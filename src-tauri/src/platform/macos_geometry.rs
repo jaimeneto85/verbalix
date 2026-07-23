@@ -99,6 +99,12 @@ fn selected_range_bounds(element: AXUIElementRef, location: isize, length: isize
 }
 
 fn focused_element_frame(element: AXUIElementRef) -> Option<Rect> {
+    if let Some(frame) = copy_attribute(element, "AXFrame")
+        .and_then(read_rect)
+        .filter(valid_frame)
+    {
+        return Some(frame);
+    }
     let position = copy_attribute(element, "AXPosition").and_then(read_point)?;
     let size = copy_attribute(element, "AXSize").and_then(read_size)?;
     Some(Rect {
@@ -211,10 +217,7 @@ fn finite(bounds: &Rect) -> bool {
 }
 
 fn valid_selected_range(bounds: &Rect) -> bool {
-    finite(bounds)
-        && bounds.width > 0.0
-        && bounds.height > 0.0
-        && !(bounds.width <= 1.0 && bounds.height <= 1.0)
+    finite(bounds) && bounds.width > 1.0 && bounds.height > 1.0
 }
 
 fn valid_frame(bounds: &Rect) -> bool {
@@ -251,6 +254,7 @@ mod tests {
         let frame = rect(40.0, 50.0, 600.0, 400.0);
         for invalid in [
             rect(0.0, 1117.0, 1.0, 1.0),
+            rect(50.0, 60.0, 0.5, 18.0),
             rect(f64::NAN, 2.0, 3.0, 4.0),
             rect(1.0, 2.0, 0.0, 4.0),
         ] {
