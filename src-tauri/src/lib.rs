@@ -5,19 +5,12 @@ mod platform;
 
 use application::{
     JsonSettingsRepository, KeychainSessionRepository, RemoteAuthRepository,
-    RemoteHistoryRepository, RemoteTransformer, SelectionCoordinator,
+    RemoteHistoryRepository, RemoteTransformer, RuntimePause, SelectionCoordinator,
 };
 use commands::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
-use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread,
-    time::Duration,
-};
+use std::{sync::Arc, thread, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -32,7 +25,7 @@ pub(crate) struct AppRuntime {
     pub clipboard: Arc<SystemClipboard>,
     pub history: Arc<RemoteHistoryRepository>,
     pub auth: Arc<RemoteAuthRepository>,
-    pub paused: AtomicBool,
+    pub pause: RuntimePause,
 }
 
 fn start_selection_observer(runtime: Arc<AppRuntime>) {
@@ -40,14 +33,16 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
         let mut candidate_id = None;
         loop {
             let settings = runtime.settings.load().unwrap_or_default();
-            if settings.automatic_toolbar && !runtime.paused.load(Ordering::Relaxed) {
+            let result = runtime.pause.run_polling(settings.automatic_toolbar, || {
                 match runtime.coordinator.refresh_selection() {
                     Ok(Some(snapshot)) if candidate_id != Some(snapshot.id) => {
                         candidate_id = Some(snapshot.id);
                         thread::sleep(Duration::from_millis(150));
-                        let _ = runtime
-                            .coordinator
-                            .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
+                        if !runtime.pause.is_paused() {
+                            let _ = runtime
+                                .coordinator
+                                .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
+                        }
                     }
                     Err(VerbalixError::SelectionUnavailable)
                     | Err(VerbalixError::ProtectedField)
@@ -57,8 +52,8 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
                     }
                     _ => {}
                 }
-            }
-            if runtime.paused.load(Ordering::Relaxed) {
+            });
+            if result.is_none() {
                 candidate_id = None;
             }
             thread::sleep(Duration::from_millis(120));
@@ -67,6 +62,12 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
 }
 
 fn trigger_shortcut(runtime: &AppRuntime) {
+    let _ = runtime
+        .pause
+        .run_global_shortcut(|| trigger_active_shortcut(runtime));
+}
+
+fn trigger_active_shortcut(runtime: &AppRuntime) {
     match runtime.coordinator.refresh_selection() {
         Ok(Some(snapshot)) => {
             let _ = runtime
@@ -75,7 +76,10 @@ fn trigger_shortcut(runtime: &AppRuntime) {
         }
         Err(VerbalixError::SelectionUnavailable) => {
             use domain::{Rect, SelectionSnapshot, TextRange};
-            if let Ok(text) = runtime.clipboard.copy_selection_preserving_clipboard() {
+            let copied = runtime
+                .pause
+                .run_clipboard_fallback(|| runtime.clipboard.copy_selection_preserving_clipboard());
+            if let Some(Ok(text)) = copied {
                 let snapshot = SelectionSnapshot::new(
                     0,
                     "clipboard-fallback".to_owned(),
@@ -124,10 +128,9 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             "quit" => app.exit(0),
             "pause" => {
                 let runtime = app.state::<Arc<AppRuntime>>();
-                let paused = runtime.paused.load(Ordering::Relaxed);
-                runtime.paused.store(!paused, Ordering::Relaxed);
-                let _ = pause_item.set_text(if paused { "Pausar" } else { "Retomar" });
-                if !paused {
+                let paused = runtime.pause.toggle();
+                let _ = pause_item.set_text(if paused { "Retomar" } else { "Pausar" });
+                if paused {
                     let _ = runtime.coordinator.dispatch(SelectionEvent::Invalidated);
                 }
             }
@@ -182,7 +185,7 @@ pub fn run() {
                     anonymous_key.clone(),
                 )),
                 auth: Arc::new(RemoteAuthRepository::new(supabase_url, anonymous_key)),
-                paused: AtomicBool::new(false),
+                pause: RuntimePause::default(),
             });
             app.manage(runtime.clone());
             let dismiss_runtime = runtime.clone();
@@ -193,19 +196,23 @@ pub fn run() {
             }));
             let observer_runtime = runtime.clone();
             runtime.selection.start_observer(Arc::new(move || {
-                match observer_runtime.coordinator.refresh_selection() {
-                    Ok(Some(snapshot)) => {
-                        thread::sleep(Duration::from_millis(150));
-                        let _ = observer_runtime
-                            .coordinator
-                            .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
+                let _ = observer_runtime.pause.run_ax_observer(|| {
+                    match observer_runtime.coordinator.refresh_selection() {
+                        Ok(Some(snapshot)) => {
+                            thread::sleep(Duration::from_millis(150));
+                            if !observer_runtime.pause.is_paused() {
+                                let _ = observer_runtime
+                                    .coordinator
+                                    .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
+                            }
+                        }
+                        _ => {
+                            let _ = observer_runtime
+                                .coordinator
+                                .dispatch(SelectionEvent::Invalidated);
+                        }
                     }
-                    _ => {
-                        let _ = observer_runtime
-                            .coordinator
-                            .dispatch(SelectionEvent::Invalidated);
-                    }
-                }
+                });
             }));
             let shortcut_runtime = runtime.clone();
             let shortcut = normalized_shortcut(&runtime.settings.load()?.shortcut);

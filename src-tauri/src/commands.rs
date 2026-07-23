@@ -77,6 +77,9 @@ pub(crate) fn current_selection(
 pub(crate) fn refresh_selection(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Option<crate::domain::SelectionSnapshot>, VerbalixError> {
+    if runtime.pause.is_paused() {
+        return Ok(None);
+    }
     let snapshot = runtime.coordinator.refresh_selection()?;
     if let Some(snapshot) = &snapshot {
         runtime
