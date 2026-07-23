@@ -24,11 +24,11 @@
 
 ## Tasks
 
-- [ ] T1: Refatorar `TauriOverlay` com dispatcher main-thread.
-- [ ] T2: Cobrir toolbar/note/hide e falhas de dispatch.
-- [ ] T3: Rodar fmt, Clippy, Rust, frontend, Edge e bundle.
-- [ ] T4: Executar smoke real de seleção e inspecionar crash reports novos.
-- [ ] T5: Atualizar memória e documentação.
+- [x] T1: Refatorar `TauriOverlay` com dispatcher main-thread.
+- [x] T2: Cobrir toolbar/note/hide e falhas de dispatch.
+- [x] T3: Rodar fmt, Clippy, Rust, frontend, Edge e bundle.
+- [x] T4: Executar smoke real de seleção e inspecionar crash reports novos.
+- [x] T5: Atualizar memória e documentação.
 
 ## Dual Analysis Proporcional
 

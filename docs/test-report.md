@@ -2,11 +2,11 @@
 
 ## Resultado
 
-- Rust: 24 testes aprovados.
+- Rust: 27 testes aprovados.
 - Frontend: 21 testes aprovados.
 - Edge Function: 6 testes aprovados.
 - Bundle: `Verbalix.app` debug gerado com sucesso.
-- Total: 51 testes, 0 falhas.
+- Total: 54 testes, 0 falhas.
 
 ## Pirâmide
 
@@ -19,10 +19,11 @@
 - Pausa bloqueia polling, callback do AXObserver, atalho global e fallback de clipboard; retomada reabilita os quatro caminhos.
 - A nota registra o resultado antes do evento e o frontend registra o listener antes de consultar o estado atual, cobrindo resultados criados antes e depois da prontidão.
 - O fluxo integrado automatizado percorre toolbar, transformação, preview, apply e undo com adapters de domínio.
+- O adapter de overlay aceita chamadas vindas de worker threads e encaminha todas as operações de janela ao executor principal.
 
 ## Cobertura instrumentada
 
-O cliente frontend testável em isolamento (`native.ts` e `types.ts`) atingiu 100% de statements, branches, functions e lines. A cobertura Rust não foi instrumentada porque `cargo-llvm-cov` não está instalado; a suíte Rust executou 24 cenários.
+O cliente frontend testável em isolamento (`native.ts` e `types.ts`) atingiu 100% de statements, branches, functions e lines. A cobertura Rust não foi instrumentada porque `cargo-llvm-cov` não está instalado; a suíte Rust executou 27 cenários.
 
 ## Gates executados
 
