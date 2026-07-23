@@ -47,6 +47,19 @@ impl TauriOverlay {
         let (x, y) = anchored_origin(bounds, width, height);
         let _ = window.set_position(LogicalPosition::new(x, y));
     }
+
+    fn show_result(
+        &self,
+        bounds: Rect,
+        payload: serde_json::Value,
+    ) -> Result<(), VerbalixError> {
+        let window = self.window("note", 420.0, 220.0)?;
+        Self::place(&window, bounds, 420.0, 220.0);
+        window
+            .emit("note-result", payload)
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        window.show().map_err(|_| VerbalixError::LocalFailure)
+    }
 }
 
 fn anchored_origin(bounds: Rect, width: f64, height: f64) -> (f64, f64) {
@@ -101,12 +114,23 @@ impl OverlayPort for TauriOverlay {
     }
 
     fn show_note(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError> {
-        let window = self.window("note", 420.0, 220.0)?;
-        Self::place(&window, bounds, 420.0, 220.0);
-        window
-            .emit("note-result", json!({ "text": text }))
-            .map_err(|_| VerbalixError::LocalFailure)?;
-        window.show().map_err(|_| VerbalixError::LocalFailure)
+        self.show_result(bounds, json!({ "mode": "result", "text": text }))
+    }
+
+    fn show_preview(
+        &self,
+        bounds: Rect,
+        request_id: uuid::Uuid,
+        text: &str,
+    ) -> Result<(), VerbalixError> {
+        self.show_result(
+            bounds,
+            json!({ "mode": "preview", "requestId": request_id, "text": text }),
+        )
+    }
+
+    fn show_undo(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError> {
+        self.show_result(bounds, json!({ "mode": "undo", "text": text }))
     }
 
     fn hide_all(&self) -> Result<(), VerbalixError> {

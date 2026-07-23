@@ -7,15 +7,23 @@ import { defaultSettings } from "./types";
 export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [result, setResult] = useState("");
+  const [noteMode, setNoteMode] = useState<"result" | "preview" | "undo">("result");
+  const [requestId, setRequestId] = useState("");
   const [busy, setBusy] = useState<"translate" | "improve" | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     native.loadSettings().then(setSettings).catch(() => undefined);
     if (kind !== "note") return;
-    const unlisten = listen<{ text: string }>("note-result", (event) =>
-      setResult(event.payload.text)
-    );
+    const unlisten = listen<{
+      mode: "result" | "preview" | "undo";
+      requestId?: string;
+      text: string;
+    }>("note-result", (event) => {
+      setResult(event.payload.text);
+      setNoteMode(event.payload.mode);
+      setRequestId(event.payload.requestId ?? "");
+    });
     return () => {
       unlisten.then((dispose) => dispose());
     };
@@ -42,6 +50,14 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
   };
 
   if (kind === "note") {
+    const apply = async () => {
+      await native.applyPreview(requestId);
+      setNoteMode("undo");
+    };
+    const undo = async () => {
+      await native.undoReplacement(result);
+      await native.dismissOverlays();
+    };
     return (
       <main className="note">
         <div className="note-heading">
@@ -49,13 +65,25 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
           <button onClick={() => native.dismissOverlays()}>×</button>
         </div>
         <p>{result || "Processando…"}</p>
-        <button
-          className="note-copy"
-          disabled={!result}
-          onClick={() => navigator.clipboard.writeText(result)}
-        >
-          Copiar
-        </button>
+        <div className="note-actions">
+          <button
+            className="note-copy"
+            disabled={!result}
+            onClick={() => navigator.clipboard.writeText(result)}
+          >
+            Copiar
+          </button>
+          {noteMode === "preview" && (
+            <button className="note-copy" disabled={!requestId} onClick={apply}>
+              Aplicar
+            </button>
+          )}
+          {noteMode === "undo" && (
+            <button className="note-copy" onClick={undo}>
+              Desfazer
+            </button>
+          )}
+        </div>
       </main>
     );
   }

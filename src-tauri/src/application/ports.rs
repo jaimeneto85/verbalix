@@ -4,11 +4,23 @@ pub trait SelectionPort: Send + Sync {
     fn permission_granted(&self, prompt: bool) -> bool;
     fn capture(&self) -> Result<SelectionSnapshot, VerbalixError>;
     fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError>;
+    fn restore(
+        &self,
+        expected: &SelectionSnapshot,
+        transformed_text: &str,
+    ) -> Result<(), VerbalixError>;
 }
 
 pub trait OverlayPort: Send + Sync {
     fn show_toolbar(&self, bounds: Rect) -> Result<(), VerbalixError>;
     fn show_note(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError>;
+    fn show_preview(
+        &self,
+        bounds: Rect,
+        request_id: uuid::Uuid,
+        text: &str,
+    ) -> Result<(), VerbalixError>;
+    fn show_undo(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError>;
     fn hide_all(&self) -> Result<(), VerbalixError>;
 }
 

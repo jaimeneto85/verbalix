@@ -44,5 +44,13 @@ mod unsupported {
         ) -> Result<(), VerbalixError> {
             Err(VerbalixError::UnsupportedPlatform)
         }
+
+        fn restore(
+            &self,
+            _expected: &SelectionSnapshot,
+            _transformed_text: &str,
+        ) -> Result<(), VerbalixError> {
+            Err(VerbalixError::UnsupportedPlatform)
+        }
     }
 }

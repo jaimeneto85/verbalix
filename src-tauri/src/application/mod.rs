@@ -8,4 +8,5 @@ pub use ports::{ClipboardPort, OverlayPort, SelectionPort};
 pub use settings_file::JsonSettingsRepository;
 pub use supabase::{
     KeychainSessionRepository, RemoteTransformer, SessionRepository, StoredSession,
+    HistoryItem, RemoteHistoryRepository,
 };

@@ -43,11 +43,7 @@ export function App() {
 
   useEffect(() => {
     if (!authenticated || !settings.historyEnabled) return;
-    supabase
-      .from("transform_history")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setHistory((data as HistoryItem[] | null) ?? []));
+    native.listHistory().then(setHistory).catch(() => setHistory([]));
   }, [authenticated, settings.historyEnabled]);
 
   const save = async () => {
@@ -62,16 +58,13 @@ export function App() {
   };
 
   const deleteItem = async (id: string) => {
-    const { error } = await supabase.from("transform_history").delete().eq("id", id);
-    if (!error) setHistory((items) => items.filter((item) => item.id !== id));
+    await native.deleteHistory(id);
+    setHistory((items) => items.filter((item) => item.id !== id));
   };
 
   const deleteAll = async () => {
-    const { error } = await supabase
-      .from("transform_history")
-      .delete()
-      .not("id", "is", null);
-    if (!error) setHistory([]);
+    await native.deleteHistory();
+    setHistory([]);
   };
 
   return (

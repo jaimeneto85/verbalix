@@ -274,4 +274,67 @@ impl SelectionPort for MacAccessibility {
             Err(VerbalixError::LocalFailure)
         }
     }
+
+    fn restore(
+        &self,
+        expected: &SelectionSnapshot,
+        transformed_text: &str,
+    ) -> Result<(), VerbalixError> {
+        let element = Self::focused_element()?;
+        let mut pid = 0;
+        if unsafe { AXUIElementGetPid(element.as_ref(), &mut pid) } != AX_SUCCESS
+            || pid != expected.pid
+        {
+            return Err(VerbalixError::StaleSelection);
+        }
+        let value = Self::string_attribute(element.as_ref(), "AXValue")?;
+        let utf16: Vec<u16> = value.encode_utf16().collect();
+        let start = usize::try_from(expected.range.location)
+            .map_err(|_| VerbalixError::StaleSelection)?;
+        let transformed_length = transformed_text.encode_utf16().count();
+        let end = start
+            .checked_add(transformed_length)
+            .filter(|end| *end <= utf16.len())
+            .ok_or(VerbalixError::StaleSelection)?;
+        let current = String::from_utf16(&utf16[start..end])
+            .map_err(|_| VerbalixError::StaleSelection)?;
+        if current != transformed_text {
+            return Err(VerbalixError::StaleSelection);
+        }
+        let range = CFRange {
+            location: start as isize,
+            length: transformed_length as isize,
+        };
+        let range_value =
+            unsafe { AXValueCreate(AX_VALUE_CF_RANGE, (&range as *const CFRange).cast()) };
+        if range_value.is_null() {
+            return Err(VerbalixError::LocalFailure);
+        }
+        let range_attribute = CFString::new("AXSelectedTextRange");
+        let range_status = unsafe {
+            AXUIElementSetAttributeValue(
+                element.as_ref(),
+                range_attribute.as_concrete_TypeRef(),
+                range_value,
+            )
+        };
+        unsafe { CFRelease(range_value) };
+        if range_status != AX_SUCCESS {
+            return Err(VerbalixError::LocalFailure);
+        }
+        let text_attribute = CFString::new("AXSelectedText");
+        let original = CFString::new(&expected.text);
+        let status = unsafe {
+            AXUIElementSetAttributeValue(
+                element.as_ref(),
+                text_attribute.as_concrete_TypeRef(),
+                original.as_CFTypeRef(),
+            )
+        };
+        if status == AX_SUCCESS {
+            Ok(())
+        } else {
+            Err(VerbalixError::LocalFailure)
+        }
+    }
 }

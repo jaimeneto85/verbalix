@@ -17,7 +17,11 @@ impl SystemClipboard {
 
     #[cfg(target_os = "macos")]
     pub fn copy_selection_preserving_clipboard(&self) -> Result<String, VerbalixError> {
-        let previous = self.read_text()?;
+        use objc2::msg_send;
+        use objc2_app_kit::NSPasteboard;
+
+        let pasteboard = NSPasteboard::generalPasteboard();
+        let previous_items = pasteboard.pasteboardItems();
         {
             let mut clipboard = self
                 .clipboard
@@ -25,23 +29,20 @@ impl SystemClipboard {
                 .map_err(|_| VerbalixError::LocalFailure)?;
             clipboard.clear().map_err(|_| VerbalixError::LocalFailure)?;
         }
-        post_copy_shortcut()?;
-        thread::sleep(Duration::from_millis(120));
-        let selected = self
-            .read_text()?
-            .filter(|value| !value.trim().is_empty())
-            .ok_or(VerbalixError::SelectionUnavailable)?;
-        match previous {
-            Some(value) => self.write_text(&value)?,
-            None => {
-                self.clipboard
-                    .lock()
-                    .map_err(|_| VerbalixError::LocalFailure)?
-                    .clear()
-                    .map_err(|_| VerbalixError::LocalFailure)?;
+        let selected = post_copy_shortcut().and_then(|()| {
+            thread::sleep(Duration::from_millis(120));
+            self.read_text()
+        });
+        pasteboard.clearContents();
+        if let Some(items) = previous_items {
+            let restored: bool = unsafe { msg_send![&*pasteboard, writeObjects: &*items] };
+            if !restored {
+                return Err(VerbalixError::LocalFailure);
             }
         }
-        Ok(selected)
+        selected?
+            .filter(|value| !value.trim().is_empty())
+            .ok_or(VerbalixError::SelectionUnavailable)
     }
 }
 

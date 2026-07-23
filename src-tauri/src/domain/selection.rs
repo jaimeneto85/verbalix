@@ -72,6 +72,15 @@ pub enum SelectionState {
         snapshot: SelectionSnapshot,
         request_id: Uuid,
     },
+    PreviewVisible {
+        snapshot: SelectionSnapshot,
+        request_id: Uuid,
+        result: String,
+    },
+    Applied {
+        snapshot: SelectionSnapshot,
+        transformed_text: String,
+    },
     ResultVisible(SelectionSnapshot),
 }
 

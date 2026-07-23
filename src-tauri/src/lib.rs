@@ -3,8 +3,8 @@ mod domain;
 mod platform;
 
 use application::{
-    JsonSettingsRepository, KeychainSessionRepository, RemoteTransformer, SelectionCoordinator,
-    SessionRepository, StoredSession,
+    HistoryItem, JsonSettingsRepository, KeychainSessionRepository, RemoteHistoryRepository,
+    RemoteTransformer, SelectionCoordinator, SessionRepository, StoredSession,
 };
 use domain::{
     AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
@@ -12,7 +12,10 @@ use domain::{
 };
 use platform::{MacAccessibility, SystemClipboard, TauriOverlay};
 use std::{
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread,
     time::Duration,
 };
@@ -28,6 +31,8 @@ struct AppRuntime {
     settings: Arc<JsonSettingsRepository>,
     session: Arc<KeychainSessionRepository>,
     clipboard: Arc<SystemClipboard>,
+    history: Arc<RemoteHistoryRepository>,
+    paused: AtomicBool,
 }
 
 #[tauri::command]
@@ -46,10 +51,19 @@ fn load_settings(runtime: State<'_, Arc<AppRuntime>>) -> Result<AppSettings, Ver
 
 #[tauri::command]
 fn save_settings(
+    app: AppHandle,
     runtime: State<'_, Arc<AppRuntime>>,
     settings: AppSettings,
 ) -> Result<(), VerbalixError> {
-    runtime.settings.save(&settings)
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    runtime.settings.save(&settings)?;
+    let shortcut = normalized_shortcut(&settings.shortcut);
+    app.global_shortcut()
+        .unregister_all()
+        .map_err(|_| VerbalixError::LocalFailure)?;
+    app.global_shortcut()
+        .register(shortcut.as_str())
+        .map_err(|_| VerbalixError::LocalFailure)
 }
 
 #[tauri::command]
@@ -114,10 +128,26 @@ async fn transform_selection(
         text: snapshot.text,
         preferences,
     };
-    runtime
+    let preview_writable = runtime.settings.load()?.confirm_before_replace;
+    let response = runtime
         .coordinator
-        .transform(request, &session.access_token)
-        .await
+        .transform(request.clone(), &session.access_token, preview_writable)
+        .await?;
+    if runtime.settings.load()?.history_enabled {
+        let _ = runtime
+            .history
+            .insert(&request, &response, &session.access_token)
+            .await;
+    }
+    Ok(response)
+}
+
+#[tauri::command]
+fn apply_preview(
+    runtime: State<'_, Arc<AppRuntime>>,
+    request_id: uuid::Uuid,
+) -> Result<String, VerbalixError> {
+    runtime.coordinator.apply_preview(request_id)
 }
 
 #[tauri::command]
@@ -133,12 +163,35 @@ fn dismiss_overlays(runtime: State<'_, Arc<AppRuntime>>) -> Result<(), VerbalixE
     runtime.coordinator.dispatch(SelectionEvent::Invalidated)
 }
 
+#[tauri::command]
+async fn list_history(
+    runtime: State<'_, Arc<AppRuntime>>,
+) -> Result<Vec<HistoryItem>, VerbalixError> {
+    let session = runtime
+        .session
+        .load()?
+        .ok_or(VerbalixError::Unauthenticated)?;
+    runtime.history.list(&session.access_token).await
+}
+
+#[tauri::command]
+async fn delete_history(
+    runtime: State<'_, Arc<AppRuntime>>,
+    id: Option<uuid::Uuid>,
+) -> Result<(), VerbalixError> {
+    let session = runtime
+        .session
+        .load()?
+        .ok_or(VerbalixError::Unauthenticated)?;
+    runtime.history.delete(id, &session.access_token).await
+}
+
 fn start_selection_observer(runtime: Arc<AppRuntime>) {
     thread::spawn(move || {
         let mut candidate_id = None;
         loop {
             let settings = runtime.settings.load().unwrap_or_default();
-            if settings.automatic_toolbar {
+            if settings.automatic_toolbar && !runtime.paused.load(Ordering::Relaxed) {
                 match runtime.coordinator.refresh_selection() {
                     Ok(Some(snapshot)) if candidate_id != Some(snapshot.id) => {
                         candidate_id = Some(snapshot.id);
@@ -151,9 +204,15 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
                     | Err(VerbalixError::ProtectedField)
                     | Err(VerbalixError::PermissionDenied) => {
                         candidate_id = None;
+                        let _ = runtime
+                            .coordinator
+                            .dispatch(SelectionEvent::Invalidated);
                     }
                     _ => {}
                 }
+            }
+            if runtime.paused.load(Ordering::Relaxed) {
+                candidate_id = None;
             }
             thread::sleep(Duration::from_millis(120));
         }
@@ -215,10 +274,24 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
             "quit" => app.exit(0),
+            "pause" => {
+                let runtime = app.state::<Arc<AppRuntime>>();
+                let paused = runtime.paused.load(Ordering::Relaxed);
+                runtime.paused.store(!paused, Ordering::Relaxed);
+                if !paused {
+                    let _ = runtime
+                        .coordinator
+                        .dispatch(SelectionEvent::Invalidated);
+                }
+            }
             _ => {}
         })
         .build(app)?;
     Ok(())
+}
+
+fn normalized_shortcut(shortcut: &str) -> String {
+    shortcut.replace("Option", "Alt")
 }
 
 pub fn run() {
@@ -237,7 +310,7 @@ pub fn run() {
                 supabase_url.trim_end_matches('/')
             );
             let anonymous_key = std::env::var("VERBALIX_SUPABASE_ANON_KEY").unwrap_or_default();
-            let provider = Arc::new(RemoteTransformer::new(endpoint, anonymous_key));
+            let provider = Arc::new(RemoteTransformer::new(endpoint, anonymous_key.clone()));
             let coordinator = Arc::new(SelectionCoordinator::new(
                 selection.clone(),
                 overlay,
@@ -258,12 +331,18 @@ pub fn run() {
                             tauri::Error::Setup(boxed.into())
                         })?,
                 ),
+                history: Arc::new(RemoteHistoryRepository::new(
+                    supabase_url,
+                    anonymous_key,
+                )),
+                paused: AtomicBool::new(false),
             });
             app.manage(runtime.clone());
             let shortcut_runtime = runtime.clone();
+            let shortcut = normalized_shortcut(&runtime.settings.load()?.shortcut);
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
-                    .with_shortcuts(["alt+shift+space"])?
+                    .with_shortcuts([shortcut.as_str()])?
                     .with_handler(move |_app, _shortcut, event| {
                         if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                             trigger_shortcut(&shortcut_runtime);
@@ -285,8 +364,11 @@ pub fn run() {
             current_selection,
             refresh_selection,
             transform_selection,
+            apply_preview,
             undo_replacement,
-            dismiss_overlays
+            dismiss_overlays,
+            list_history,
+            delete_history
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Verbalix");

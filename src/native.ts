@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
+  HistoryItem,
   SelectionSnapshot,
   TransformResult
 } from "./types";
@@ -43,10 +44,19 @@ export const native = {
       }
     });
   },
+  applyPreview(requestId: string) {
+    return invoke<string>("apply_preview", { requestId });
+  },
   undoReplacement(transformedText: string) {
     return invoke<void>("undo_replacement", { transformedText });
   },
   dismissOverlays() {
     return invoke<void>("dismiss_overlays");
+  },
+  listHistory() {
+    return invoke<HistoryItem[]>("list_history");
+  },
+  deleteHistory(id?: string) {
+    return invoke<void>("delete_history", { id: id ?? null });
   }
 };
