@@ -1,5 +1,6 @@
 mod application;
 mod commands;
+mod diagnostics;
 mod domain;
 mod platform;
 
@@ -35,6 +36,7 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
         loop {
             let settings = runtime.settings.load().unwrap_or_default();
             let result = runtime.pause.run_polling(settings.automatic_toolbar, || {
+                diagnostics::detection("polling");
                 match runtime.coordinator.refresh_selection() {
                     Ok(Some(snapshot)) if candidate_id != Some(snapshot.id) => {
                         candidate_id = Some(snapshot.id);
@@ -45,9 +47,10 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
                                 .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
                         }
                     }
-                    Err(VerbalixError::SelectionUnavailable)
-                    | Err(VerbalixError::ProtectedField)
-                    | Err(VerbalixError::PermissionDenied) => {
+                    Err(error @ VerbalixError::SelectionUnavailable)
+                    | Err(error @ VerbalixError::ProtectedField)
+                    | Err(error @ VerbalixError::PermissionDenied) => {
+                        diagnostics::capture_failure("polling", &error);
                         candidate_id = None;
                         let _ = runtime.coordinator.dispatch(SelectionEvent::Invalidated);
                     }
@@ -69,6 +72,7 @@ fn trigger_shortcut(runtime: &AppRuntime) {
 }
 
 fn trigger_active_shortcut(runtime: &AppRuntime) {
+    diagnostics::detection("shortcut");
     match runtime.coordinator.refresh_selection() {
         Ok(Some(snapshot)) => {
             let _ = runtime
@@ -76,6 +80,7 @@ fn trigger_active_shortcut(runtime: &AppRuntime) {
                 .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
         }
         Err(VerbalixError::SelectionUnavailable) => {
+            diagnostics::capture_failure("shortcut", &VerbalixError::SelectionUnavailable);
             use domain::{Rect, SelectionSnapshot, TextRange};
             let copied = runtime
                 .pause
@@ -106,6 +111,7 @@ fn trigger_active_shortcut(runtime: &AppRuntime) {
                     .dispatch(SelectionEvent::DebounceElapsed(id));
             }
         }
+        Err(error) => diagnostics::capture_failure("shortcut", &error),
         _ => {}
     }
 }
@@ -192,6 +198,7 @@ pub fn run() {
             app.manage(runtime.clone());
             let dismiss_runtime = runtime.clone();
             install_mouse_dismiss_monitor(Arc::new(move || {
+                diagnostics::detection("mouse_dismiss");
                 let _ = dismiss_runtime
                     .coordinator
                     .dispatch(SelectionEvent::Invalidated);
@@ -199,6 +206,7 @@ pub fn run() {
             let observer_runtime = runtime.clone();
             runtime.selection.start_observer(Arc::new(move || {
                 let _ = observer_runtime.pause.run_ax_observer(|| {
+                    diagnostics::detection("ax_observer");
                     match observer_runtime.coordinator.refresh_selection() {
                         Ok(Some(snapshot)) => {
                             thread::sleep(Duration::from_millis(150));
@@ -208,11 +216,13 @@ pub fn run() {
                                     .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
                             }
                         }
-                        _ => {
+                        Err(error) => {
+                            diagnostics::capture_failure("ax_observer", &error);
                             let _ = observer_runtime
                                 .coordinator
                                 .dispatch(SelectionEvent::Invalidated);
                         }
+                        _ => {}
                     }
                 });
             }));

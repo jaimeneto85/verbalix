@@ -1,0 +1,128 @@
+use crate::domain::{SelectionSnapshot, VerbalixError};
+use std::sync::OnceLock;
+
+fn enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("VERBALIX_DIAGNOSTICS")
+            .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
+            .unwrap_or(false)
+    })
+}
+
+fn emit(stage: &str, event: &str, metadata: &str) {
+    if enabled() {
+        eprintln!("[verbalix:{stage}] {event} {metadata}");
+    }
+}
+
+pub fn detection(origin: &str) {
+    emit("detection", "triggered", &format!("origin={origin}"));
+}
+
+pub fn capture_success(snapshot: &SelectionSnapshot) {
+    emit("capture", "success", &snapshot_metadata(snapshot));
+}
+
+pub fn capture_failure(origin: &str, error: &VerbalixError) {
+    emit(
+        "capture",
+        "failure",
+        &format!("origin={origin} error={}", error_code(error)),
+    );
+}
+
+pub fn coordinator(decision: &str, snapshot: Option<&SelectionSnapshot>) {
+    let metadata = snapshot
+        .map(snapshot_metadata)
+        .unwrap_or_else(|| "snapshot_id=none".to_owned());
+    emit("coordinator", decision, &metadata);
+}
+
+pub fn overlay(stage: &str, label: &str, sequence: u64) {
+    emit(
+        "overlay",
+        stage,
+        &format!("label={label} sequence={sequence}"),
+    );
+}
+
+pub fn overlay_visibility(label: &str, sequence: u64, visible: bool) {
+    emit(
+        "overlay",
+        "visibility",
+        &format!("label={label} sequence={sequence} visible={visible}"),
+    );
+}
+
+pub fn overlay_position(label: &str, sequence: u64, x: f64, y: f64) {
+    emit(
+        "overlay",
+        "positioned",
+        &format!("label={label} sequence={sequence} x={x:.1} y={y:.1}"),
+    );
+}
+
+fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
+    format!(
+        "snapshot_id={} pid={} range_location={} range_length={} bounds={:.1},{:.1},{:.1},{:.1} writable={}",
+        snapshot.id,
+        snapshot.pid,
+        snapshot.range.location,
+        snapshot.range.length,
+        snapshot.bounds.x,
+        snapshot.bounds.y,
+        snapshot.bounds.width,
+        snapshot.bounds.height,
+        snapshot.writable
+    )
+}
+
+fn error_code(error: &VerbalixError) -> &'static str {
+    match error {
+        VerbalixError::PermissionDenied => "permission_denied",
+        VerbalixError::SelectionUnavailable => "selection_unavailable",
+        VerbalixError::ProtectedField => "protected_field",
+        VerbalixError::StaleSelection => "stale_selection",
+        VerbalixError::TextTooLong => "text_too_long",
+        VerbalixError::Unauthenticated => "unauthenticated",
+        VerbalixError::ProviderTimeout => "provider_timeout",
+        VerbalixError::ProviderRejected => "provider_rejected",
+        VerbalixError::InvalidResponse => "invalid_response",
+        #[cfg(not(target_os = "macos"))]
+        VerbalixError::UnsupportedPlatform => "unsupported_platform",
+        VerbalixError::LocalFailure => "local_failure",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Rect, TextRange};
+
+    #[test]
+    fn snapshot_diagnostics_never_include_selected_text() {
+        let snapshot = SelectionSnapshot::new(
+            42,
+            "pid:42".to_owned(),
+            "secret selected text".to_owned(),
+            TextRange {
+                location: 3,
+                length: 8,
+            },
+            Rect {
+                x: 1.0,
+                y: 2.0,
+                width: 3.0,
+                height: 4.0,
+            },
+            true,
+        );
+
+        let metadata = snapshot_metadata(&snapshot);
+
+        assert!(!metadata.contains("secret selected text"));
+        assert!(metadata.contains("pid=42"));
+        assert!(metadata.contains("range_location=3"));
+    }
+}
