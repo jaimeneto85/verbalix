@@ -88,6 +88,7 @@ Oportunidades:
 - [x] T3 Corrigir a identidade retornada por `refresh_selection` e qualquer causa adicional comprovada pelo trace.
 - [x] T4 Confirmar criação, posicionamento, show e visibilidade somente na main thread.
 - [x] T5 Melhorar a UX de permissão stale sem automatizar alterações no TCC.
-- [x] T6 Executar gates Rust/frontend/Clippy/build/bundle e smoke local.
-- [ ] T7 QA independente revisar segurança, concorrência, regressões e emitir verdict.
+- [x] T6 Executar gates Rust/frontend/E2E/Edge/Clippy/build/bundle.
+- [x] T7 QA independente revisar segurança, concorrência, regressões e emitir verdict `APPROVED`.
 - [x] T8 Documentar resultado e evidência em `docs/`.
+- [ ] T9 Reautorizar o bundle exato no TCC e executar smoke visual TextEdit → seleção → toolbar.

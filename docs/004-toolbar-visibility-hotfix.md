@@ -26,6 +26,7 @@ Também foi comprovado um defeito independente no debounce: recapturas equivalen
 - `codesign --verify --deep --strict` aprovado no bundle recém-gerado.
 - O E2E automatizado prova somente a orientação e a rechecagem da UI no estado simulado sem permissão; não prova o estado real do TCC.
 - O smoke visual da toolbar no TextEdit continua bloqueado até o bundle atual ser autorizado em Acessibilidade.
+- QA final independente: `APPROVED` para o diff `4077c13..01654a0`.
 
 ## Operação local
 
@@ -33,4 +34,4 @@ Se o Verbalix já aparece habilitado, remova a entrada antiga em Privacidade e S
 
 ## Status
 
-Implementação e testes concluídos na branch `hotfix-toolbar-visibility`. A revisão QA independente permanece pendente e nenhum merge ou push foi realizado.
+Implementação, testes e QA concluídos na branch `hotfix-toolbar-visibility`. Gates aprovados: Rust 32/32, Clippy, Vitest 22/22, build frontend, Playwright 1/1, Edge 6/6 e diff check. O smoke visual real permanece uma pendência manual não bloqueante, dependente da reautorização do bundle atual. Nenhum merge ou push foi realizado.
