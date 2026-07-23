@@ -74,6 +74,10 @@ describe("native command contract", () => {
     await native.currentSelection();
     await native.refreshSelection();
     await native.dismissOverlays();
+    await native.applyPreview("request-id");
+    await native.listHistory();
+    await native.deleteHistory("history-id");
+    await native.deleteHistory();
 
     expect(invoke.mock.calls).toEqual([
       ["load_settings"],
@@ -82,7 +86,11 @@ describe("native command contract", () => {
       ["clear_session"],
       ["current_selection"],
       ["refresh_selection"],
-      ["dismiss_overlays"]
+      ["dismiss_overlays"],
+      ["apply_preview", { requestId: "request-id" }],
+      ["list_history"],
+      ["delete_history", { id: "history-id" }],
+      ["delete_history", { id: null }]
     ]);
   });
 });

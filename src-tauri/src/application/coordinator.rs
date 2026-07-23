@@ -23,7 +23,11 @@ mod tests {
         domain::{Rect, TextRange, TransformResult},
     };
     use async_trait::async_trait;
-    use std::sync::Mutex;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    };
+    use tokio::sync::Notify;
 
     struct FakeSelection {
         current: Mutex<SelectionSnapshot>,
@@ -42,11 +46,7 @@ mod tests {
                 .map_err(|_| VerbalixError::LocalFailure)
         }
 
-        fn replace(
-            &self,
-            expected: &SelectionSnapshot,
-            text: &str,
-        ) -> Result<(), VerbalixError> {
+        fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
             let current = self
                 .current
                 .lock()
@@ -186,6 +186,33 @@ mod tests {
         }
     }
 
+    struct OutOfOrderProvider {
+        calls: AtomicUsize,
+        first_started: Notify,
+        release_first: Notify,
+    }
+
+    #[async_trait]
+    impl AiProvider for OutOfOrderProvider {
+        async fn transform(
+            &self,
+            request: &TransformRequest,
+            _access_token: &str,
+        ) -> Result<TransformResult, VerbalixError> {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            if call == 0 {
+                self.first_started.notify_one();
+                self.release_first.notified().await;
+            }
+            Ok(TransformResult {
+                request_id: request.request_id,
+                source_language: "pt".to_owned(),
+                target_language: Some("en".to_owned()),
+                result: format!("result-{call}"),
+            })
+        }
+    }
+
     fn snapshot(writable: bool) -> SelectionSnapshot {
         SelectionSnapshot::new(
             42,
@@ -261,13 +288,13 @@ mod tests {
         coordinator
             .dispatch(SelectionEvent::DebounceElapsed(current.id))
             .unwrap();
-        let request = coordinator.request_for(
-            TransformOperation::Translate,
-            current.text.clone(),
-            None,
-        );
+        let request =
+            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
 
-        coordinator.transform(request, "token", false).await.unwrap();
+        coordinator
+            .transform(request, "token", false)
+            .await
+            .unwrap();
 
         assert_eq!(
             selection.replacements.lock().unwrap().as_slice(),
@@ -290,13 +317,13 @@ mod tests {
         coordinator
             .dispatch(SelectionEvent::DebounceElapsed(current.id))
             .unwrap();
-        let request = coordinator.request_for(
-            TransformOperation::Translate,
-            current.text.clone(),
-            None,
-        );
+        let request =
+            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
 
-        coordinator.transform(request, "token", false).await.unwrap();
+        coordinator
+            .transform(request, "token", false)
+            .await
+            .unwrap();
 
         assert!(selection.replacements.lock().unwrap().is_empty());
         assert_eq!(
@@ -320,11 +347,8 @@ mod tests {
         coordinator
             .dispatch(SelectionEvent::DebounceElapsed(current.id))
             .unwrap();
-        let request = coordinator.request_for(
-            TransformOperation::Translate,
-            current.text.clone(),
-            None,
-        );
+        let request =
+            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
         selection.current.lock().unwrap().text = "Seleção mudou".to_owned();
 
         let result = coordinator.transform(request, "token", false).await;
@@ -360,22 +384,16 @@ mod tests {
             replacements: Mutex::new(Vec::new()),
         });
         let overlay = Arc::new(FakeOverlay::default());
-        let coordinator = SelectionCoordinator::new(
-            selection.clone(),
-            overlay.clone(),
-            Arc::new(ErrorProvider),
-        );
+        let coordinator =
+            SelectionCoordinator::new(selection.clone(), overlay.clone(), Arc::new(ErrorProvider));
         coordinator
             .dispatch(SelectionEvent::Candidate(current.clone()))
             .unwrap();
         coordinator
             .dispatch(SelectionEvent::DebounceElapsed(current.id))
             .unwrap();
-        let request = coordinator.request_for(
-            TransformOperation::Translate,
-            current.text.clone(),
-            None,
-        );
+        let request =
+            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
 
         let result = coordinator.transform(request, "token", false).await;
 
@@ -402,11 +420,8 @@ mod tests {
         coordinator
             .dispatch(SelectionEvent::DebounceElapsed(current.id))
             .unwrap();
-        let request = coordinator.request_for(
-            TransformOperation::Translate,
-            current.text.clone(),
-            None,
-        );
+        let request =
+            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
 
         let result = coordinator.transform(request, "token", false).await;
 
@@ -448,6 +463,88 @@ mod tests {
 
         assert!(matches!(result, Err(VerbalixError::TextTooLong)));
         assert_eq!(*overlay.hidden_count.lock().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn preview_requires_explicit_apply_before_replacement() {
+        let current = snapshot(true);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let overlay = Arc::new(FakeOverlay::default());
+        let coordinator = coordinator(selection.clone(), overlay.clone());
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(current.id))
+            .unwrap();
+        let request =
+            coordinator.request_for(TransformOperation::Improve, current.text.clone(), None);
+        let request_id = request.request_id;
+
+        coordinator.transform(request, "token", true).await.unwrap();
+
+        assert!(selection.replacements.lock().unwrap().is_empty());
+        assert_eq!(
+            overlay.notes.lock().unwrap().as_slice(),
+            ["preview:Hello 👋🏽 APIClient"]
+        );
+        coordinator.apply_preview(request_id).unwrap();
+        assert_eq!(
+            selection.replacements.lock().unwrap().as_slice(),
+            ["Hello 👋🏽 APIClient"]
+        );
+    }
+
+    #[tokio::test]
+    async fn latest_request_wins_when_responses_finish_out_of_order() {
+        let current = snapshot(true);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let provider = Arc::new(OutOfOrderProvider {
+            calls: AtomicUsize::new(0),
+            first_started: Notify::new(),
+            release_first: Notify::new(),
+        });
+        let coordinator = Arc::new(SelectionCoordinator::new(
+            selection.clone(),
+            Arc::new(FakeOverlay::default()),
+            provider.clone(),
+        ));
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(current.id))
+            .unwrap();
+        let first_request =
+            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
+        let first_coordinator = coordinator.clone();
+        let first = tokio::spawn(async move {
+            first_coordinator
+                .transform(first_request, "token", false)
+                .await
+        });
+        provider.first_started.notified().await;
+        let second_request =
+            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
+
+        coordinator
+            .transform(second_request, "token", false)
+            .await
+            .unwrap();
+        provider.release_first.notify_one();
+        let first_result = first.await.unwrap();
+
+        assert!(matches!(first_result, Err(VerbalixError::StaleSelection)));
+        assert_eq!(
+            selection.replacements.lock().unwrap().as_slice(),
+            ["result-1"]
+        );
     }
 }
 

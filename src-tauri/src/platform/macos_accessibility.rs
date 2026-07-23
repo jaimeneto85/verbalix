@@ -12,11 +12,14 @@ use core_foundation_sys::{base::Boolean, dictionary::CFDictionaryRef};
 use std::{
     ffi::c_void,
     ptr::{self, NonNull},
+    sync::Arc,
+    thread,
 };
 
 type AXUIElementRef = *const c_void;
 type AXValueRef = *const c_void;
 type AXError = i32;
+type AXObserverRef = *const c_void;
 
 const AX_SUCCESS: AXError = 0;
 const AX_VALUE_CF_RANGE: i32 = 4;
@@ -80,6 +83,33 @@ extern "C" {
     fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
     fn AXValueCreate(value_type: i32, value: *const c_void) -> AXValueRef;
     fn AXValueGetValue(value: AXValueRef, value_type: i32, output: *mut c_void) -> Boolean;
+    fn AXObserverCreate(
+        pid: i32,
+        callback: extern "C" fn(AXObserverRef, AXUIElementRef, CFStringRef, *mut c_void),
+        observer: *mut AXObserverRef,
+    ) -> AXError;
+    fn AXObserverAddNotification(
+        observer: AXObserverRef,
+        element: AXUIElementRef,
+        notification: CFStringRef,
+        context: *mut c_void,
+    ) -> AXError;
+    fn AXObserverGetRunLoopSource(
+        observer: AXObserverRef,
+    ) -> core_foundation_sys::runloop::CFRunLoopSourceRef;
+}
+
+extern "C" fn observer_callback(
+    _observer: AXObserverRef,
+    _element: AXUIElementRef,
+    _notification: CFStringRef,
+    context: *mut c_void,
+) {
+    if context.is_null() {
+        return;
+    }
+    let callback = unsafe { &*(context as *const Arc<dyn Fn() + Send + Sync>) };
+    callback();
 }
 
 struct OwnedAxElement(NonNull<c_void>);
@@ -101,6 +131,54 @@ pub struct MacAccessibility;
 impl MacAccessibility {
     pub fn new() -> Self {
         Self
+    }
+
+    pub fn start_observer(&self, callback: Arc<dyn Fn() + Send + Sync>) {
+        thread::spawn(move || {
+            use core_foundation_sys::runloop::{
+                kCFRunLoopDefaultMode, CFRunLoopAddSource, CFRunLoopGetCurrent,
+                CFRunLoopRemoveSource, CFRunLoopRunInMode,
+            };
+            let context = Box::into_raw(Box::new(callback)).cast::<c_void>();
+            loop {
+                let element = match Self::focused_element() {
+                    Ok(element) => element,
+                    Err(_) => {
+                        thread::sleep(std::time::Duration::from_millis(500));
+                        continue;
+                    }
+                };
+                let mut pid = 0;
+                if unsafe { AXUIElementGetPid(element.as_ref(), &mut pid) } != AX_SUCCESS {
+                    continue;
+                }
+                let mut observer: AXObserverRef = ptr::null();
+                if unsafe { AXObserverCreate(pid, observer_callback, &mut observer) } != AX_SUCCESS
+                    || observer.is_null()
+                {
+                    continue;
+                }
+                for notification in ["AXSelectedTextChanged", "AXUIElementDestroyed"] {
+                    let notification = CFString::new(notification);
+                    unsafe {
+                        AXObserverAddNotification(
+                            observer,
+                            element.as_ref(),
+                            notification.as_concrete_TypeRef(),
+                            context,
+                        );
+                    }
+                }
+                let source = unsafe { AXObserverGetRunLoopSource(observer) };
+                let run_loop = unsafe { CFRunLoopGetCurrent() };
+                unsafe {
+                    CFRunLoopAddSource(run_loop, source, kCFRunLoopDefaultMode);
+                    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.75, 1);
+                    CFRunLoopRemoveSource(run_loop, source, kCFRunLoopDefaultMode);
+                    CFRelease(observer);
+                }
+            }
+        });
     }
 
     fn attribute(element: AXUIElementRef, name: &str) -> Result<CFTypeRef, VerbalixError> {
@@ -126,10 +204,7 @@ impl MacAccessibility {
             .ok_or(VerbalixError::SelectionUnavailable)
     }
 
-    fn string_attribute(
-        element: AXUIElementRef,
-        name: &str,
-    ) -> Result<String, VerbalixError> {
+    fn string_attribute(element: AXUIElementRef, name: &str) -> Result<String, VerbalixError> {
         let value = Self::attribute(element, name)?;
         let is_string = unsafe { CFGetTypeID(value) == CFStringGetTypeID() };
         if !is_string {
@@ -143,8 +218,13 @@ impl MacAccessibility {
     fn selected_range(element: AXUIElementRef) -> Result<CFRange, VerbalixError> {
         let value = Self::attribute(element, "AXSelectedTextRange")?;
         let mut range = CFRange::default();
-        let success =
-            unsafe { AXValueGetValue(value, AX_VALUE_CF_RANGE, (&mut range as *mut CFRange).cast()) };
+        let success = unsafe {
+            AXValueGetValue(
+                value,
+                AX_VALUE_CF_RANGE,
+                (&mut range as *mut CFRange).cast(),
+            )
+        };
         unsafe { CFRelease(value) };
         if success == 0 || range.length <= 0 {
             return Err(VerbalixError::SelectionUnavailable);
@@ -177,11 +257,7 @@ impl MacAccessibility {
         let mut bounds = CGRect::default();
         if status == AX_SUCCESS && !value.is_null() {
             unsafe {
-                AXValueGetValue(
-                    value,
-                    AX_VALUE_CG_RECT,
-                    (&mut bounds as *mut CGRect).cast(),
-                );
+                AXValueGetValue(value, AX_VALUE_CG_RECT, (&mut bounds as *mut CGRect).cast());
                 CFRelease(value);
             }
         }
@@ -197,11 +273,8 @@ impl MacAccessibility {
         let attribute = CFString::new("AXSelectedText");
         let mut settable: Boolean = 0;
         unsafe {
-            AXUIElementIsAttributeSettable(
-                element,
-                attribute.as_concrete_TypeRef(),
-                &mut settable,
-            ) == AX_SUCCESS
+            AXUIElementIsAttributeSettable(element, attribute.as_concrete_TypeRef(), &mut settable)
+                == AX_SUCCESS
                 && settable != 0
         }
     }
@@ -289,15 +362,15 @@ impl SelectionPort for MacAccessibility {
         }
         let value = Self::string_attribute(element.as_ref(), "AXValue")?;
         let utf16: Vec<u16> = value.encode_utf16().collect();
-        let start = usize::try_from(expected.range.location)
-            .map_err(|_| VerbalixError::StaleSelection)?;
+        let start =
+            usize::try_from(expected.range.location).map_err(|_| VerbalixError::StaleSelection)?;
         let transformed_length = transformed_text.encode_utf16().count();
         let end = start
             .checked_add(transformed_length)
             .filter(|end| *end <= utf16.len())
             .ok_or(VerbalixError::StaleSelection)?;
-        let current = String::from_utf16(&utf16[start..end])
-            .map_err(|_| VerbalixError::StaleSelection)?;
+        let current =
+            String::from_utf16(&utf16[start..end]).map_err(|_| VerbalixError::StaleSelection)?;
         if current != transformed_text {
             return Err(VerbalixError::StaleSelection);
         }

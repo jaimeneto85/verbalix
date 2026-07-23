@@ -76,7 +76,10 @@ mod tests {
             text: "👩🏽‍💻".repeat(3_001),
             preferences: None,
         };
-        assert!(matches!(request.validate(), Err(VerbalixError::TextTooLong)));
+        assert!(matches!(
+            request.validate(),
+            Err(VerbalixError::TextTooLong)
+        ));
     }
 
     #[test]

@@ -37,11 +37,7 @@ mod unsupported {
             Err(VerbalixError::UnsupportedPlatform)
         }
 
-        fn replace(
-            &self,
-            _expected: &SelectionSnapshot,
-            _text: &str,
-        ) -> Result<(), VerbalixError> {
+        fn replace(&self, _expected: &SelectionSnapshot, _text: &str) -> Result<(), VerbalixError> {
             Err(VerbalixError::UnsupportedPlatform)
         }
 

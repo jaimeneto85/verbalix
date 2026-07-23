@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { AuthPanel } from "./components/AuthPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { PermissionCard } from "./components/PermissionCard";
@@ -38,7 +39,18 @@ export function App() {
         .saveSession(session.access_token, session.refresh_token)
         .then(() => setAuthenticated(true));
     });
-    return () => subscription.unsubscribe();
+    const deepLink = onOpenUrl(async (urls) => {
+      for (const value of urls) {
+        const code = new URL(value).searchParams.get("code");
+        if (code) {
+          await supabase.auth.exchangeCodeForSession(code);
+        }
+      }
+    });
+    return () => {
+      subscription.unsubscribe();
+      deepLink.then((dispose) => dispose());
+    };
   }, []);
 
   useEffect(() => {

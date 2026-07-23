@@ -3,8 +3,9 @@ mod domain;
 mod platform;
 
 use application::{
-    HistoryItem, JsonSettingsRepository, KeychainSessionRepository, RemoteHistoryRepository,
-    RemoteTransformer, SelectionCoordinator, SessionRepository, StoredSession,
+    HistoryItem, JsonSettingsRepository, KeychainSessionRepository, RemoteAuthRepository,
+    RemoteHistoryRepository, RemoteTransformer, SelectionCoordinator, SessionRepository,
+    StoredSession,
 };
 use domain::{
     AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
@@ -32,16 +33,16 @@ struct AppRuntime {
     session: Arc<KeychainSessionRepository>,
     clipboard: Arc<SystemClipboard>,
     history: Arc<RemoteHistoryRepository>,
+    auth: Arc<RemoteAuthRepository>,
     paused: AtomicBool,
 }
 
 #[tauri::command]
-fn accessibility_status(
-    runtime: State<'_, Arc<AppRuntime>>,
-    prompt: Option<bool>,
-) -> bool {
+fn accessibility_status(runtime: State<'_, Arc<AppRuntime>>, prompt: Option<bool>) -> bool {
     use application::SelectionPort;
-    runtime.selection.permission_granted(prompt.unwrap_or(false))
+    runtime
+        .selection
+        .permission_granted(prompt.unwrap_or(false))
 }
 
 #[tauri::command]
@@ -89,9 +90,7 @@ fn clear_session(runtime: State<'_, Arc<AppRuntime>>) -> Result<(), VerbalixErro
 }
 
 #[tauri::command]
-fn current_selection(
-    runtime: State<'_, Arc<AppRuntime>>,
-) -> Option<domain::SelectionSnapshot> {
+fn current_selection(runtime: State<'_, Arc<AppRuntime>>) -> Option<domain::SelectionSnapshot> {
     runtime.coordinator.current_snapshot()
 }
 
@@ -118,10 +117,12 @@ async fn transform_selection(
         .coordinator
         .current_snapshot()
         .ok_or(VerbalixError::SelectionUnavailable)?;
-    let session = runtime
+    let stored = runtime
         .session
         .load()?
         .ok_or(VerbalixError::Unauthenticated)?;
+    let session = runtime.auth.refresh(&stored).await?;
+    runtime.session.save(&session)?;
     let request = TransformRequest {
         request_id: uuid::Uuid::new_v4(),
         operation,
@@ -167,10 +168,12 @@ fn dismiss_overlays(runtime: State<'_, Arc<AppRuntime>>) -> Result<(), VerbalixE
 async fn list_history(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Vec<HistoryItem>, VerbalixError> {
-    let session = runtime
+    let stored = runtime
         .session
         .load()?
         .ok_or(VerbalixError::Unauthenticated)?;
+    let session = runtime.auth.refresh(&stored).await?;
+    runtime.session.save(&session)?;
     runtime.history.list(&session.access_token).await
 }
 
@@ -179,10 +182,12 @@ async fn delete_history(
     runtime: State<'_, Arc<AppRuntime>>,
     id: Option<uuid::Uuid>,
 ) -> Result<(), VerbalixError> {
-    let session = runtime
+    let stored = runtime
         .session
         .load()?
         .ok_or(VerbalixError::Unauthenticated)?;
+    let session = runtime.auth.refresh(&stored).await?;
+    runtime.session.save(&session)?;
     runtime.history.delete(id, &session.access_token).await
 }
 
@@ -204,9 +209,7 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
                     | Err(VerbalixError::ProtectedField)
                     | Err(VerbalixError::PermissionDenied) => {
                         candidate_id = None;
-                        let _ = runtime
-                            .coordinator
-                            .dispatch(SelectionEvent::Invalidated);
+                        let _ = runtime.coordinator.dispatch(SelectionEvent::Invalidated);
                     }
                     _ => {}
                 }
@@ -279,9 +282,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 let paused = runtime.paused.load(Ordering::Relaxed);
                 runtime.paused.store(!paused, Ordering::Relaxed);
                 if !paused {
-                    let _ = runtime
-                        .coordinator
-                        .dispatch(SelectionEvent::Invalidated);
+                    let _ = runtime.coordinator.dispatch(SelectionEvent::Invalidated);
                 }
             }
             _ => {}
@@ -296,12 +297,15 @@ fn normalized_shortcut(shortcut: &str) -> String {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let config_dir = app.path().app_config_dir()?;
-            let settings = Arc::new(JsonSettingsRepository::new(config_dir.join("settings.json")));
+            let settings = Arc::new(JsonSettingsRepository::new(
+                config_dir.join("settings.json"),
+            ));
             let selection = Arc::new(MacAccessibility::new());
             let overlay = Arc::new(TauriOverlay::new(app.handle().clone()));
             let supabase_url = std::env::var("VERBALIX_SUPABASE_URL").unwrap_or_default();
@@ -324,20 +328,34 @@ pub fn run() {
                     "com.verbalix.desktop",
                     "supabase-access-token",
                 )),
-                clipboard: Arc::new(
-                    SystemClipboard::new()
-                        .map_err(|error| {
-                            let boxed: Box<dyn std::error::Error> = Box::new(error);
-                            tauri::Error::Setup(boxed.into())
-                        })?,
-                ),
+                clipboard: Arc::new(SystemClipboard::new().map_err(|error| {
+                    let boxed: Box<dyn std::error::Error> = Box::new(error);
+                    tauri::Error::Setup(boxed.into())
+                })?),
                 history: Arc::new(RemoteHistoryRepository::new(
-                    supabase_url,
-                    anonymous_key,
+                    supabase_url.clone(),
+                    anonymous_key.clone(),
                 )),
+                auth: Arc::new(RemoteAuthRepository::new(supabase_url, anonymous_key)),
                 paused: AtomicBool::new(false),
             });
             app.manage(runtime.clone());
+            let observer_runtime = runtime.clone();
+            runtime.selection.start_observer(Arc::new(move || {
+                match observer_runtime.coordinator.refresh_selection() {
+                    Ok(Some(snapshot)) => {
+                        thread::sleep(Duration::from_millis(150));
+                        let _ = observer_runtime
+                            .coordinator
+                            .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
+                    }
+                    _ => {
+                        let _ = observer_runtime
+                            .coordinator
+                            .dispatch(SelectionEvent::Invalidated);
+                    }
+                }
+            }));
             let shortcut_runtime = runtime.clone();
             let shortcut = normalized_shortcut(&runtime.settings.load()?.shortcut);
             app.handle().plugin(

@@ -7,6 +7,6 @@ pub use coordinator::SelectionCoordinator;
 pub use ports::{ClipboardPort, OverlayPort, SelectionPort};
 pub use settings_file::JsonSettingsRepository;
 pub use supabase::{
-    KeychainSessionRepository, RemoteTransformer, SessionRepository, StoredSession,
-    HistoryItem, RemoteHistoryRepository,
+    HistoryItem, KeychainSessionRepository, RemoteAuthRepository, RemoteHistoryRepository,
+    RemoteTransformer, SessionRepository, StoredSession,
 };
