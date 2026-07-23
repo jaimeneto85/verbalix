@@ -7,7 +7,8 @@ mod settings_file;
 mod supabase;
 
 pub use ai_readiness::{
-    evaluate_ai_readiness, AiReadiness, AiReadinessStatus, PublicBackendConfig,
+    classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
+    PublicBackendConfig, RefreshFailureRoute,
 };
 pub use auth_refresh::RemoteAuthRepository;
 pub use coordinator::SelectionCoordinator;

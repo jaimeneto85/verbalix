@@ -1,3 +1,4 @@
+use crate::domain::VerbalixError;
 use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -49,6 +50,12 @@ pub enum AiReadinessStatus {
     ProviderNotConfigured,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RefreshFailureRoute {
+    LoginRequired,
+    ProviderUnavailable,
+}
+
 impl AiReadinessStatus {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -96,6 +103,13 @@ pub fn evaluate_ai_readiness(configured: bool, has_session: bool) -> AiReadiness
         AiReadiness::login_required()
     } else {
         AiReadiness::ready()
+    }
+}
+
+pub fn classify_refresh_failure(error: &VerbalixError) -> RefreshFailureRoute {
+    match error {
+        VerbalixError::Unauthenticated => RefreshFailureRoute::LoginRequired,
+        _ => RefreshFailureRoute::ProviderUnavailable,
     }
 }
 
@@ -176,6 +190,23 @@ mod tests {
         assert_eq!(
             evaluate_ai_readiness(true, true).status,
             AiReadinessStatus::Ready
+        );
+    }
+
+    #[test]
+    fn existing_session_refresh_errors_preserve_auth_for_provider_failures() {
+        for error in [
+            VerbalixError::ProviderRejected,
+            VerbalixError::InvalidResponse,
+        ] {
+            assert_eq!(
+                classify_refresh_failure(&error),
+                RefreshFailureRoute::ProviderUnavailable
+            );
+        }
+        assert_eq!(
+            classify_refresh_failure(&VerbalixError::Unauthenticated),
+            RefreshFailureRoute::LoginRequired
         );
     }
 }

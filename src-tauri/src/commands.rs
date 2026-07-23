@@ -1,7 +1,7 @@
 use crate::{
     application::{
-        evaluate_ai_readiness, AiReadiness, AiReadinessStatus, HistoryItem, PublicBackendConfig,
-        SessionRepository, StoredSession,
+        classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
+        HistoryItem, PublicBackendConfig, RefreshFailureRoute, SessionRepository, StoredSession,
     },
     domain::{
         AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
@@ -185,9 +185,16 @@ pub(crate) async fn transform_selection(
     let session = match runtime.auth.refresh(&stored).await {
         Ok(session) => session,
         Err(error) => {
-            let readiness = AiReadiness::login_required();
-            show_readiness(&runtime, &readiness);
-            crate::show_main_window(&app, "login_required");
+            match classify_refresh_failure(&error) {
+                RefreshFailureRoute::LoginRequired => {
+                    let readiness = AiReadiness::login_required();
+                    show_readiness(&runtime, &readiness);
+                    crate::show_main_window(&app, "login_required");
+                }
+                RefreshFailureRoute::ProviderUnavailable => {
+                    show_provider_unavailable(&runtime);
+                }
+            }
             return Err(error);
         }
     };
