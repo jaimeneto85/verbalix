@@ -15,9 +15,11 @@ pub(crate) fn accessibility_status(
     prompt: Option<bool>,
 ) -> bool {
     use crate::application::SelectionPort;
-    runtime
+    let trusted = runtime
         .selection
-        .permission_granted(prompt.unwrap_or(false))
+        .permission_granted(prompt.unwrap_or(false));
+    crate::diagnostics::accessibility(trusted);
+    trusted
 }
 
 #[tauri::command]

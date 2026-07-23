@@ -20,6 +20,22 @@ pub fn detection(origin: &str) {
     emit("detection", "triggered", &format!("origin={origin}"));
 }
 
+pub fn lifecycle(event: &'static str, origin: &'static str) {
+    emit("lifecycle", event, &lifecycle_metadata(origin));
+}
+
+pub fn accessibility(trusted: bool) {
+    emit(
+        "accessibility",
+        "status",
+        if trusted {
+            "trusted=true"
+        } else {
+            "trusted=false"
+        },
+    );
+}
+
 pub fn capture_success(snapshot: &SelectionSnapshot) {
     emit("capture", "success", &snapshot_metadata(snapshot));
 }
@@ -78,6 +94,10 @@ fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
     )
 }
 
+fn lifecycle_metadata(origin: &'static str) -> String {
+    format!("origin={origin}")
+}
+
 fn error_code(error: &VerbalixError) -> &'static str {
     match error {
         VerbalixError::PermissionDenied => "permission_denied",
@@ -132,5 +152,13 @@ mod tests {
             error_code(&VerbalixError::PermissionDenied),
             "permission_denied"
         );
+    }
+
+    #[test]
+    fn lifecycle_metadata_contains_only_a_bounded_origin() {
+        let metadata = lifecycle_metadata("dock_reopen");
+
+        assert_eq!(metadata, "origin=dock_reopen");
+        assert!(!metadata.contains("secret selected text"));
     }
 }

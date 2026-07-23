@@ -15,7 +15,7 @@ use std::{sync::Arc, thread, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Manager, RunEvent, WindowEvent,
 };
 
 pub(crate) struct AppRuntime {
@@ -116,6 +116,23 @@ fn trigger_active_shortcut(runtime: &AppRuntime) {
     }
 }
 
+fn show_main_window(app: &AppHandle, origin: &'static str) {
+    diagnostics::lifecycle("show_requested", origin);
+    let Some(window) = app.get_webview_window("main") else {
+        diagnostics::lifecycle("show_failed", "main_window_missing");
+        return;
+    };
+    if window.show().and_then(|_| window.set_focus()).is_ok() {
+        diagnostics::lifecycle("shown", origin);
+    } else {
+        diagnostics::lifecycle("show_failed", origin);
+    }
+}
+
+fn is_main_window(label: &str) -> bool {
+    label == "main"
+}
+
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let settings = MenuItem::with_id(app, "settings", "Configurações", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", "Pausar", true, None::<&str>)?;
@@ -126,13 +143,11 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .tooltip("Verbalix")
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id.as_ref() {
-            "settings" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+            "settings" => show_main_window(app, "tray"),
+            "quit" => {
+                diagnostics::lifecycle("quit_requested", "tray");
+                app.exit(0);
             }
-            "quit" => app.exit(0),
             "pause" => {
                 let runtime = app.state::<Arc<AppRuntime>>();
                 let paused = runtime.pause.toggle();
@@ -152,11 +167,28 @@ pub(crate) fn normalized_shortcut(shortcut: &str) -> String {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
+        .on_window_event(|window, event| {
+            if is_main_window(window.label()) {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    diagnostics::lifecycle("close_intercepted", "main_window");
+                    if window.hide().is_ok() {
+                        diagnostics::lifecycle("hidden", "main_window");
+                    } else {
+                        diagnostics::lifecycle("hide_failed", "main_window");
+                    }
+                }
+            }
+        })
         .setup(|app| {
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            {
+                app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                diagnostics::lifecycle("activation_policy_applied", "regular");
+            }
+            diagnostics::lifecycle("setup_started", "application");
             let config_dir = app.path().app_config_dir()?;
             let settings = Arc::new(JsonSettingsRepository::new(
                 config_dir.join("settings.json"),
@@ -240,6 +272,7 @@ pub fn run() {
             )?;
             start_selection_observer(runtime);
             setup_tray(app.handle())?;
+            diagnostics::lifecycle("setup_finished", "application");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -259,6 +292,27 @@ pub fn run() {
             list_history,
             delete_history
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Verbalix");
+        .build(tauri::generate_context!())
+        .expect("failed to build Verbalix");
+    diagnostics::lifecycle("event_loop_started", "application");
+    app.run(|app, event| match event {
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => show_main_window(app, "dock_reopen"),
+        RunEvent::Ready => diagnostics::lifecycle("ready", "application"),
+        RunEvent::ExitRequested { .. } => diagnostics::lifecycle("exit_requested", "application"),
+        RunEvent::Exit => diagnostics::lifecycle("exiting", "application"),
+        _ => {}
+    });
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::is_main_window;
+
+    #[test]
+    fn only_the_main_window_uses_hide_on_close_lifecycle() {
+        assert!(is_main_window("main"));
+        assert!(!is_main_window("toolbar"));
+        assert!(!is_main_window("note"));
+    }
 }
