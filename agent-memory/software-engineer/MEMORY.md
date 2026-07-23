@@ -23,12 +23,15 @@
 - Testes assíncronos Rust exigem `macros` e um runtime habilitados no Tokio.
 - Erros de setup Tauri precisam ser convertidos para `Box<dyn std::error::Error>`.
 - Bundles ad-hoc podem manter uma entrada TCC visualmente habilitada que não corresponde ao requisito designado do build atual; nunca resetar TCC automaticamente.
+- Refresh de sessão deve separar autenticação inválida (`400/401/403`) de indisponibilidade transitória (`429/5xx`, transporte ou JSON inválido); somente a primeira rota abre o login.
 
 ## Dependências & Integrações
 - Transformações passam exclusivamente pela Edge Function autenticada.
 - Sessões sensíveis usam Keychain; preferências não sensíveis usam store local.
 - O clamp do overlay usa `NSScreen.visibleFrame` capturado no setup da aplicação e mantém fallback pelos monitores do Tauri.
 - O dispatcher de overlay cria, configura, posiciona, mostra, oculta e confirma `is_visible` exclusivamente dentro de `run_on_main_thread`.
+- Depois de trocar a classe nativa de uma WebView para `NSPanel`, não chamar setters de janela do wrapper Tauri que dependam da classe/ivars originais; o painel não ativante deve ser configurado integralmente no boundary AppKit.
+- Durante o MVP diagnosticável, `ActivationPolicy::Regular`, fechamento da janela principal como hide e reabertura centralizada por Dock/tray mantêm o processo observável.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.

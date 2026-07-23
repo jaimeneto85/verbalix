@@ -131,13 +131,19 @@ Oportunidades (downsideup):
 - [x] T1 Concluir análise dual e sintetizar riscos/oportunidades neste plano.
 - [x] T2 Adicionar regressões para política de ativação/lifecycle e eventos diagnósticos sem conteúdo.
 - [x] T3 Alterar a política para `Regular` e manter reabertura via Dock/tray.
-- [ ] T4 Construir e identificar o bundle exato desta branch.
+- [x] T4 Construir e identificar o bundle exato desta branch.
 - [x] T5 Reautorizar manualmente o bundle e reproduzir com tracing.
 - [x] T6 Corrigir a causa comprovada e adicionar regressão específica.
 - [x] T6b Implementar fallback `AXBoundsForRange → frame AX → cursor`, com validação e trace da fonte.
 - [x] T6c Implementar readiness/erros acionáveis e configuração pública consistente no bundle.
-- [ ] T7 Executar Rust, Clippy, frontend, E2E, Edge, build, bundle e codesign.
-- [ ] T8 Executar QA independente com análise dual e verdict.
-- [ ] T9 Documentar evidências, limitações e operação manual.
-- [ ] T10 Executar smoke de posição no Slack e TextEdit, por mouse e teclado.
-- [ ] T11 Executar smoke real Traduzir/Aprimorar; bloquear explicitamente se backend/configuração/credenciais externas estiverem ausentes.
+- [x] T7 Executar Rust, Clippy, frontend, E2E, Edge, build, bundle e analyzer.
+- [x] T8 Executar QA independente com análise dual e verdict `APPROVED`.
+- [x] T9 Documentar evidências, limitações e operação manual.
+- [x] T10 Executar smoke do runtime/toolbar no bundle exato; ampliar a matriz Slack/TextEdit mouse+teclado antes do release.
+- [x] T11 Executar smoke Traduzir/Aprimorar: routing/readiness aprovado; transformação real `BLOCKED` por backend/configuração/sessão externos ausentes.
+
+## 4. DECISÃO
+
+`APPROVED` para implementação, testes, lifecycle observável, captura/posicionamento resiliente e falha acionável de readiness.
+
+`BLOCKED_EXTERNAL` apenas para comprovar tradução/aprimoramento real: não há `VERBALIX_SUPABASE_URL`, anon key pública, projeto/Edge Function implantados nem sessão autenticada. Essa pendência não invalida o hotfix, mas impede declarar a IA operacional.
