@@ -1,0 +1,139 @@
+.side-column {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.auth-panel p {
+  margin: 8px 0 18px;
+  font-size: 11px;
+}
+
+.email-form {
+  display: grid;
+  gap: 8px;
+}
+
+.email-form input {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #dce0e7;
+  border-radius: 9px;
+  outline: none;
+}
+
+.email-form input:focus {
+  border-color: var(--mint);
+  box-shadow: 0 0 0 3px rgba(83, 203, 166, 0.12);
+}
+
+.inline-message {
+  margin: 10px 0 0 !important;
+  color: #33755f !important;
+}
+
+.demo-card ol {
+  display: grid;
+  gap: 13px;
+  margin: 15px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.demo-card li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #667085;
+  font-size: 11px;
+}
+
+.demo-card b {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 8px;
+  color: #138a68;
+  background: #e2f7f0;
+}
+
+.history-panel {
+  min-height: 400px;
+}
+
+.empty-state {
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+  color: #9aa1ae;
+  font-size: 13px;
+}
+
+.history-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.history-list article {
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.history-meta,
+.history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-meta span {
+  color: #168665;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.history-meta time {
+  color: #a0a6b1;
+  font-size: 10px;
+}
+
+.history-list p {
+  margin: 11px 0;
+  font-size: 12px;
+}
+
+.history-list .result {
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+  color: #263146;
+}
+
+.history-actions {
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.history-actions button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: #657084;
+  background: #f1f3f6;
+  font-size: 10px;
+}
+
+.toast {
+  position: fixed;
+  right: 25px;
+  bottom: 25px;
+  padding: 11px 16px;
+  border-radius: 9px;
+  color: #fff;
+  background: #172033;
+  font-size: 12px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
