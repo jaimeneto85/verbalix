@@ -8,6 +8,7 @@ import { native } from "./native";
 import { supabase } from "./supabase";
 import type { AppSettings, HistoryItem } from "./types";
 import { defaultSettings } from "./types";
+import brandMark from "../branding/verbalix-mark.svg";
 
 type Tab = "settings" | "history";
 
@@ -83,7 +84,7 @@ export function App() {
     <main className="app-shell">
       <aside>
         <div className="brand">
-          <div className="brand-mark">V</div>
+          <img className="brand-mark" src={brandMark} alt="" />
           <div>
             <strong>Verbalix</strong>
             <span>Technical writing copilot</span>

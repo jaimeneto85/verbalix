@@ -30,12 +30,18 @@
   "bundle": {
     "active": true,
     "targets": ["dmg", "app"],
-    "icon": [],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
     "category": "Productivity",
     "shortDescription": "Translate and improve selected technical text",
     "macOS": {
       "minimumSystemVersion": "14.0",
-      "entitlements": "Entitlements.plist"
+      "entitlements": "Entitlements.plist",
+      "signingIdentity": "-"
     }
   },
   "plugins": {

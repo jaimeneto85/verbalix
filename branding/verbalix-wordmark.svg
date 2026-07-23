@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 240" role="img" aria-labelledby="title">
+  <title id="title">Verbalix</title>
+  <g transform="translate(24 20) scale(.39)">
+    <defs>
+      <linearGradient id="wl" x1="96" y1="104" x2="276" y2="400" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#B45CFF"/>
+        <stop offset="1" stop-color="#6737E8"/>
+      </linearGradient>
+      <linearGradient id="wr" x1="416" y1="104" x2="236" y2="400" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#2DE2F2"/>
+        <stop offset="1" stop-color="#2864F0"/>
+      </linearGradient>
+    </defs>
+    <path d="M92 112c-8-14 2-32 19-32h81c22 0 42 12 52 32l67 133-66 113c-11 19-38 19-49 0L92 112Z" fill="url(#wl)"/>
+    <path d="M420 112c8-14-2-32-19-32h-81c-22 0-42 12-52 32l-67 133 66 113c11 19 38 19 49 0L420 112Z" fill="url(#wr)"/>
+    <rect x="251" y="220" width="10" height="86" rx="5" fill="#F8FAFC"/>
+  </g>
+  <text x="242" y="157" fill="#F8FAFC" font-family="Inter, SF Pro Display, system-ui, sans-serif" font-size="112" font-weight="680" letter-spacing="-4">verbalix</text>
+</svg>
