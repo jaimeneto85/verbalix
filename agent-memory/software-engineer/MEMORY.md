@@ -14,6 +14,8 @@
 
 ## Erros Recorrentes & Soluções
 - A Accessibility API é incompleta em alguns aplicativos; ausência de atributos deve produzir degradação segura.
+- Testes assíncronos Rust exigem `macros` e um runtime habilitados no Tokio.
+- Erros de setup Tauri precisam ser convertidos para `Box<dyn std::error::Error>`.
 
 ## Dependências & Integrações
 - Transformações passam exclusivamente pela Edge Function autenticada.
@@ -21,3 +23,4 @@
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.
+- `npm test`, `npm run build` e `cargo test` são os gates mínimos antes do handoff.

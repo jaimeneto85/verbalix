@@ -63,3 +63,34 @@ pub trait AiProvider: Send + Sync {
         access_token: &str,
     ) -> Result<TransformResult, VerbalixError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_unicode_scalars_for_limit() {
+        let request = TransformRequest {
+            request_id: Uuid::new_v4(),
+            operation: TransformOperation::Translate,
+            text: "👩🏽‍💻".repeat(3_001),
+            preferences: None,
+        };
+        assert!(matches!(request.validate(), Err(VerbalixError::TextTooLong)));
+    }
+
+    #[test]
+    fn accepts_technical_text_at_boundary() {
+        let request = TransformRequest {
+            request_id: Uuid::new_v4(),
+            operation: TransformOperation::Improve,
+            text: "a".repeat(12_000),
+            preferences: Some(TransformPreferences {
+                formality: 3,
+                length: LengthPreference::Balanced,
+                tone: TonePreference::Technical,
+            }),
+        };
+        assert!(request.validate().is_ok());
+    }
+}

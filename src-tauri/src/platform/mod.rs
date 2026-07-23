@@ -4,6 +4,7 @@ mod overlay;
 #[cfg(target_os = "macos")]
 mod macos_accessibility;
 
+pub use clipboard::SystemClipboard;
 pub use overlay::TauriOverlay;
 
 #[cfg(target_os = "macos")]

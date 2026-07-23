@@ -10,7 +10,7 @@ use domain::{
     AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
     TransformRequest, TransformResult, VerbalixError,
 };
-use platform::{MacAccessibility, TauriOverlay};
+use platform::{MacAccessibility, SystemClipboard, TauriOverlay};
 use std::{
     sync::Arc,
     thread,
@@ -27,6 +27,7 @@ struct AppRuntime {
     selection: Arc<MacAccessibility>,
     settings: Arc<JsonSettingsRepository>,
     session: Arc<KeychainSessionRepository>,
+    clipboard: Arc<SystemClipboard>,
 }
 
 #[tauri::command]
@@ -159,6 +160,45 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
     });
 }
 
+fn trigger_shortcut(runtime: &AppRuntime) {
+    match runtime.coordinator.refresh_selection() {
+        Ok(Some(snapshot)) => {
+            let _ = runtime
+                .coordinator
+                .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
+        }
+        Err(VerbalixError::SelectionUnavailable) => {
+            use domain::{Rect, SelectionSnapshot, TextRange};
+            if let Ok(text) = runtime.clipboard.copy_selection_preserving_clipboard() {
+                let snapshot = SelectionSnapshot::new(
+                    0,
+                    "clipboard-fallback".to_owned(),
+                    text.clone(),
+                    TextRange {
+                        location: 0,
+                        length: text.encode_utf16().count() as i64,
+                    },
+                    Rect {
+                        x: 24.0,
+                        y: 80.0,
+                        width: 1.0,
+                        height: 1.0,
+                    },
+                    false,
+                );
+                let id = snapshot.id;
+                let _ = runtime
+                    .coordinator
+                    .dispatch(SelectionEvent::Candidate(snapshot));
+                let _ = runtime
+                    .coordinator
+                    .dispatch(SelectionEvent::DebounceElapsed(id));
+            }
+        }
+        _ => {}
+    }
+}
+
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let settings = MenuItem::with_id(app, "settings", "Configurações", true, None::<&str>)?;
     let pause = MenuItem::with_id(app, "pause", "Pausar", true, None::<&str>)?;
@@ -211,8 +251,26 @@ pub fn run() {
                     "com.verbalix.desktop",
                     "supabase-access-token",
                 )),
+                clipboard: Arc::new(
+                    SystemClipboard::new()
+                        .map_err(|error| {
+                            let boxed: Box<dyn std::error::Error> = Box::new(error);
+                            tauri::Error::Setup(boxed.into())
+                        })?,
+                ),
             });
             app.manage(runtime.clone());
+            let shortcut_runtime = runtime.clone();
+            app.handle().plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_shortcuts(["alt+shift+space"])?
+                    .with_handler(move |_app, _shortcut, event| {
+                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                            trigger_shortcut(&shortcut_runtime);
+                        }
+                    })
+                    .build(),
+            )?;
             start_selection_observer(runtime);
             setup_tray(app.handle())?;
             Ok(())

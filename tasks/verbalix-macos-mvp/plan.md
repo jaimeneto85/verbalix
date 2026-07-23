@@ -109,30 +109,30 @@
 ## 📝 TASKS
 
 ### Fase 1: Fundação
-- [ ] T1.1: [LOW] Inicializar workspace Tauri 2, frontend, manifests e configurações macOS.
-- [ ] T1.2: [LOW] Definir tipos, erros, ports e configuração compartilhada.
-- [ ] T1.3: [LOW] Implementar store local de settings e validação.
-- [ ] T1.4: [MEDIUM] Criar schema/migration Supabase, RLS owner-only e contrato da Edge Function.
+- [x] T1.1: [LOW] Inicializar workspace Tauri 2, frontend, manifests e configurações macOS.
+- [x] T1.2: [LOW] Definir tipos, erros, ports e configuração compartilhada.
+- [x] T1.3: [LOW] Implementar store local de settings e validação.
+- [x] T1.4: [MEDIUM] Criar schema/migration Supabase, RLS owner-only e contrato da Edge Function.
 
 ### Fase 2: Seleção e Estado
-- [ ] T2.1: [MEDIUM] Implementar adapter de confiança/permissão Accessibility.
-- [ ] T2.2: [MEDIUM] Implementar captura AX de elemento, texto, range, bounds e writability.
+- [x] T2.1: [MEDIUM] Implementar adapter de confiança/permissão Accessibility.
+- [x] T2.2: [MEDIUM] Implementar captura AX de elemento, texto, range, bounds e writability.
 - [ ] T2.3: [MEDIUM] Implementar observação híbrida, debounce e filtros de segurança.
-- [ ] T2.4: [MEDIUM] Implementar state machine, snapshots, cancelamento e revalidação.
-- [ ] T2.5: [MEDIUM] Implementar escrita AX estrita para seleção gravável.
-- [ ] T2.6: [MEDIUM] Implementar atalho e fallback copy-only com restauração segura do clipboard.
+- [x] T2.4: [MEDIUM] Implementar state machine, snapshots, cancelamento e revalidação.
+- [x] T2.5: [MEDIUM] Implementar escrita AX estrita para seleção gravável.
+- [x] T2.6: [MEDIUM] Implementar atalho e fallback copy-only com restauração segura do clipboard.
 
 ### Fase 3: Overlays e UI
 - [ ] T3.1: [MEDIUM] Implementar toolbar nativa não ativante e posicionamento/clamp.
-- [ ] T3.2: [MEDIUM] Implementar nota read-only com Copiar/Fechar e estados de erro/loading.
-- [ ] T3.3: [MEDIUM] Implementar onboarding e Settings no frontend Tauri.
-- [ ] T3.4: [LOW] Integrar menu bar, ciclo de vida e abertura das configurações.
-- [ ] T3.5: [MEDIUM] Implementar login magic link, histórico, exclusão e estados de sessão.
+- [x] T3.2: [MEDIUM] Implementar nota read-only com Copiar/Fechar e estados de erro/loading.
+- [x] T3.3: [MEDIUM] Implementar onboarding e Settings no frontend Tauri.
+- [x] T3.4: [LOW] Integrar menu bar, ciclo de vida e abertura das configurações.
+- [x] T3.5: [MEDIUM] Implementar login magic link, histórico, exclusão e estados de sessão.
 
 ### Fase 4: IA
-- [ ] T4.1: [MEDIUM] Implementar `TextTransformer`, prompts técnicos e política PT/EN.
-- [ ] T4.2: [MEDIUM] Implementar Edge Function com `AiProvider`, OpenAI por env, erros padronizados, timeout e limite de 12k.
-- [ ] T4.3: [MEDIUM] Implementar cliente Supabase, sessão no Keychain e repositories de auth/histórico.
+- [x] T4.1: [MEDIUM] Implementar `TextTransformer`, prompts técnicos e política PT/EN.
+- [x] T4.2: [MEDIUM] Implementar Edge Function com `AiProvider`, OpenAI por env, erros padronizados, timeout e limite de 12k.
+- [x] T4.3: [MEDIUM] Implementar cliente Supabase, sessão no Keychain e repositories de auth/histórico.
 - [ ] T4.4: [MEDIUM] Integrar ações, latest-wins, preview, aplicação segura e undo temporário.
 
 ### Fase 5: Verificação

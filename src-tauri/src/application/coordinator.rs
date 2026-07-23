@@ -15,6 +15,249 @@ pub struct SelectionCoordinator {
     state: Mutex<SelectionState>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        application::{OverlayPort, SelectionPort},
+        domain::{Rect, TextRange, TransformResult},
+    };
+    use async_trait::async_trait;
+    use std::sync::Mutex;
+
+    struct FakeSelection {
+        current: Mutex<SelectionSnapshot>,
+        replacements: Mutex<Vec<String>>,
+    }
+
+    impl SelectionPort for FakeSelection {
+        fn permission_granted(&self, _prompt: bool) -> bool {
+            true
+        }
+
+        fn capture(&self) -> Result<SelectionSnapshot, VerbalixError> {
+            self.current
+                .lock()
+                .map(|current| current.clone())
+                .map_err(|_| VerbalixError::LocalFailure)
+        }
+
+        fn replace(
+            &self,
+            expected: &SelectionSnapshot,
+            text: &str,
+        ) -> Result<(), VerbalixError> {
+            let current = self
+                .current
+                .lock()
+                .map_err(|_| VerbalixError::LocalFailure)?;
+            if !current.same_target(expected) {
+                return Err(VerbalixError::StaleSelection);
+            }
+            self.replacements
+                .lock()
+                .map_err(|_| VerbalixError::LocalFailure)?
+                .push(text.to_owned());
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeOverlay {
+        toolbar_count: Mutex<usize>,
+        notes: Mutex<Vec<String>>,
+    }
+
+    impl OverlayPort for FakeOverlay {
+        fn show_toolbar(&self, _bounds: Rect) -> Result<(), VerbalixError> {
+            *self
+                .toolbar_count
+                .lock()
+                .map_err(|_| VerbalixError::LocalFailure)? += 1;
+            Ok(())
+        }
+
+        fn show_note(&self, _bounds: Rect, text: &str) -> Result<(), VerbalixError> {
+            self.notes
+                .lock()
+                .map_err(|_| VerbalixError::LocalFailure)?
+                .push(text.to_owned());
+            Ok(())
+        }
+
+        fn hide_all(&self) -> Result<(), VerbalixError> {
+            Ok(())
+        }
+    }
+
+    struct FakeProvider {
+        result: String,
+    }
+
+    #[async_trait]
+    impl AiProvider for FakeProvider {
+        async fn transform(
+            &self,
+            request: &TransformRequest,
+            _access_token: &str,
+        ) -> Result<TransformResult, VerbalixError> {
+            Ok(TransformResult {
+                request_id: request.request_id,
+                source_language: "pt".to_owned(),
+                target_language: Some("en".to_owned()),
+                result: self.result.clone(),
+            })
+        }
+    }
+
+    fn snapshot(writable: bool) -> SelectionSnapshot {
+        SelectionSnapshot::new(
+            42,
+            "com.example.editor".to_owned(),
+            "Olá 👋🏽 APIClient".to_owned(),
+            TextRange {
+                location: 5,
+                length: 16,
+            },
+            Rect {
+                x: 100.0,
+                y: 200.0,
+                width: 90.0,
+                height: 18.0,
+            },
+            writable,
+        )
+    }
+
+    fn coordinator(
+        selection: Arc<FakeSelection>,
+        overlay: Arc<FakeOverlay>,
+    ) -> SelectionCoordinator {
+        SelectionCoordinator::new(
+            selection,
+            overlay,
+            Arc::new(FakeProvider {
+                result: "Hello 👋🏽 APIClient".to_owned(),
+            }),
+        )
+    }
+
+    #[test]
+    fn only_latest_candidate_opens_toolbar() {
+        let first = snapshot(true);
+        let mut second = snapshot(true);
+        second.text = "Outra seleção".to_owned();
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(second.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let overlay = Arc::new(FakeOverlay::default());
+        let coordinator = coordinator(selection, overlay.clone());
+
+        coordinator
+            .dispatch(SelectionEvent::Candidate(first.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::Candidate(second.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(first.id))
+            .unwrap();
+        assert_eq!(*overlay.toolbar_count.lock().unwrap(), 0);
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(second.id))
+            .unwrap();
+        assert_eq!(*overlay.toolbar_count.lock().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn writable_selection_is_replaced_after_revalidation() {
+        let current = snapshot(true);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let overlay = Arc::new(FakeOverlay::default());
+        let coordinator = coordinator(selection.clone(), overlay);
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(current.id))
+            .unwrap();
+        let request = coordinator.request_for(
+            TransformOperation::Translate,
+            current.text.clone(),
+            None,
+        );
+
+        coordinator.transform(request, "token").await.unwrap();
+
+        assert_eq!(
+            selection.replacements.lock().unwrap().as_slice(),
+            ["Hello 👋🏽 APIClient"]
+        );
+    }
+
+    #[tokio::test]
+    async fn read_only_selection_uses_note_without_replacement() {
+        let current = snapshot(false);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let overlay = Arc::new(FakeOverlay::default());
+        let coordinator = coordinator(selection.clone(), overlay.clone());
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(current.id))
+            .unwrap();
+        let request = coordinator.request_for(
+            TransformOperation::Translate,
+            current.text.clone(),
+            None,
+        );
+
+        coordinator.transform(request, "token").await.unwrap();
+
+        assert!(selection.replacements.lock().unwrap().is_empty());
+        assert_eq!(
+            overlay.notes.lock().unwrap().as_slice(),
+            ["Hello 👋🏽 APIClient"]
+        );
+    }
+
+    #[tokio::test]
+    async fn changed_selection_blocks_remote_result() {
+        let current = snapshot(true);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let overlay = Arc::new(FakeOverlay::default());
+        let coordinator = coordinator(selection.clone(), overlay);
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(current.id))
+            .unwrap();
+        let request = coordinator.request_for(
+            TransformOperation::Translate,
+            current.text.clone(),
+            None,
+        );
+        selection.current.lock().unwrap().text = "Seleção mudou".to_owned();
+
+        let result = coordinator.transform(request, "token").await;
+
+        assert!(matches!(result, Err(VerbalixError::StaleSelection)));
+        assert!(selection.replacements.lock().unwrap().is_empty());
+    }
+}
+
 impl SelectionCoordinator {
     pub fn new(
         selection: Arc<dyn SelectionPort>,

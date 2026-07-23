@@ -57,3 +57,24 @@ pub trait SettingsRepository: Send + Sync {
     fn load(&self) -> Result<AppSettings, VerbalixError>;
     fn save(&self, settings: &AppSettings) -> Result<(), VerbalixError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_match_product_contract() {
+        let settings = AppSettings::default();
+        assert_eq!(settings.formality, 3);
+        assert_eq!(settings.length, LengthPreference::Balanced);
+        assert_eq!(settings.tone, TonePreference::Technical);
+        assert!(!settings.confirm_before_replace);
+    }
+
+    #[test]
+    fn rejects_formality_outside_supported_range() {
+        let mut settings = AppSettings::default();
+        settings.formality = 6;
+        assert!(settings.validate().is_err());
+    }
+}
