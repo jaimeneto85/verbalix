@@ -22,12 +22,14 @@ Fluxo simplificado: trata-se de hotfix localizado em um pipeline já especificad
 ## 1. REQUIREMENTS
 
 - R1: uma seleção válida e estável deve produzir exatamente uma intenção efetiva de `ShowToolbar`.
+- R0: quando o bundle atual não está autorizado no TCC, a UI deve explicar que a seleção não chegará ao pipeline e oferecer recuperação segura.
 - R2: capturas equivalentes não podem trocar o ID usado pelo debounce.
 - R3: invalidações anteriores à seleção não podem ocultar uma toolbar posterior por reordenação assíncrona.
 - R4: `ShowToolbar` deve criar/reusar, posicionar, mostrar e confirmar visibilidade da janela na main thread.
 - R5: erros devem degradar sem panic e ficar diagnosticáveis.
 - R6: nenhuma telemetria/log pode conter texto selecionado, tokens ou credenciais.
 - R7: seleção indisponível continua ocultando overlays.
+- R8: o app nunca deve resetar ou editar o banco TCC automaticamente.
 
 Critérios de aceite:
 
@@ -35,6 +37,7 @@ Critérios de aceite:
 - testes cobrem ordenação/execução dos comandos de overlay;
 - Rust tests, Clippy, frontend tests/build e bundle passam;
 - smoke confirma processo vivo e, se TCC permitir, toolbar visível no TextEdit.
+- instruções distinguem autorização antiga/stale da identidade do bundle atual e exigem reabertura após a mudança.
 
 ## 2. DESIGN
 
@@ -49,6 +52,12 @@ Eventos estruturados e sanitizados devem identificar:
 5. criação/reuso, posição, `show` e `is_visible`.
 
 O rastreio deve ser opt-in via ambiente e não registrar `SelectionSnapshot.text`.
+
+### Causa primária observada
+
+O bundle atual é assinado ad-hoc, não possui `TeamIdentifier` e sua designated requirement depende do `cdhash`. A linha "Verbalix" habilitada em Ajustes do Sistema pode pertencer a um build anterior, enquanto `AXIsProcessTrusted` retorna falso para o executável atual. Nesse caso o pipeline encerra em `PermissionDenied` antes da captura.
+
+A recuperação segura é manual: remover a entrada antiga de Acessibilidade, adicionar o bundle atual exato, habilitar e encerrar/reabrir o app. Uma autorização estável entre rebuilds requer certificado Apple Development ou Developer ID; o hotfix não pode fabricar essa identidade.
 
 ### Invariantes
 
@@ -75,9 +84,10 @@ Oportunidades:
 ## 3. TASKS
 
 - [ ] T1 Adicionar regressões que reproduzam recaptura equivalente/debounce e ordem do overlay.
-- [ ] T2 Implementar rastreio opt-in e sanitizado dos cinco estágios.
+- [ ] T2 Implementar rastreio opt-in e sanitizado dos cinco estágios, incluindo `PermissionDenied`.
 - [ ] T3 Corrigir a identidade retornada por `refresh_selection` e qualquer causa adicional comprovada pelo trace.
 - [ ] T4 Confirmar criação, posicionamento, show e visibilidade somente na main thread.
-- [ ] T5 Executar gates Rust/frontend/Clippy/build/bundle e smoke local.
-- [ ] T6 QA independente revisar segurança, concorrência, regressões e emitir verdict.
-- [ ] T7 Documentar resultado e evidência em `docs/`.
+- [ ] T5 Melhorar a UX de permissão stale sem automatizar alterações no TCC.
+- [ ] T6 Executar gates Rust/frontend/Clippy/build/bundle e smoke local.
+- [ ] T7 QA independente revisar segurança, concorrência, regressões e emitir verdict.
+- [ ] T8 Documentar resultado e evidência em `docs/`.
