@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Verbalix",
+  "version": "0.1.0",
+  "identifier": "com.verbalix.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Verbalix",
+        "width": 980,
+        "height": 720,
+        "minWidth": 760,
+        "minHeight": 600,
+        "visible": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "icon": [],
+    "category": "Productivity",
+    "shortDescription": "Translate and improve selected technical text",
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "entitlements": "Entitlements.plist"
+    }
+  }
+}
