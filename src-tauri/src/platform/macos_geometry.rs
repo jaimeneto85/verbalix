@@ -278,4 +278,37 @@ mod tests {
             Some((rect(420.0, 240.0, 1.0, 1.0), GeometrySource::Cursor))
         );
     }
+
+    #[test]
+    fn negative_global_coordinates_remain_valid_for_secondary_displays() {
+        let selected = rect(-1440.0, -120.0, 80.0, 18.0);
+        let cursor = CGPoint {
+            x: -800.0,
+            y: 420.0,
+        };
+
+        assert_eq!(
+            select_geometry(Some(selected), None, Some(cursor)),
+            Some((selected, GeometrySource::SelectedRange))
+        );
+        assert_eq!(
+            select_geometry(None, None, Some(cursor)),
+            Some((rect(-800.0, 420.0, 1.0, 1.0), GeometrySource::Cursor))
+        );
+    }
+
+    #[test]
+    fn invalid_cursor_does_not_create_a_sentinel_rectangle() {
+        assert_eq!(
+            select_geometry(
+                Some(rect(0.0, 0.0, 1.0, 1.0)),
+                Some(rect(10.0, 10.0, f64::INFINITY, 20.0)),
+                Some(CGPoint {
+                    x: f64::NAN,
+                    y: 240.0,
+                }),
+            ),
+            None
+        );
+    }
 }
