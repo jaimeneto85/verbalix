@@ -18,12 +18,14 @@ Também foi comprovado um defeito independente no debounce: recapturas equivalen
 ## Evidência
 
 - A regressão falhou antes da correção mostrando UUIDs diferentes e passou depois.
-- Rust: 29 testes aprovados.
+- Rust: 32 testes aprovados.
 - Frontend: 22 testes aprovados.
+- E2E Playwright: 1 cenário aprovado com adapter Tauri simulado para o estado sem permissão.
 - Edge Function: 6 testes aprovados.
 - Clippy com warnings como erro, Vite build e bundle Tauri aprovados.
 - `codesign --verify --deep --strict` aprovado no bundle recém-gerado.
-- A validação visual da toolbar fica bloqueada até o bundle atual ser autorizado em Acessibilidade.
+- O E2E automatizado prova somente a orientação e a rechecagem da UI no estado simulado sem permissão; não prova o estado real do TCC.
+- O smoke visual da toolbar no TextEdit continua bloqueado até o bundle atual ser autorizado em Acessibilidade.
 
 ## Operação local
 
