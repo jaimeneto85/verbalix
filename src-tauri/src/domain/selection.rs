@@ -12,6 +12,24 @@ pub struct Rect {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeometrySource {
+    SelectedRange,
+    FocusedElement,
+    Cursor,
+}
+
+impl GeometrySource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SelectedRange => "selected_range",
+            Self::FocusedElement => "focused_element",
+            Self::Cursor => "cursor",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TextRange {
     pub location: i64,
@@ -27,6 +45,7 @@ pub struct SelectionSnapshot {
     pub text: String,
     pub range: TextRange,
     pub bounds: Rect,
+    pub geometry_source: Option<GeometrySource>,
     pub writable: bool,
     pub captured_at_ms: u128,
 }
@@ -47,12 +66,18 @@ impl SelectionSnapshot {
             text,
             range,
             bounds,
+            geometry_source: None,
             writable,
             captured_at_ms: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|duration| duration.as_millis())
                 .unwrap_or_default(),
         }
+    }
+
+    pub fn with_geometry_source(mut self, source: GeometrySource) -> Self {
+        self.geometry_source = Some(source);
+        self
     }
 
     pub fn same_target(&self, other: &Self) -> bool {

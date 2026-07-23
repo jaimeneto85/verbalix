@@ -1,6 +1,6 @@
 use crate::{
     application::SelectionPort,
-    domain::{Rect, SelectionSnapshot, TextRange, VerbalixError},
+    domain::{SelectionSnapshot, TextRange, VerbalixError},
 };
 use core_foundation::{
     base::{CFGetTypeID, CFRelease, CFTypeRef, TCFType},
@@ -21,34 +21,12 @@ type AXError = i32;
 
 pub(super) const AX_SUCCESS: AXError = 0;
 const AX_VALUE_CF_RANGE: i32 = 4;
-const AX_VALUE_CG_RECT: i32 = 3;
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 struct CFRange {
     location: isize,
     length: isize,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-struct CGPoint {
-    x: f64,
-    y: f64,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-struct CGSize {
-    width: f64,
-    height: f64,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-struct CGRect {
-    origin: CGPoint,
-    size: CGSize,
 }
 
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -62,12 +40,6 @@ extern "C" {
         attribute: CFStringRef,
         value: *mut CFTypeRef,
     ) -> AXError;
-    fn AXUIElementCopyParameterizedAttributeValue(
-        element: AXUIElementRef,
-        attribute: CFStringRef,
-        parameter: CFTypeRef,
-        value: *mut CFTypeRef,
-    ) -> AXError;
     fn AXUIElementIsAttributeSettable(
         element: AXUIElementRef,
         attribute: CFStringRef,
@@ -79,7 +51,6 @@ extern "C" {
         value: CFTypeRef,
     ) -> AXError;
     fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
-    fn AXValueCreate(value_type: i32, value: *const c_void) -> AXValueRef;
     fn AXValueGetValue(value: AXValueRef, value_type: i32, output: *mut c_void) -> Boolean;
 }
 
@@ -162,43 +133,6 @@ impl MacAccessibility {
         Ok(range)
     }
 
-    fn bounds(element: AXUIElementRef, range: CFRange) -> Rect {
-        let range_value =
-            unsafe { AXValueCreate(AX_VALUE_CF_RANGE, (&range as *const CFRange).cast()) };
-        if range_value.is_null() {
-            return Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 1.0,
-                height: 1.0,
-            };
-        }
-        let attribute = CFString::new("AXBoundsForRange");
-        let mut value: CFTypeRef = ptr::null();
-        let status = unsafe {
-            AXUIElementCopyParameterizedAttributeValue(
-                element,
-                attribute.as_concrete_TypeRef(),
-                range_value,
-                &mut value,
-            )
-        };
-        unsafe { CFRelease(range_value) };
-        let mut bounds = CGRect::default();
-        if status == AX_SUCCESS && !value.is_null() {
-            unsafe {
-                AXValueGetValue(value, AX_VALUE_CG_RECT, (&mut bounds as *mut CGRect).cast());
-                CFRelease(value);
-            }
-        }
-        Rect {
-            x: bounds.origin.x,
-            y: bounds.origin.y,
-            width: bounds.size.width.max(1.0),
-            height: bounds.size.height.max(1.0),
-        }
-    }
-
     fn writable(element: AXUIElementRef) -> bool {
         let attribute = CFString::new("AXSelectedText");
         let mut settable: Boolean = 0;
@@ -243,6 +177,9 @@ impl SelectionPort for MacAccessibility {
         if unsafe { AXUIElementGetPid(element.as_ref(), &mut pid) } != AX_SUCCESS {
             return Err(VerbalixError::SelectionUnavailable);
         }
+        let (bounds, geometry_source) =
+            super::macos_geometry::resolve(element.as_ref(), range.location, range.length)
+                .ok_or(VerbalixError::SelectionUnavailable)?;
         Ok(SelectionSnapshot::new(
             pid,
             format!("pid:{pid}"),
@@ -251,9 +188,10 @@ impl SelectionPort for MacAccessibility {
                 location: range.location as i64,
                 length: range.length as i64,
             },
-            Self::bounds(element.as_ref(), range),
+            bounds,
             Self::writable(element.as_ref()),
-        ))
+        )
+        .with_geometry_source(geometry_source))
     }
 
     fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {

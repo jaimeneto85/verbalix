@@ -18,6 +18,7 @@ export type SelectionSnapshot = {
   text: string;
   range: { location: number; length: number };
   bounds: { x: number; y: number; width: number; height: number };
+  geometrySource?: "selected_range" | "focused_element" | "cursor";
   writable: boolean;
   capturedAtMs: number;
 };

@@ -81,7 +81,7 @@ pub fn overlay_position(label: &str, sequence: u64, x: f64, y: f64) {
 
 fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
     format!(
-        "snapshot_id={} pid={} range_location={} range_length={} bounds={:.1},{:.1},{:.1},{:.1} writable={}",
+        "snapshot_id={} pid={} range_location={} range_length={} bounds={:.1},{:.1},{:.1},{:.1} geometry_source={} writable={}",
         snapshot.id,
         snapshot.pid,
         snapshot.range.location,
@@ -90,6 +90,10 @@ fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
         snapshot.bounds.y,
         snapshot.bounds.width,
         snapshot.bounds.height,
+        snapshot
+            .geometry_source
+            .map(|source| source.as_str())
+            .unwrap_or("unknown"),
         snapshot.writable
     )
 }
@@ -144,6 +148,33 @@ mod tests {
         assert!(!metadata.contains("secret selected text"));
         assert!(metadata.contains("pid=42"));
         assert!(metadata.contains("range_location=3"));
+        assert!(metadata.contains("geometry_source=unknown"));
+    }
+
+    #[test]
+    fn geometry_source_uses_a_sanitized_stable_label() {
+        let snapshot = SelectionSnapshot::new(
+            42,
+            "pid:42".to_owned(),
+            "secret selected text".to_owned(),
+            TextRange {
+                location: 3,
+                length: 8,
+            },
+            Rect {
+                x: 1.0,
+                y: 2.0,
+                width: 3.0,
+                height: 4.0,
+            },
+            true,
+        )
+        .with_geometry_source(crate::domain::GeometrySource::FocusedElement);
+
+        let metadata = snapshot_metadata(&snapshot);
+
+        assert!(metadata.contains("geometry_source=focused_element"));
+        assert!(!metadata.contains("secret selected text"));
     }
 
     #[test]
