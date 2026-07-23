@@ -31,6 +31,7 @@ Fora do escopo:
 - R7: a toolbar deve aparecer após seleção válida no TextEdit com processo vivo.
 - R8: a correção deve atacar somente uma falha comprovada; hipóteses não comprovadas permanecem observações.
 - R9: nenhum acesso AppKit ocorre fora da main thread.
+- R10: bounds inválidos de `AXBoundsForRange` não podem virar silenciosamente `(0,0,1,1)`; a origem geométrica escolhida deve ser válida, rastreável e próxima ao alvo.
 
 ## 2. DESIGN
 
@@ -47,6 +48,18 @@ O trace do bundle exato chegou a:
 `configure_nonactivating_panel` troca dinamicamente a classe da janela para `NSPanel` com `AnyObject::set_class`. Depois desse swizzle, o wrapper Tauri ainda executa `set_focusable(false)` esperando um ivar da classe original; o ivar não existe no objeto convertido e o processo encerra. A ausência da toolbar é consequência desse panic, não de captura, bounds, TCC ou debounce nesta reprodução.
 
 A correção remove a chamada Tauri pós-swizzle. O builder já cria a janela com `.focused(false)` e a configuração nativa aplica `NSWindowStyleMaskNonactivatingPanel`, `setBecomesKeyOnlyIfNeeded` e nível adequado, suficientes para o comportamento não ativante.
+
+### Causa adicional comprovada no smoke
+
+Após remover o panic, o bundle permaneceu vivo e o trace confirmou `toolbar visible=true`. No Slack, porém, a seleção `range_length=3` produziu `bounds=0.0,1117.0,1.0,1.0`: `AXBoundsForRange` falhou, o adapter converteu a falha em retângulo sentinela e o overlay foi corretamente — mas inutilmente — ancorado no canto inferior esquerdo.
+
+A captura passa a resolver geometria nesta ordem:
+
+1. `AXBoundsForRange` quando retornar retângulo finito, positivo e não sentinela;
+2. frame do elemento AX, combinando posição e tamanho válidos;
+3. posição atual do cursor obtida por API thread-safe e convertida ao mesmo sistema global em pontos usado pelo overlay.
+
+Cada snapshot registra apenas a fonte geométrica (`selected_range`, `focused_element` ou `cursor`) e os números já sanitizados. O conteúdo continua fora do trace. O fallback do cursor é amostrado no momento da captura para manter proximidade com seleção por mouse; seleção por teclado pode cair no frame do elemento.
 
 ### Procedimento de reprodução
 
@@ -79,6 +92,8 @@ Riscos (upsidedown):
 - rebuilds ad-hoc mudam `CDHash`; congelar caminho/artefato durante toda a reprodução evita reautorizar o bundle errado.
 - logs de lifecycle e overlay devem distinguir encerramento real de janela apenas oculta.
 - remover `set_focusable` exige comprovar que o painel continua não ativante e clicável.
+- frame AX pode cobrir um editor inteiro; deve ser preferido ao cursor apenas quando a seleção não fornece bounds, e o smoke deve avaliar proximidade no Slack/TextEdit.
+- coordenadas AX, Core Graphics e Tauri devem ser comparadas em pontos globais, incluindo monitores com escala/origem diferentes.
 
 Oportunidades (downsideup):
 
@@ -90,11 +105,13 @@ Oportunidades (downsideup):
 ## 3. TASKS
 
 - [x] T1 Concluir análise dual e sintetizar riscos/oportunidades neste plano.
-- [ ] T2 Adicionar regressões para política de ativação/lifecycle e eventos diagnósticos sem conteúdo.
-- [ ] T3 Alterar a política para `Regular` e manter reabertura via Dock/tray.
+- [x] T2 Adicionar regressões para política de ativação/lifecycle e eventos diagnósticos sem conteúdo.
+- [x] T3 Alterar a política para `Regular` e manter reabertura via Dock/tray.
 - [ ] T4 Construir e identificar o bundle exato desta branch.
 - [x] T5 Reautorizar manualmente o bundle e reproduzir com tracing.
-- [ ] T6 Corrigir a causa comprovada e adicionar regressão específica.
+- [x] T6 Corrigir a causa comprovada e adicionar regressão específica.
+- [ ] T6b Implementar fallback `AXBoundsForRange → frame AX → cursor`, com validação e trace da fonte.
 - [ ] T7 Executar Rust, Clippy, frontend, E2E, Edge, build, bundle e codesign.
 - [ ] T8 Executar QA independente com análise dual e verdict.
 - [ ] T9 Documentar evidências, limitações e operação manual.
+- [ ] T10 Executar smoke de posição no Slack e TextEdit, por mouse e teclado.
