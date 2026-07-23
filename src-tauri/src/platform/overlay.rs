@@ -22,11 +22,15 @@ pub fn install_mouse_dismiss_monitor(callback: std::sync::Arc<dyn Fn() + Send + 
 
 pub struct TauriOverlay {
     app: AppHandle,
+    visible_frames: Vec<Rect>,
 }
 
 impl TauriOverlay {
     pub fn new(app: AppHandle) -> Self {
-        Self { app }
+        Self {
+            app,
+            visible_frames: macos_visible_frames(),
+        }
     }
 
     fn window(&self, label: &str, width: f64, height: f64) -> Result<WebviewWindow, VerbalixError> {
@@ -55,24 +59,36 @@ impl TauriOverlay {
     }
 
     fn place(&self, window: &WebviewWindow, bounds: Rect, width: f64, height: f64) {
-        let frame = self.app.available_monitors().ok().and_then(|monitors| {
-            monitors.into_iter().find_map(|monitor| {
-                let scale = monitor.scale_factor();
-                let position = monitor.position();
-                let size = monitor.size();
-                let frame = Rect {
-                    x: f64::from(position.x) / scale,
-                    y: f64::from(position.y) / scale,
-                    width: f64::from(size.width) / scale,
-                    height: f64::from(size.height) / scale,
-                };
-                let contained = bounds.x >= frame.x
+        let frame = self
+            .visible_frames
+            .iter()
+            .copied()
+            .find(|frame| {
+                bounds.x >= frame.x
                     && bounds.x <= frame.x + frame.width
                     && bounds.y >= frame.y
-                    && bounds.y <= frame.y + frame.height;
-                contained.then_some(frame)
+                    && bounds.y <= frame.y + frame.height
             })
-        });
+            .or_else(|| {
+                self.app.available_monitors().ok().and_then(|monitors| {
+                    monitors.into_iter().find_map(|monitor| {
+                        let scale = monitor.scale_factor();
+                        let position = monitor.position();
+                        let size = monitor.size();
+                        let frame = Rect {
+                            x: f64::from(position.x) / scale,
+                            y: f64::from(position.y) / scale,
+                            width: f64::from(size.width) / scale,
+                            height: f64::from(size.height) / scale,
+                        };
+                        let contained = bounds.x >= frame.x
+                            && bounds.x <= frame.x + frame.width
+                            && bounds.y >= frame.y
+                            && bounds.y <= frame.y + frame.height;
+                        contained.then_some(frame)
+                    })
+                })
+            });
         let (x, y) = anchored_origin(bounds, width, height, frame);
         let _ = window.set_position(LogicalPosition::new(x, y));
     }
@@ -85,6 +101,35 @@ impl TauriOverlay {
             .map_err(|_| VerbalixError::LocalFailure)?;
         window.show().map_err(|_| VerbalixError::LocalFailure)
     }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_visible_frames() -> Vec<Rect> {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSScreen;
+    let Some(mtm) = MainThreadMarker::new() else {
+        return Vec::new();
+    };
+    let primary_height = NSScreen::mainScreen(mtm)
+        .map(|screen| screen.frame().size.height)
+        .unwrap_or_default();
+    NSScreen::screens(mtm)
+        .iter()
+        .map(|screen| {
+            let visible = screen.visibleFrame();
+            Rect {
+                x: visible.origin.x,
+                y: primary_height - visible.origin.y - visible.size.height,
+                width: visible.size.width,
+                height: visible.size.height,
+            }
+        })
+        .collect()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn macos_visible_frames() -> Vec<Rect> {
+    Vec::new()
 }
 
 fn anchored_origin(

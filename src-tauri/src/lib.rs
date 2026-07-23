@@ -1,16 +1,14 @@
 mod application;
+mod commands;
 mod domain;
 mod platform;
 
 use application::{
-    HistoryItem, JsonSettingsRepository, KeychainSessionRepository, RemoteAuthRepository,
-    RemoteHistoryRepository, RemoteTransformer, SelectionCoordinator, SessionRepository,
-    StoredSession,
+    JsonSettingsRepository, KeychainSessionRepository, RemoteAuthRepository,
+    RemoteHistoryRepository, RemoteTransformer, SelectionCoordinator,
 };
-use domain::{
-    AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
-    TransformRequest, TransformResult, VerbalixError,
-};
+use commands::*;
+use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
 use std::{
     sync::{
@@ -23,172 +21,18 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, State,
+    AppHandle, Manager,
 };
 
-struct AppRuntime {
-    coordinator: Arc<SelectionCoordinator>,
-    selection: Arc<MacAccessibility>,
-    settings: Arc<JsonSettingsRepository>,
-    session: Arc<KeychainSessionRepository>,
-    clipboard: Arc<SystemClipboard>,
-    history: Arc<RemoteHistoryRepository>,
-    auth: Arc<RemoteAuthRepository>,
-    paused: AtomicBool,
-}
-
-#[tauri::command]
-fn accessibility_status(runtime: State<'_, Arc<AppRuntime>>, prompt: Option<bool>) -> bool {
-    use application::SelectionPort;
-    runtime
-        .selection
-        .permission_granted(prompt.unwrap_or(false))
-}
-
-#[tauri::command]
-fn load_settings(runtime: State<'_, Arc<AppRuntime>>) -> Result<AppSettings, VerbalixError> {
-    runtime.settings.load()
-}
-
-#[tauri::command]
-fn save_settings(
-    app: AppHandle,
-    runtime: State<'_, Arc<AppRuntime>>,
-    settings: AppSettings,
-) -> Result<(), VerbalixError> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    runtime.settings.save(&settings)?;
-    let shortcut = normalized_shortcut(&settings.shortcut);
-    app.global_shortcut()
-        .unregister_all()
-        .map_err(|_| VerbalixError::LocalFailure)?;
-    app.global_shortcut()
-        .register(shortcut.as_str())
-        .map_err(|_| VerbalixError::LocalFailure)
-}
-
-#[tauri::command]
-fn save_session(
-    runtime: State<'_, Arc<AppRuntime>>,
-    access_token: String,
-    refresh_token: String,
-) -> Result<(), VerbalixError> {
-    runtime.session.save(&StoredSession {
-        access_token,
-        refresh_token,
-    })
-}
-
-#[tauri::command]
-fn has_session(runtime: State<'_, Arc<AppRuntime>>) -> Result<bool, VerbalixError> {
-    runtime.session.load().map(|session| session.is_some())
-}
-
-#[tauri::command]
-fn clear_session(runtime: State<'_, Arc<AppRuntime>>) -> Result<(), VerbalixError> {
-    runtime.session.clear()
-}
-
-#[tauri::command]
-fn current_selection(runtime: State<'_, Arc<AppRuntime>>) -> Option<domain::SelectionSnapshot> {
-    runtime.coordinator.current_snapshot()
-}
-
-#[tauri::command]
-fn refresh_selection(
-    runtime: State<'_, Arc<AppRuntime>>,
-) -> Result<Option<domain::SelectionSnapshot>, VerbalixError> {
-    let snapshot = runtime.coordinator.refresh_selection()?;
-    if let Some(snapshot) = &snapshot {
-        runtime
-            .coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(snapshot.id))?;
-    }
-    Ok(snapshot)
-}
-
-#[tauri::command]
-async fn transform_selection(
-    runtime: State<'_, Arc<AppRuntime>>,
-    operation: TransformOperation,
-    preferences: Option<TransformPreferences>,
-) -> Result<TransformResult, VerbalixError> {
-    let snapshot = runtime
-        .coordinator
-        .current_snapshot()
-        .ok_or(VerbalixError::SelectionUnavailable)?;
-    let stored = runtime
-        .session
-        .load()?
-        .ok_or(VerbalixError::Unauthenticated)?;
-    let session = runtime.auth.refresh(&stored).await?;
-    runtime.session.save(&session)?;
-    let request = TransformRequest {
-        request_id: uuid::Uuid::new_v4(),
-        operation,
-        text: snapshot.text,
-        preferences,
-    };
-    let preview_writable = runtime.settings.load()?.confirm_before_replace;
-    let response = runtime
-        .coordinator
-        .transform(request.clone(), &session.access_token, preview_writable)
-        .await?;
-    if runtime.settings.load()?.history_enabled {
-        let _ = runtime
-            .history
-            .insert(&request, &response, &session.access_token)
-            .await;
-    }
-    Ok(response)
-}
-
-#[tauri::command]
-fn apply_preview(
-    runtime: State<'_, Arc<AppRuntime>>,
-    request_id: uuid::Uuid,
-) -> Result<String, VerbalixError> {
-    runtime.coordinator.apply_preview(request_id)
-}
-
-#[tauri::command]
-fn undo_replacement(
-    runtime: State<'_, Arc<AppRuntime>>,
-    transformed_text: String,
-) -> Result<(), VerbalixError> {
-    runtime.coordinator.undo(&transformed_text)
-}
-
-#[tauri::command]
-fn dismiss_overlays(runtime: State<'_, Arc<AppRuntime>>) -> Result<(), VerbalixError> {
-    runtime.coordinator.dispatch(SelectionEvent::Invalidated)
-}
-
-#[tauri::command]
-async fn list_history(
-    runtime: State<'_, Arc<AppRuntime>>,
-) -> Result<Vec<HistoryItem>, VerbalixError> {
-    let stored = runtime
-        .session
-        .load()?
-        .ok_or(VerbalixError::Unauthenticated)?;
-    let session = runtime.auth.refresh(&stored).await?;
-    runtime.session.save(&session)?;
-    runtime.history.list(&session.access_token).await
-}
-
-#[tauri::command]
-async fn delete_history(
-    runtime: State<'_, Arc<AppRuntime>>,
-    id: Option<uuid::Uuid>,
-) -> Result<(), VerbalixError> {
-    let stored = runtime
-        .session
-        .load()?
-        .ok_or(VerbalixError::Unauthenticated)?;
-    let session = runtime.auth.refresh(&stored).await?;
-    runtime.session.save(&session)?;
-    runtime.history.delete(id, &session.access_token).await
+pub(crate) struct AppRuntime {
+    pub coordinator: Arc<SelectionCoordinator>,
+    pub selection: Arc<MacAccessibility>,
+    pub settings: Arc<JsonSettingsRepository>,
+    pub session: Arc<KeychainSessionRepository>,
+    pub clipboard: Arc<SystemClipboard>,
+    pub history: Arc<RemoteHistoryRepository>,
+    pub auth: Arc<RemoteAuthRepository>,
+    pub paused: AtomicBool,
 }
 
 fn start_selection_observer(runtime: Arc<AppRuntime>) {
@@ -293,7 +137,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn normalized_shortcut(shortcut: &str) -> String {
+pub(crate) fn normalized_shortcut(shortcut: &str) -> String {
     shortcut.replace("Option", "Alt")
 }
 
@@ -303,7 +147,6 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
             let config_dir = app.path().app_config_dir()?;
             let settings = Arc::new(JsonSettingsRepository::new(
                 config_dir.join("settings.json"),

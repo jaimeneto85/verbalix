@@ -15,540 +15,6 @@ pub struct SelectionCoordinator {
     state: Mutex<SelectionState>,
 }
 
-#[cfg(test)]
-#[allow(clippy::items_after_test_module)]
-mod tests {
-    use super::*;
-    use crate::{
-        application::{OverlayPort, SelectionPort},
-        domain::{Rect, TextRange, TransformOperation, TransformResult},
-    };
-    use async_trait::async_trait;
-    use std::sync::{
-        atomic::{AtomicUsize, Ordering},
-        Mutex,
-    };
-    use tokio::sync::Notify;
-
-    struct FakeSelection {
-        current: Mutex<SelectionSnapshot>,
-        replacements: Mutex<Vec<String>>,
-    }
-
-    impl SelectionPort for FakeSelection {
-        fn permission_granted(&self, _prompt: bool) -> bool {
-            true
-        }
-
-        fn capture(&self) -> Result<SelectionSnapshot, VerbalixError> {
-            self.current
-                .lock()
-                .map(|current| current.clone())
-                .map_err(|_| VerbalixError::LocalFailure)
-        }
-
-        fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
-            let current = self
-                .current
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)?;
-            if !current.same_target(expected) {
-                return Err(VerbalixError::StaleSelection);
-            }
-            self.replacements
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)?
-                .push(text.to_owned());
-            Ok(())
-        }
-
-        fn restore(
-            &self,
-            expected: &SelectionSnapshot,
-            transformed_text: &str,
-        ) -> Result<(), VerbalixError> {
-            let current = self
-                .current
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)?;
-            if current.text != transformed_text {
-                return Err(VerbalixError::StaleSelection);
-            }
-            self.replacements
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)?
-                .push(expected.text.clone());
-            Ok(())
-        }
-    }
-
-    #[derive(Default)]
-    struct FakeOverlay {
-        toolbar_count: Mutex<usize>,
-        notes: Mutex<Vec<String>>,
-        hidden_count: Mutex<usize>,
-    }
-
-    impl OverlayPort for FakeOverlay {
-        fn show_toolbar(&self, _bounds: Rect) -> Result<(), VerbalixError> {
-            *self
-                .toolbar_count
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)? += 1;
-            Ok(())
-        }
-
-        fn show_note(&self, _bounds: Rect, text: &str) -> Result<(), VerbalixError> {
-            self.notes
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)?
-                .push(text.to_owned());
-            Ok(())
-        }
-
-        fn show_preview(
-            &self,
-            _bounds: Rect,
-            _request_id: Uuid,
-            text: &str,
-        ) -> Result<(), VerbalixError> {
-            self.notes
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)?
-                .push(format!("preview:{text}"));
-            Ok(())
-        }
-
-        fn show_undo(&self, _bounds: Rect, text: &str) -> Result<(), VerbalixError> {
-            self.notes
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)?
-                .push(format!("undo:{text}"));
-            Ok(())
-        }
-
-        fn hide_all(&self) -> Result<(), VerbalixError> {
-            *self
-                .hidden_count
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)? += 1;
-            Ok(())
-        }
-    }
-
-    struct FakeProvider {
-        result: String,
-    }
-
-    #[async_trait]
-    impl AiProvider for FakeProvider {
-        async fn transform(
-            &self,
-            request: &TransformRequest,
-            _access_token: &str,
-        ) -> Result<TransformResult, VerbalixError> {
-            Ok(TransformResult {
-                request_id: request.request_id,
-                source_language: "pt".to_owned(),
-                target_language: Some("en".to_owned()),
-                result: self.result.clone(),
-            })
-        }
-    }
-
-    struct ErrorProvider;
-
-    #[async_trait]
-    impl AiProvider for ErrorProvider {
-        async fn transform(
-            &self,
-            _request: &TransformRequest,
-            _access_token: &str,
-        ) -> Result<TransformResult, VerbalixError> {
-            Err(VerbalixError::ProviderTimeout)
-        }
-    }
-
-    struct WrongRequestProvider;
-
-    #[async_trait]
-    impl AiProvider for WrongRequestProvider {
-        async fn transform(
-            &self,
-            _request: &TransformRequest,
-            _access_token: &str,
-        ) -> Result<TransformResult, VerbalixError> {
-            Ok(TransformResult {
-                request_id: Uuid::new_v4(),
-                source_language: "pt".to_owned(),
-                target_language: Some("en".to_owned()),
-                result: "result".to_owned(),
-            })
-        }
-    }
-
-    struct OutOfOrderProvider {
-        calls: AtomicUsize,
-        first_started: Notify,
-        release_first: Notify,
-    }
-
-    #[async_trait]
-    impl AiProvider for OutOfOrderProvider {
-        async fn transform(
-            &self,
-            request: &TransformRequest,
-            _access_token: &str,
-        ) -> Result<TransformResult, VerbalixError> {
-            let call = self.calls.fetch_add(1, Ordering::SeqCst);
-            if call == 0 {
-                self.first_started.notify_one();
-                self.release_first.notified().await;
-            }
-            Ok(TransformResult {
-                request_id: request.request_id,
-                source_language: "pt".to_owned(),
-                target_language: Some("en".to_owned()),
-                result: format!("result-{call}"),
-            })
-        }
-    }
-
-    fn snapshot(writable: bool) -> SelectionSnapshot {
-        SelectionSnapshot::new(
-            42,
-            "com.example.editor".to_owned(),
-            "Olá 👋🏽 APIClient".to_owned(),
-            TextRange {
-                location: 5,
-                length: 16,
-            },
-            Rect {
-                x: 100.0,
-                y: 200.0,
-                width: 90.0,
-                height: 18.0,
-            },
-            writable,
-        )
-    }
-
-    fn coordinator(
-        selection: Arc<FakeSelection>,
-        overlay: Arc<FakeOverlay>,
-    ) -> SelectionCoordinator {
-        SelectionCoordinator::new(
-            selection,
-            overlay,
-            Arc::new(FakeProvider {
-                result: "Hello 👋🏽 APIClient".to_owned(),
-            }),
-        )
-    }
-
-    #[test]
-    fn only_latest_candidate_opens_toolbar() {
-        let first = snapshot(true);
-        let mut second = snapshot(true);
-        second.text = "Outra seleção".to_owned();
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(second.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let overlay = Arc::new(FakeOverlay::default());
-        let coordinator = coordinator(selection, overlay.clone());
-
-        coordinator
-            .dispatch(SelectionEvent::Candidate(first.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::Candidate(second.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(first.id))
-            .unwrap();
-        assert_eq!(*overlay.toolbar_count.lock().unwrap(), 0);
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(second.id))
-            .unwrap();
-        assert_eq!(*overlay.toolbar_count.lock().unwrap(), 1);
-    }
-
-    #[tokio::test]
-    async fn writable_selection_is_replaced_after_revalidation() {
-        let current = snapshot(true);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let overlay = Arc::new(FakeOverlay::default());
-        let coordinator = coordinator(selection.clone(), overlay);
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(current.id))
-            .unwrap();
-        let request =
-            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
-
-        coordinator
-            .transform(request, "token", false)
-            .await
-            .unwrap();
-
-        assert_eq!(
-            selection.replacements.lock().unwrap().as_slice(),
-            ["Hello 👋🏽 APIClient"]
-        );
-    }
-
-    #[tokio::test]
-    async fn read_only_selection_uses_note_without_replacement() {
-        let current = snapshot(false);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let overlay = Arc::new(FakeOverlay::default());
-        let coordinator = coordinator(selection.clone(), overlay.clone());
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(current.id))
-            .unwrap();
-        let request =
-            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
-
-        coordinator
-            .transform(request, "token", false)
-            .await
-            .unwrap();
-
-        assert!(selection.replacements.lock().unwrap().is_empty());
-        assert_eq!(
-            overlay.notes.lock().unwrap().as_slice(),
-            ["Hello 👋🏽 APIClient"]
-        );
-    }
-
-    #[tokio::test]
-    async fn changed_selection_blocks_remote_result() {
-        let current = snapshot(true);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let overlay = Arc::new(FakeOverlay::default());
-        let coordinator = coordinator(selection.clone(), overlay);
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(current.id))
-            .unwrap();
-        let request =
-            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
-        selection.current.lock().unwrap().text = "Seleção mudou".to_owned();
-
-        let result = coordinator.transform(request, "token", false).await;
-
-        assert!(matches!(result, Err(VerbalixError::StaleSelection)));
-        assert!(selection.replacements.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn invalidation_hides_overlays_and_clears_snapshot() {
-        let current = snapshot(true);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let overlay = Arc::new(FakeOverlay::default());
-        let coordinator = coordinator(selection, overlay.clone());
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current))
-            .unwrap();
-
-        coordinator.dispatch(SelectionEvent::Invalidated).unwrap();
-
-        assert!(coordinator.current_snapshot().is_none());
-        assert_eq!(*overlay.hidden_count.lock().unwrap(), 1);
-    }
-
-    #[tokio::test]
-    async fn provider_timeout_never_writes_or_shows_result() {
-        let current = snapshot(true);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let overlay = Arc::new(FakeOverlay::default());
-        let coordinator =
-            SelectionCoordinator::new(selection.clone(), overlay.clone(), Arc::new(ErrorProvider));
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(current.id))
-            .unwrap();
-        let request =
-            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
-
-        let result = coordinator.transform(request, "token", false).await;
-
-        assert!(matches!(result, Err(VerbalixError::ProviderTimeout)));
-        assert!(selection.replacements.lock().unwrap().is_empty());
-        assert!(overlay.notes.lock().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn mismatched_request_id_never_writes() {
-        let current = snapshot(true);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let coordinator = SelectionCoordinator::new(
-            selection.clone(),
-            Arc::new(FakeOverlay::default()),
-            Arc::new(WrongRequestProvider),
-        );
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(current.id))
-            .unwrap();
-        let request =
-            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
-
-        let result = coordinator.transform(request, "token", false).await;
-
-        assert!(matches!(result, Err(VerbalixError::InvalidResponse)));
-        assert!(selection.replacements.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn undo_rejects_when_transformed_content_is_no_longer_intact() {
-        let current = snapshot(true);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let coordinator = coordinator(selection.clone(), Arc::new(FakeOverlay::default()));
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current))
-            .unwrap();
-        selection.current.lock().unwrap().text = "edited again".to_owned();
-
-        let result = coordinator.undo("transformed");
-
-        assert!(matches!(result, Err(VerbalixError::StaleSelection)));
-        assert!(selection.replacements.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn oversized_capture_is_invalidated_before_provider_use() {
-        let mut current = snapshot(true);
-        current.text = "a".repeat(12_001);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let overlay = Arc::new(FakeOverlay::default());
-        let coordinator = coordinator(selection, overlay.clone());
-
-        let result = coordinator.refresh_selection();
-
-        assert!(matches!(result, Err(VerbalixError::TextTooLong)));
-        assert_eq!(*overlay.hidden_count.lock().unwrap(), 1);
-    }
-
-    #[tokio::test]
-    async fn preview_requires_explicit_apply_before_replacement() {
-        let current = snapshot(true);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let overlay = Arc::new(FakeOverlay::default());
-        let coordinator = coordinator(selection.clone(), overlay.clone());
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(current.id))
-            .unwrap();
-        let request =
-            coordinator.request_for(TransformOperation::Improve, current.text.clone(), None);
-        let request_id = request.request_id;
-
-        coordinator.transform(request, "token", true).await.unwrap();
-
-        assert!(selection.replacements.lock().unwrap().is_empty());
-        assert_eq!(
-            overlay.notes.lock().unwrap().as_slice(),
-            ["preview:Hello 👋🏽 APIClient"]
-        );
-        coordinator.apply_preview(request_id).unwrap();
-        assert_eq!(
-            selection.replacements.lock().unwrap().as_slice(),
-            ["Hello 👋🏽 APIClient"]
-        );
-    }
-
-    #[tokio::test]
-    async fn latest_request_wins_when_responses_finish_out_of_order() {
-        let current = snapshot(true);
-        let selection = Arc::new(FakeSelection {
-            current: Mutex::new(current.clone()),
-            replacements: Mutex::new(Vec::new()),
-        });
-        let provider = Arc::new(OutOfOrderProvider {
-            calls: AtomicUsize::new(0),
-            first_started: Notify::new(),
-            release_first: Notify::new(),
-        });
-        let coordinator = Arc::new(SelectionCoordinator::new(
-            selection.clone(),
-            Arc::new(FakeOverlay::default()),
-            provider.clone(),
-        ));
-        coordinator
-            .dispatch(SelectionEvent::Candidate(current.clone()))
-            .unwrap();
-        coordinator
-            .dispatch(SelectionEvent::DebounceElapsed(current.id))
-            .unwrap();
-        let first_request =
-            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
-        let first_coordinator = coordinator.clone();
-        let first = tokio::spawn(async move {
-            first_coordinator
-                .transform(first_request, "token", false)
-                .await
-        });
-        provider.first_started.notified().await;
-        let second_request =
-            coordinator.request_for(TransformOperation::Translate, current.text.clone(), None);
-
-        coordinator
-            .transform(second_request, "token", false)
-            .await
-            .unwrap();
-        provider.release_first.notify_one();
-        let first_result = first.await.unwrap();
-
-        assert!(matches!(first_result, Err(VerbalixError::StaleSelection)));
-        assert_eq!(
-            selection.replacements.lock().unwrap().as_slice(),
-            ["result-1"]
-        );
-    }
-}
-
 impl SelectionCoordinator {
     pub fn new(
         selection: Arc<dyn SelectionPort>,
@@ -579,9 +45,7 @@ impl SelectionCoordinator {
     pub fn dispatch(&self, event: SelectionEvent) -> Result<(), VerbalixError> {
         let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
         match event {
-            SelectionEvent::Candidate(snapshot) => {
-                *state = SelectionState::Candidate(snapshot);
-            }
+            SelectionEvent::Candidate(snapshot) => *state = SelectionState::Candidate(snapshot),
             SelectionEvent::DebounceElapsed(id) => {
                 if let SelectionState::Candidate(snapshot) = &*state {
                     if snapshot.id == id {
@@ -605,10 +69,10 @@ impl SelectionCoordinator {
             SelectionEvent::ResultReady(request_id) => {
                 if let SelectionState::Processing {
                     snapshot,
-                    request_id: active_request,
+                    request_id: active,
                 } = &*state
                 {
-                    if *active_request == request_id {
+                    if *active == request_id {
                         *state = SelectionState::ResultVisible(snapshot.clone());
                     }
                 }
@@ -650,46 +114,50 @@ impl SelectionCoordinator {
         self.dispatch(SelectionEvent::ActionStarted(request.request_id))?;
         let response = match self.provider.transform(&request, access_token).await {
             Ok(response) => response,
-            Err(error) => {
-                self.recover_request(request.request_id)?;
-                return Err(error);
-            }
+            Err(error) => return self.fail(request.request_id, error),
         };
+        match self.finish_transform(&request, &snapshot, &response, preview_writable) {
+            Ok(()) => Ok(response),
+            Err(error) => self.fail(request.request_id, error),
+        }
+    }
+
+    fn finish_transform(
+        &self,
+        request: &TransformRequest,
+        snapshot: &SelectionSnapshot,
+        response: &TransformResult,
+        preview_writable: bool,
+    ) -> Result<(), VerbalixError> {
         if !self.is_active_request(request.request_id)? {
             return Err(VerbalixError::StaleSelection);
         }
         if response.request_id != request.request_id || response.result.trim().is_empty() {
-            self.recover_request(request.request_id)?;
             return Err(VerbalixError::InvalidResponse);
         }
         let active = self
             .current_snapshot()
-            .filter(|current| current.same_target(&snapshot))
+            .filter(|current| current.same_target(snapshot))
             .ok_or(VerbalixError::StaleSelection)?;
-        if active.writable {
-            if preview_writable {
-                self.overlay
-                    .show_preview(active.bounds, request.request_id, &response.result)?;
-                let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
-                *state = SelectionState::PreviewVisible {
-                    snapshot: active,
-                    request_id: request.request_id,
-                    result: response.result.clone(),
-                };
-                return Ok(response);
-            }
-            self.selection.replace(&active, &response.result)?;
-            self.overlay.show_undo(active.bounds, &response.result)?;
-            let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
-            *state = SelectionState::Applied {
-                snapshot: active,
-                transformed_text: response.result.clone(),
-            };
-        } else {
+        if !active.writable {
             self.overlay.show_note(active.bounds, &response.result)?;
-            self.dispatch(SelectionEvent::ResultReady(request.request_id))?;
+            return self.dispatch(SelectionEvent::ResultReady(request.request_id));
         }
-        Ok(response)
+        if preview_writable {
+            self.overlay
+                .show_preview(active.bounds, request.request_id, &response.result)?;
+            return self.set_state(SelectionState::PreviewVisible {
+                snapshot: active,
+                request_id: request.request_id,
+                result: response.result.clone(),
+            });
+        }
+        self.selection.replace(&active, &response.result)?;
+        self.overlay.show_undo(active.bounds, &response.result)?;
+        self.set_state(SelectionState::Applied {
+            snapshot: active,
+            transformed_text: response.result.clone(),
+        })
     }
 
     pub fn apply_preview(&self, request_id: Uuid) -> Result<String, VerbalixError> {
@@ -698,19 +166,18 @@ impl SelectionCoordinator {
             match &*state {
                 SelectionState::PreviewVisible {
                     snapshot,
-                    request_id: active_request,
+                    request_id: active,
                     result,
-                } if *active_request == request_id => (snapshot.clone(), result.clone()),
+                } if *active == request_id => (snapshot.clone(), result.clone()),
                 _ => return Err(VerbalixError::StaleSelection),
             }
         };
         self.selection.replace(&snapshot, &result)?;
         self.overlay.show_undo(snapshot.bounds, &result)?;
-        let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
-        *state = SelectionState::Applied {
+        self.set_state(SelectionState::Applied {
             snapshot,
             transformed_text: result.clone(),
-        };
+        })?;
         Ok(result)
     }
 
@@ -720,8 +187,8 @@ impl SelectionCoordinator {
             match &*state {
                 SelectionState::Applied {
                     snapshot,
-                    transformed_text: active_text,
-                } if active_text == transformed_text => snapshot.clone(),
+                    transformed_text: active,
+                } if active == transformed_text => snapshot.clone(),
                 _ => return Err(VerbalixError::StaleSelection),
             }
         };
@@ -729,14 +196,19 @@ impl SelectionCoordinator {
         self.dispatch(SelectionEvent::Invalidated)
     }
 
+    fn fail<T>(&self, request_id: Uuid, error: VerbalixError) -> Result<T, VerbalixError> {
+        self.recover_request(request_id)?;
+        Err(error)
+    }
+
     fn is_active_request(&self, request_id: Uuid) -> Result<bool, VerbalixError> {
         let state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
         Ok(matches!(
             &*state,
             SelectionState::Processing {
-                request_id: active_request,
+                request_id: active,
                 ..
-            } if *active_request == request_id
+            } if *active == request_id
         ))
     }
 
@@ -744,28 +216,22 @@ impl SelectionCoordinator {
         let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
         if let SelectionState::Processing {
             snapshot,
-            request_id: active_request,
+            request_id: active,
         } = &*state
         {
-            if *active_request == request_id {
+            if *active == request_id {
                 *state = SelectionState::ToolbarVisible(snapshot.clone());
             }
         }
         Ok(())
     }
 
-    #[cfg(test)]
-    pub fn request_for(
-        &self,
-        operation: crate::domain::TransformOperation,
-        text: String,
-        preferences: Option<crate::domain::TransformPreferences>,
-    ) -> TransformRequest {
-        TransformRequest {
-            request_id: Uuid::new_v4(),
-            operation,
-            text,
-            preferences,
-        }
+    fn set_state(&self, next: SelectionState) -> Result<(), VerbalixError> {
+        *self.state.lock().map_err(|_| VerbalixError::LocalFailure)? = next;
+        Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "coordinator_tests.rs"]
+mod tests;
