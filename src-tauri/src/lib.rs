@@ -4,7 +4,7 @@ mod platform;
 
 use application::{
     JsonSettingsRepository, KeychainSessionRepository, RemoteTransformer, SelectionCoordinator,
-    SessionRepository,
+    SessionRepository, StoredSession,
 };
 use domain::{
     AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
@@ -55,8 +55,12 @@ fn save_settings(
 fn save_session(
     runtime: State<'_, Arc<AppRuntime>>,
     access_token: String,
+    refresh_token: String,
 ) -> Result<(), VerbalixError> {
-    runtime.session.save(&access_token)
+    runtime.session.save(&StoredSession {
+        access_token,
+        refresh_token,
+    })
 }
 
 #[tauri::command]
@@ -99,7 +103,7 @@ async fn transform_selection(
         .coordinator
         .current_snapshot()
         .ok_or(VerbalixError::SelectionUnavailable)?;
-    let token = runtime
+    let session = runtime
         .session
         .load()?
         .ok_or(VerbalixError::Unauthenticated)?;
@@ -109,7 +113,10 @@ async fn transform_selection(
         text: snapshot.text,
         preferences,
     };
-    runtime.coordinator.transform(request, &token).await
+    runtime
+        .coordinator
+        .transform(request, &session.access_token)
+        .await
 }
 
 #[tauri::command]

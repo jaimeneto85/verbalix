@@ -6,9 +6,16 @@ use keyring::Entry;
 use reqwest::{Client, StatusCode};
 use std::time::Duration;
 
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredSession {
+    pub access_token: String,
+    pub refresh_token: String,
+}
+
 pub trait SessionRepository: Send + Sync {
-    fn load(&self) -> Result<Option<String>, VerbalixError>;
-    fn save(&self, token: &str) -> Result<(), VerbalixError>;
+    fn load(&self) -> Result<Option<StoredSession>, VerbalixError>;
+    fn save(&self, session: &StoredSession) -> Result<(), VerbalixError>;
     fn clear(&self) -> Result<(), VerbalixError>;
 }
 
@@ -31,17 +38,21 @@ impl KeychainSessionRepository {
 }
 
 impl SessionRepository for KeychainSessionRepository {
-    fn load(&self) -> Result<Option<String>, VerbalixError> {
+    fn load(&self) -> Result<Option<StoredSession>, VerbalixError> {
         match self.entry()?.get_password() {
-            Ok(value) => Ok(Some(value)),
+            Ok(value) => serde_json::from_str(&value)
+                .map(Some)
+                .map_err(|_| VerbalixError::LocalFailure),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(_) => Err(VerbalixError::LocalFailure),
         }
     }
 
-    fn save(&self, token: &str) -> Result<(), VerbalixError> {
+    fn save(&self, session: &StoredSession) -> Result<(), VerbalixError> {
+        let serialized =
+            serde_json::to_string(session).map_err(|_| VerbalixError::LocalFailure)?;
         self.entry()?
-            .set_password(token)
+            .set_password(&serialized)
             .map_err(|_| VerbalixError::LocalFailure)
     }
 

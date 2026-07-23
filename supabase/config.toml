@@ -1,0 +1,4 @@
+project_id = "verbalix"
+
+[functions.transform]
+verify_jwt = true
