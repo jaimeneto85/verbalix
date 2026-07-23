@@ -1,3 +1,4 @@
+mod ai_readiness;
 mod auth_refresh;
 mod coordinator;
 mod ports;
@@ -5,6 +6,9 @@ mod runtime_pause;
 mod settings_file;
 mod supabase;
 
+pub use ai_readiness::{
+    evaluate_ai_readiness, AiReadiness, AiReadinessStatus, PublicBackendConfig,
+};
 pub use auth_refresh::RemoteAuthRepository;
 pub use coordinator::SelectionCoordinator;
 pub use ports::{ClipboardPort, OverlayPort, SelectionPort};

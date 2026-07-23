@@ -7,10 +7,10 @@ import { defaultSettings } from "./types";
 export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [result, setResult] = useState("");
-  const [noteMode, setNoteMode] = useState<"result" | "preview" | "undo">("result");
+  const [noteMode, setNoteMode] =
+    useState<"error" | "result" | "preview" | "undo">("result");
   const [requestId, setRequestId] = useState("");
   const [busy, setBusy] = useState<"translate" | "improve" | null>(null);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     native.loadSettings().then(setSettings).catch(() => undefined);
@@ -49,11 +49,12 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
 
   const transform = async (operation: "translate" | "improve") => {
     setBusy(operation);
-    setError("");
     try {
+      const readiness = await native.aiReadiness();
+      if (readiness.status !== "ready") return;
       await native.transformSelection(operation, settings);
-    } catch (reason) {
-      setError(String(reason));
+    } catch {
+      await native.openMainWindow().catch(() => undefined);
     } finally {
       setBusy(null);
     }
@@ -71,18 +72,24 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
     return (
       <main className="note">
         <div className="note-heading">
-          <span>Resultado</span>
+          <span>{noteMode === "error" ? "Ação necessária" : "Resultado"}</span>
           <button onClick={() => native.dismissOverlays()}>×</button>
         </div>
         <p>{result || "Processando…"}</p>
         <div className="note-actions">
-          <button
-            className="note-copy"
-            disabled={!result}
-            onClick={() => navigator.clipboard.writeText(result)}
-          >
-            Copiar
-          </button>
+          {noteMode === "error" ? (
+            <button className="note-copy" onClick={() => native.openMainWindow()}>
+              Abrir Verbalix
+            </button>
+          ) : (
+            <button
+              className="note-copy"
+              disabled={!result}
+              onClick={() => navigator.clipboard.writeText(result)}
+            >
+              Copiar
+            </button>
+          )}
           {noteMode === "preview" && (
             <button className="note-copy" disabled={!requestId} onClick={apply}>
               Aplicar
@@ -109,7 +116,6 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
         <span>✦</span>
         {busy === "improve" ? "Aprimorando…" : "Aprimorar"}
       </button>
-      {error && <div className="toolbar-error">{error}</div>}
     </main>
   );
 }

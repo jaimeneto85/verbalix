@@ -47,6 +47,17 @@ impl TauriOverlay {
         self.note_result.current()
     }
 
+    pub fn show_error(&self, bounds: Rect, message: &str) -> Result<(), VerbalixError> {
+        self.show_result(
+            bounds,
+            NoteResultPayload {
+                mode: NoteMode::Error,
+                request_id: None,
+                text: message.to_owned(),
+            },
+        )
+    }
+
     fn show_result(&self, bounds: Rect, payload: NoteResultPayload) -> Result<(), VerbalixError> {
         self.note_result.publish(payload.clone())?;
         self.dispatcher
@@ -140,6 +151,9 @@ mod tests {
         let overlay = Arc::new(TauriOverlay::with_dispatcher(dispatcher.clone()));
         let worker = std::thread::spawn(move || {
             overlay.show_toolbar(bounds()).unwrap();
+            overlay
+                .show_error(bounds(), "Entre no Verbalix para continuar.")
+                .unwrap();
             overlay.show_note(bounds(), "translated").unwrap();
             overlay
                 .show_preview(bounds(), uuid::Uuid::new_v4(), "preview")
@@ -155,7 +169,8 @@ mod tests {
         assert!(matches!(commands[1], OverlayCommand::ShowResult(_, _)));
         assert!(matches!(commands[2], OverlayCommand::ShowResult(_, _)));
         assert!(matches!(commands[3], OverlayCommand::ShowResult(_, _)));
-        assert_eq!(commands[4], OverlayCommand::HideAll);
+        assert!(matches!(commands[4], OverlayCommand::ShowResult(_, _)));
+        assert_eq!(commands[5], OverlayCommand::HideAll);
     }
 
     #[test]

@@ -2,10 +2,11 @@ mod application;
 mod commands;
 mod diagnostics;
 mod domain;
+mod lifecycle;
 mod platform;
 
 use application::{
-    JsonSettingsRepository, KeychainSessionRepository, RemoteAuthRepository,
+    JsonSettingsRepository, KeychainSessionRepository, PublicBackendConfig, RemoteAuthRepository,
     RemoteHistoryRepository, RemoteTransformer, RuntimePause, SelectionCoordinator,
 };
 use commands::*;
@@ -27,6 +28,7 @@ pub(crate) struct AppRuntime {
     pub clipboard: Arc<SystemClipboard>,
     pub history: Arc<RemoteHistoryRepository>,
     pub auth: Arc<RemoteAuthRepository>,
+    pub backend_config: PublicBackendConfig,
     pub pause: RuntimePause,
 }
 
@@ -116,7 +118,7 @@ fn trigger_active_shortcut(runtime: &AppRuntime) {
     }
 }
 
-fn show_main_window(app: &AppHandle, origin: &'static str) {
+pub(crate) fn show_main_window(app: &AppHandle, origin: &'static str) {
     diagnostics::lifecycle("show_requested", origin);
     let Some(window) = app.get_webview_window("main") else {
         diagnostics::lifecycle("show_failed", "main_window_missing");
@@ -127,10 +129,6 @@ fn show_main_window(app: &AppHandle, origin: &'static str) {
     } else {
         diagnostics::lifecycle("show_failed", origin);
     }
-}
-
-fn is_main_window(label: &str) -> bool {
-    label == "main"
 }
 
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -170,7 +168,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
         .on_window_event(|window, event| {
-            if is_main_window(window.label()) {
+            if lifecycle::is_main_window(window.label()) {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     diagnostics::lifecycle("close_intercepted", "main_window");
@@ -195,12 +193,10 @@ pub fn run() {
             ));
             let selection = Arc::new(MacAccessibility::new());
             let overlay = Arc::new(TauriOverlay::new(app.handle().clone()));
-            let supabase_url = std::env::var("VERBALIX_SUPABASE_URL").unwrap_or_default();
-            let endpoint = format!(
-                "{}/functions/v1/transform",
-                supabase_url.trim_end_matches('/')
-            );
-            let anonymous_key = std::env::var("VERBALIX_SUPABASE_ANON_KEY").unwrap_or_default();
+            let backend_config = PublicBackendConfig::resolve();
+            let supabase_url = backend_config.supabase_url.clone();
+            let anonymous_key = backend_config.anonymous_key.clone();
+            let endpoint = backend_config.transform_endpoint();
             let provider = Arc::new(RemoteTransformer::new(endpoint, anonymous_key.clone()));
             let coordinator = Arc::new(SelectionCoordinator::new(
                 selection.clone(),
@@ -225,6 +221,7 @@ pub fn run() {
                     anonymous_key.clone(),
                 )),
                 auth: Arc::new(RemoteAuthRepository::new(supabase_url, anonymous_key)),
+                backend_config,
                 pause: RuntimePause::default(),
             });
             app.manage(runtime.clone());
@@ -284,6 +281,9 @@ pub fn run() {
             clear_session,
             current_selection,
             current_note_result,
+            public_backend_config,
+            ai_readiness,
+            open_main_window,
             refresh_selection,
             transform_selection,
             apply_preview,
@@ -303,16 +303,4 @@ pub fn run() {
         RunEvent::Exit => diagnostics::lifecycle("exiting", "application"),
         _ => {}
     });
-}
-
-#[cfg(test)]
-mod lifecycle_tests {
-    use super::is_main_window;
-
-    #[test]
-    fn only_the_main_window_uses_hide_on_close_lifecycle() {
-        assert!(is_main_window("main"));
-        assert!(!is_main_window("toolbar"));
-        assert!(!is_main_window("note"));
-    }
 }

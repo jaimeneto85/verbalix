@@ -1,19 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
+import { native } from "./native";
 
-const url = import.meta.env.VITE_SUPABASE_URL ?? "";
-const anonymousKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
+let client: ReturnType<typeof createClient> | null | undefined;
 
-export const supabaseConfigured = Boolean(url && anonymousKey);
-
-export const supabase = createClient(
-  url || "https://configuration-required.invalid",
-  anonymousKey || "configuration-required",
-  {
+export async function getSupabase() {
+  if (client !== undefined) return client;
+  const config = await native.publicBackendConfig();
+  if (!config.configured) {
+    client = null;
+    return client;
+  }
+  client = createClient(config.supabaseUrl, config.anonymousKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: true,
       detectSessionInUrl: true,
       flowType: "pkce"
     }
-  }
-);
+  });
+  return client;
+}

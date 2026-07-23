@@ -29,12 +29,12 @@ vi.mock("./native", () => ({
 }));
 
 vi.mock("./supabase", () => ({
-  supabase: {
+  getSupabase: vi.fn(async () => ({
     auth: {
       exchangeCodeForSession: mocks.exchangeCodeForSession,
       onAuthStateChange: mocks.onAuthStateChange
     }
-  }
+  }))
 }));
 
 vi.mock("@tauri-apps/plugin-deep-link", () => ({

@@ -5,18 +5,20 @@ import { defaultSettings } from "./types";
 
 type NoteEvent = {
   payload: {
-    mode: "result" | "preview" | "undo";
+    mode: "error" | "result" | "preview" | "undo";
     requestId?: string;
     text: string;
   };
 };
 
 const mocks = vi.hoisted(() => ({
+  aiReadiness: vi.fn(),
   applyPreview: vi.fn(),
   currentNoteResult: vi.fn(),
   dismissOverlays: vi.fn(),
   listener: undefined as undefined | ((event: NoteEvent) => void),
   loadSettings: vi.fn(),
+  openMainWindow: vi.fn(),
   transformSelection: vi.fn(),
   undoReplacement: vi.fn(),
   unlisten: vi.fn()
@@ -25,9 +27,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./native", () => ({
   native: {
     applyPreview: mocks.applyPreview,
+    aiReadiness: mocks.aiReadiness,
     currentNoteResult: mocks.currentNoteResult,
     dismissOverlays: mocks.dismissOverlays,
     loadSettings: mocks.loadSettings,
+    openMainWindow: mocks.openMainWindow,
     transformSelection: mocks.transformSelection,
     undoReplacement: mocks.undoReplacement
   }
@@ -47,6 +51,11 @@ describe("selection overlays", () => {
     vi.clearAllMocks();
     mocks.listener = undefined;
     mocks.loadSettings.mockResolvedValue(defaultSettings);
+    mocks.aiReadiness.mockResolvedValue({
+      status: "ready",
+      message: "A IA está pronta."
+    });
+    mocks.openMainWindow.mockResolvedValue(undefined);
     mocks.applyPreview.mockResolvedValue("Improved");
     mocks.currentNoteResult.mockResolvedValue(null);
     mocks.transformSelection.mockResolvedValue({});
@@ -67,14 +76,46 @@ describe("selection overlays", () => {
     ]);
   });
 
-  it("renders transformation failures and dismisses with Escape", async () => {
+  it("opens the main window as a safe fallback for transformation failures", async () => {
     mocks.transformSelection.mockRejectedValue("provider unavailable");
     render(<Overlay kind="toolbar" />);
 
     fireEvent.click(screen.getByRole("button", { name: /Traduzir/ }));
-    expect(await screen.findByText("provider unavailable")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.openMainWindow).toHaveBeenCalledOnce());
     fireEvent.keyDown(window, { key: "Escape" });
     expect(mocks.dismissOverlays).toHaveBeenCalledOnce();
+  });
+
+  it("blocks transforms when backend readiness requires login", async () => {
+    mocks.aiReadiness.mockResolvedValue({
+      status: "login_required",
+      message: "Entre no Verbalix."
+    });
+    render(<Overlay kind="toolbar" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Aprimorar/ }));
+
+    await waitFor(() => expect(mocks.aiReadiness).toHaveBeenCalledOnce());
+    expect(mocks.transformSelection).not.toHaveBeenCalled();
+  });
+
+  it("renders actionable errors in the full-size note surface", async () => {
+    const user = userEvent.setup();
+    render(<Overlay kind="note" />);
+    await waitFor(() => expect(mocks.listener).toBeTypeOf("function"));
+    act(() => {
+      mocks.listener!({
+        payload: {
+          mode: "error",
+          text: "Este build não contém a configuração pública do backend."
+        }
+      });
+    });
+
+    expect(await screen.findByText("Ação necessária")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Abrir Verbalix" }));
+    expect(mocks.openMainWindow).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Copiar" })).not.toBeInTheDocument();
   });
 
   it("applies a preview and then offers strict undo", async () => {

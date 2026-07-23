@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { supabase, supabaseConfigured } from "../supabase";
+import { getSupabase } from "../supabase";
 
 export function AuthPanel({ authenticated }: { authenticated: boolean }) {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
 
   const sendLink = async () => {
-    if (!supabaseConfigured) {
-      setMessage("Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.");
+    const supabase = await getSupabase().catch(() => null);
+    if (!supabase) {
+      setMessage("Este build não contém a configuração pública do backend.");
       return;
     }
     const { error } = await supabase.auth.signInWithOtp({

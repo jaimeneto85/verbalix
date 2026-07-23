@@ -30,8 +30,19 @@ export type TransformResult = {
   result: string;
 };
 
+export type PublicBackendConfig = {
+  supabaseUrl: string;
+  anonymousKey: string;
+  configured: boolean;
+};
+
+export type AiReadiness = {
+  status: "ready" | "login_required" | "provider_not_configured";
+  message: string;
+};
+
 export type NoteResult = {
-  mode: "result" | "preview" | "undo";
+  mode: "error" | "result" | "preview" | "undo";
   requestId?: string;
   text: string;
 };

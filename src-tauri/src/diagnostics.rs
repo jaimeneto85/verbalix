@@ -36,6 +36,10 @@ pub fn accessibility(trusted: bool) {
     );
 }
 
+pub fn ai_readiness(status: &str) {
+    emit("ai", "readiness", &format!("status={status}"));
+}
+
 pub fn capture_success(snapshot: &SelectionSnapshot) {
     emit("capture", "success", &snapshot_metadata(snapshot));
 }
@@ -110,6 +114,7 @@ fn error_code(error: &VerbalixError) -> &'static str {
         VerbalixError::StaleSelection => "stale_selection",
         VerbalixError::TextTooLong => "text_too_long",
         VerbalixError::Unauthenticated => "unauthenticated",
+        VerbalixError::ProviderNotConfigured => "provider_not_configured",
         VerbalixError::ProviderTimeout => "provider_timeout",
         VerbalixError::ProviderRejected => "provider_rejected",
         VerbalixError::InvalidResponse => "invalid_response",

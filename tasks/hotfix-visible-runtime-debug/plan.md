@@ -135,7 +135,7 @@ Oportunidades (downsideup):
 - [x] T5 Reautorizar manualmente o bundle e reproduzir com tracing.
 - [x] T6 Corrigir a causa comprovada e adicionar regressão específica.
 - [x] T6b Implementar fallback `AXBoundsForRange → frame AX → cursor`, com validação e trace da fonte.
-- [ ] T6c Implementar readiness/erros acionáveis e configuração pública consistente no bundle.
+- [x] T6c Implementar readiness/erros acionáveis e configuração pública consistente no bundle.
 - [ ] T7 Executar Rust, Clippy, frontend, E2E, Edge, build, bundle e codesign.
 - [ ] T8 Executar QA independente com análise dual e verdict.
 - [ ] T9 Documentar evidências, limitações e operação manual.

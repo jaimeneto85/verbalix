@@ -6,6 +6,7 @@ use uuid::Uuid;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NoteMode {
+    Error,
     Result,
     Preview,
     Undo,
@@ -70,9 +71,9 @@ mod tests {
             })
             .unwrap();
         let updated = NoteResultPayload {
-            mode: NoteMode::Undo,
+            mode: NoteMode::Error,
             request_id: None,
-            text: "Applied".to_owned(),
+            text: "Entre no Verbalix para continuar.".to_owned(),
         };
 
         state.publish(updated.clone()).unwrap();

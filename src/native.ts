@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
+  AiReadiness,
   HistoryItem,
   NoteResult,
+  PublicBackendConfig,
   SelectionSnapshot,
   TransformResult
 } from "./types";
@@ -31,6 +33,15 @@ export const native = {
   },
   currentNoteResult() {
     return invoke<NoteResult | null>("current_note_result");
+  },
+  publicBackendConfig() {
+    return invoke<PublicBackendConfig>("public_backend_config");
+  },
+  aiReadiness() {
+    return invoke<AiReadiness>("ai_readiness");
+  },
+  openMainWindow() {
+    return invoke<void>("open_main_window");
   },
   refreshSelection() {
     return invoke<SelectionSnapshot | null>("refresh_selection");

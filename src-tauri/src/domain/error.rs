@@ -15,6 +15,8 @@ pub enum VerbalixError {
     TextTooLong,
     #[error("Remote authentication is required")]
     Unauthenticated,
+    #[error("The public transformation provider configuration is missing")]
+    ProviderNotConfigured,
     #[error("The transformation provider timed out")]
     ProviderTimeout,
     #[error("The transformation provider rejected the request")]
