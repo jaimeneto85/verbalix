@@ -41,12 +41,12 @@
 
 ## 📝 TASKS
 
-- [ ] T1: Registrar e validar os assets aprovados.
-- [ ] T2: Integrar mark/paleta na UI sem regressão de layout.
-- [ ] T3: Reconstruir bundle debug e validar Resources, plist e assinatura.
-- [ ] T4: Executar launch smoke e confirmar ausência do panic do ícone.
-- [ ] T5: Rodar suítes e checks de regressão.
-- [ ] T6: Atualizar memória e documento de entrega.
+- [x] T1: Registrar e validar os assets aprovados.
+- [x] T2: Integrar mark/paleta na UI sem regressão de layout.
+- [x] T3: Reconstruir bundle debug e validar Resources, plist e assinatura.
+- [x] T4: Executar launch smoke e confirmar ausência do panic do ícone.
+- [x] T5: Rodar suítes e checks de regressão.
+- [x] T6: Atualizar memória e documento de entrega.
 
 ## Análise Dual Proporcional
 
