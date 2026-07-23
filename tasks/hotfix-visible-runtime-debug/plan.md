@@ -34,6 +34,20 @@ Fora do escopo:
 
 ## 2. DESIGN
 
+### Causa comprovada
+
+O trace do bundle exato chegou a:
+
+1. seleção TextEdit capturada;
+2. candidato/debounce aceito;
+3. comando executado na main thread;
+4. toolbar criada e posicionada;
+5. panic na main thread em `WebviewWindow::set_focusable(false)`.
+
+`configure_nonactivating_panel` troca dinamicamente a classe da janela para `NSPanel` com `AnyObject::set_class`. Depois desse swizzle, o wrapper Tauri ainda executa `set_focusable(false)` esperando um ivar da classe original; o ivar não existe no objeto convertido e o processo encerra. A ausência da toolbar é consequência desse panic, não de captura, bounds, TCC ou debounce nesta reprodução.
+
+A correção remove a chamada Tauri pós-swizzle. O builder já cria a janela com `.focused(false)` e a configuração nativa aplica `NSWindowStyleMaskNonactivatingPanel`, `setBecomesKeyOnlyIfNeeded` e nível adequado, suficientes para o comportamento não ativante.
+
 ### Procedimento de reprodução
 
 1. Limpar somente artefatos de build deste worktree e gerar um bundle debug novo.
@@ -49,22 +63,37 @@ Fora do escopo:
 
 `ActivationPolicy::Regular` deve ser configurada na main thread durante setup. O diagnóstico registra startup, política aplicada, janela principal disponível, eventos de abertura/fechamento e solicitação explícita de quit sem registrar dados do usuário.
 
+Um helper único reabre e foca a janela principal a partir do tray e de `RunEvent::Reopen`. `CloseRequested` na janela principal impede o encerramento e apenas oculta a janela; quit continua exclusivo à ação explícita do tray/processo.
+
 ### Hipóteses a discriminar
 
-- autorização AX ainda stale para o bundle executado;
-- captura falha antes de criar candidato;
-- candidato/debounce é invalidado por mouse/polling;
-- comando main-thread é agendado mas não executado;
-- janela é criada/mostrada e imediatamente ocultada;
-- processo encerra por violação AppKit, panic ou lifecycle.
+- Confirmada: chamada `set_focusable(false)` do Tauri após swizzle para `NSPanel`.
+- Rejeitadas nesta reprodução: TCC stale, captura ausente, debounce divergente, bounds inválidos e comando main-thread não executado.
+- A monitorar após a correção: janela criada/mostrada e imediatamente ocultada ou lifecycle de fechar/reabrir.
+
+### Análise dual
+
+Riscos (upsidedown):
+
+- `Regular` altera foco, Cmd+Tab e semântica de fechamento; fechar/reabrir precisa ser testado explicitamente.
+- rebuilds ad-hoc mudam `CDHash`; congelar caminho/artefato durante toda a reprodução evita reautorizar o bundle errado.
+- logs de lifecycle e overlay devem distinguir encerramento real de janela apenas oculta.
+- remover `set_focusable` exige comprovar que o painel continua não ativante e clicável.
+
+Oportunidades (downsideup):
+
+- a causa está isolada em uma chamada pós-swizzle e não exige redesenhar o dispatcher.
+- `.focused(false)` no builder mais a configuração `NSPanel` existente permitem remover o acesso incompatível.
+- `show_main_window`, `CloseRequested` e `RunEvent::Reopen` centralizam um lifecycle previsível e testável.
+- o tracing já existente permite confirmar o caminho `created → positioned → visibility=true` sem conteúdo do usuário.
 
 ## 3. TASKS
 
-- [ ] T1 Concluir análise dual e sintetizar riscos/oportunidades neste plano.
+- [x] T1 Concluir análise dual e sintetizar riscos/oportunidades neste plano.
 - [ ] T2 Adicionar regressões para política de ativação/lifecycle e eventos diagnósticos sem conteúdo.
 - [ ] T3 Alterar a política para `Regular` e manter reabertura via Dock/tray.
 - [ ] T4 Construir e identificar o bundle exato desta branch.
-- [ ] T5 Reautorizar manualmente o bundle e reproduzir com tracing.
+- [x] T5 Reautorizar manualmente o bundle e reproduzir com tracing.
 - [ ] T6 Corrigir a causa comprovada e adicionar regressão específica.
 - [ ] T7 Executar Rust, Clippy, frontend, E2E, Edge, build, bundle e codesign.
 - [ ] T8 Executar QA independente com análise dual e verdict.
