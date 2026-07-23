@@ -83,11 +83,11 @@ Oportunidades:
 
 ## 3. TASKS
 
-- [ ] T1 Adicionar regressões que reproduzam recaptura equivalente/debounce e ordem do overlay.
-- [ ] T2 Implementar rastreio opt-in e sanitizado dos cinco estágios, incluindo `PermissionDenied`.
-- [ ] T3 Corrigir a identidade retornada por `refresh_selection` e qualquer causa adicional comprovada pelo trace.
-- [ ] T4 Confirmar criação, posicionamento, show e visibilidade somente na main thread.
-- [ ] T5 Melhorar a UX de permissão stale sem automatizar alterações no TCC.
-- [ ] T6 Executar gates Rust/frontend/Clippy/build/bundle e smoke local.
+- [x] T1 Adicionar regressões que reproduzam recaptura equivalente/debounce e ordem do overlay.
+- [x] T2 Implementar rastreio opt-in e sanitizado dos cinco estágios, incluindo `PermissionDenied`.
+- [x] T3 Corrigir a identidade retornada por `refresh_selection` e qualquer causa adicional comprovada pelo trace.
+- [x] T4 Confirmar criação, posicionamento, show e visibilidade somente na main thread.
+- [x] T5 Melhorar a UX de permissão stale sem automatizar alterações no TCC.
+- [x] T6 Executar gates Rust/frontend/Clippy/build/bundle e smoke local.
 - [ ] T7 QA independente revisar segurança, concorrência, regressões e emitir verdict.
-- [ ] T8 Documentar resultado e evidência em `docs/`.
+- [x] T8 Documentar resultado e evidência em `docs/`.
