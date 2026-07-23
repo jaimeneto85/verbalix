@@ -1,6 +1,7 @@
 mod clipboard;
 mod note_result;
 mod overlay;
+mod overlay_dispatcher;
 
 #[cfg(target_os = "macos")]
 mod macos_accessibility;
