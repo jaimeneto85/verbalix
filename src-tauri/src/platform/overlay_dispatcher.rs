@@ -95,9 +95,6 @@ fn execute_command(
         OverlayCommand::ShowToolbar(bounds) => {
             let window = window(app, "toolbar", 236.0, 52.0, sequence)?;
             place(app, &window, bounds, 236.0, 52.0, "toolbar", sequence)?;
-            window
-                .set_focusable(false)
-                .map_err(|_| VerbalixError::LocalFailure)?;
             show_and_confirm(&window, "toolbar", sequence)
         }
         OverlayCommand::ShowResult(bounds, payload) => {
