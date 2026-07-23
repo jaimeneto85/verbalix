@@ -20,6 +20,9 @@
 ## Aprendizados de QA
 - A matriz de compatibilidade precisa cobrir seleção por mouse e teclado, campos editáveis e somente leitura, múltiplos monitores e conteúdo Unicode.
 - Testar separadamente detecção, leitura, bounds e escrita evita mascarar incompatibilidades específicas dos aplicativos.
+- Pausar precisa bloquear todos os entrypoints: polling, AXObserver, atalho global e fallback de clipboard.
+- Eventos de overlay não são enfileirados para listeners futuros; resultados de nota precisam de estado persistido e state pull após registrar o listener.
+- Aprovação automatizada de código não substitui o spike manual AX/AppKit na matriz antes da distribuição.
 
 ## Dependências & Integrações
 - Accessibility e AppKit exigem permissão de Acessibilidade concedida pelo usuário.
@@ -29,3 +32,4 @@
 
 ## Observações
 - A promessa do produto é mensurável na matriz de aplicativos suportados e best-effort nos demais; não existe evento universal de seleção no macOS.
+- O código do MVP recebeu verdict final `APPROVED`; T5.4 e T5.5 permanecem gates manuais de pré-release.

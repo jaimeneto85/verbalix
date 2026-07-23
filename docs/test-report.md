@@ -22,7 +22,7 @@
 
 ## Cobertura instrumentada
 
-O cliente frontend testável em isolamento (`native.ts` e `types.ts`) atingiu 100% de statements, branches, functions e lines. A cobertura Rust não foi instrumentada porque `cargo-llvm-cov` não está instalado; a suíte Rust executou 17 cenários.
+O cliente frontend testável em isolamento (`native.ts` e `types.ts`) atingiu 100% de statements, branches, functions e lines. A cobertura Rust não foi instrumentada porque `cargo-llvm-cov` não está instalado; a suíte Rust executou 24 cenários.
 
 ## Gates executados
 
