@@ -125,4 +125,12 @@ mod tests {
         assert!(metadata.contains("pid=42"));
         assert!(metadata.contains("range_location=3"));
     }
+
+    #[test]
+    fn permission_failure_uses_a_sanitized_stable_code() {
+        assert_eq!(
+            error_code(&VerbalixError::PermissionDenied),
+            "permission_denied"
+        );
+    }
 }
