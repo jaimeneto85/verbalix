@@ -29,6 +29,20 @@ export function PermissionCard({ granted, onChange }: Props) {
             ? "A seleção é processada localmente até você escolher uma ação."
             : "O macOS exige sua autorização para ler e substituir o texto selecionado."}
         </p>
+        {!granted && (
+          <div className="permission-recovery">
+            <strong>Se o Verbalix já aparece habilitado:</strong>
+            <ol>
+              <li>Remova a entrada antiga em Privacidade e Segurança → Acessibilidade.</li>
+              <li>Adicione o bundle Verbalix.app que você está abrindo agora.</li>
+              <li>Habilite a nova entrada, encerre o app e abra novamente.</li>
+            </ol>
+            <small>
+              Builds ad-hoc podem mudar de identidade. Apple Development ou Developer ID mantém
+              uma identidade estável entre builds.
+            </small>
+          </div>
+        )}
       </div>
       {!granted && (
         <button className="primary" disabled={checking} onClick={request}>

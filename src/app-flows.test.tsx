@@ -144,4 +144,20 @@ describe("application authentication and history flows", () => {
     await waitFor(() => expect(mocks.saveSettings).toHaveBeenCalled());
     expect(await screen.findByText("Preferências salvas")).toBeInTheDocument();
   });
+
+  it("guides recovery when the macOS accessibility entry is stale", async () => {
+    mocks.accessibilityStatus.mockResolvedValue(false);
+
+    render(<App />);
+
+    expect(
+      await screen.findByText("Se o Verbalix já aparece habilitado:")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Remova a entrada antiga/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Apple Development ou Developer ID/)
+    ).toBeInTheDocument();
+  });
 });
