@@ -74,6 +74,13 @@ pub(crate) fn current_selection(
 }
 
 #[tauri::command]
+pub(crate) fn current_note_result(
+    runtime: State<'_, Arc<AppRuntime>>,
+) -> Result<Option<crate::platform::NoteResultPayload>, VerbalixError> {
+    runtime.overlay.current_note_result()
+}
+
+#[tauri::command]
 pub(crate) fn refresh_selection(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Option<crate::domain::SelectionSnapshot>, VerbalixError> {

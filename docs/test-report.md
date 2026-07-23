@@ -2,17 +2,23 @@
 
 ## Resultado
 
-- Rust: 17 testes aprovados.
-- Frontend: 19 testes aprovados.
+- Rust: 24 testes aprovados.
+- Frontend: 21 testes aprovados.
 - Edge Function: 6 testes aprovados.
 - Bundle: `Verbalix.app` debug gerado com sucesso.
-- Total: 42 testes, 0 falhas.
+- Total: 51 testes, 0 falhas.
 
 ## Pirâmide
 
 - Unitários: domínio, Unicode/UTF-16, settings, prompts e validação de contratos.
 - Integração: coordinator com adapters falsos, fluxos React, IPC Tauri e persistência em arquivo.
 - Smoke: configuração do bundle e geração real do `.app`.
+
+## Regressões finais
+
+- Pausa bloqueia polling, callback do AXObserver, atalho global e fallback de clipboard; retomada reabilita os quatro caminhos.
+- A nota registra o resultado antes do evento e o frontend registra o listener antes de consultar o estado atual, cobrindo resultados criados antes e depois da prontidão.
+- O fluxo integrado automatizado percorre toolbar, transformação, preview, apply e undo com adapters de domínio.
 
 ## Cobertura instrumentada
 
@@ -34,6 +40,7 @@ O analisador de tamanho não encontrou arquivos acima do limite de 300 linhas ef
 
 ## Gaps que exigem QA manual
 
-- Validar preview, aplicar, undo temporário e restauração integral do clipboard em processos macOS reais.
+- Executar toolbar → transformar → preview/aplicar → undo em TextEdit com o bundle assinado, permissão AX e credenciais válidas; esses requisitos impedem automação confiável no ambiente de CI atual.
+- Validar restauração integral do clipboard em processos macOS reais.
 - Confirmar o comportamento do AXObserver híbrido, o clamp pelo `NSScreen.visibleFrame` e o `NSPanel` não ativante com múltiplos monitores.
 - Chrome, Safari, VS Code, Slack, Notes e TextEdit exigem permissão de Acessibilidade e execução manual; T5.4 e T5.5 permanecem abertos.

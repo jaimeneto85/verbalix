@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { native } from "./native";
-import type { AppSettings } from "./types";
+import type { AppSettings, NoteResult } from "./types";
 import { defaultSettings } from "./types";
 
 export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
@@ -15,16 +15,26 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
   useEffect(() => {
     native.loadSettings().then(setSettings).catch(() => undefined);
     if (kind !== "note") return;
-    const unlisten = listen<{
-      mode: "result" | "preview" | "undo";
-      requestId?: string;
-      text: string;
-    }>("note-result", (event) => {
-      setResult(event.payload.text);
-      setNoteMode(event.payload.mode);
-      setRequestId(event.payload.requestId ?? "");
+    let active = true;
+    const showResult = (payload: NoteResult) => {
+      if (!active) return;
+      setResult(payload.text);
+      setNoteMode(payload.mode);
+      setRequestId(payload.requestId ?? "");
+    };
+    const unlisten = listen<NoteResult>("note-result", (event) => {
+      showResult(event.payload);
+    }).then(async (dispose) => {
+      if (!active) {
+        dispose();
+        return () => undefined;
+      }
+      const current = await native.currentNoteResult().catch(() => null);
+      if (current) showResult(current);
+      return dispose;
     });
     return () => {
+      active = false;
       unlisten.then((dispose) => dispose());
     };
   }, [kind]);

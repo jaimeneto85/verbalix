@@ -13,6 +13,7 @@ type NoteEvent = {
 
 const mocks = vi.hoisted(() => ({
   applyPreview: vi.fn(),
+  currentNoteResult: vi.fn(),
   dismissOverlays: vi.fn(),
   listener: undefined as undefined | ((event: NoteEvent) => void),
   loadSettings: vi.fn(),
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./native", () => ({
   native: {
     applyPreview: mocks.applyPreview,
+    currentNoteResult: mocks.currentNoteResult,
     dismissOverlays: mocks.dismissOverlays,
     loadSettings: mocks.loadSettings,
     transformSelection: mocks.transformSelection,
@@ -46,6 +48,7 @@ describe("selection overlays", () => {
     mocks.listener = undefined;
     mocks.loadSettings.mockResolvedValue(defaultSettings);
     mocks.applyPreview.mockResolvedValue("Improved");
+    mocks.currentNoteResult.mockResolvedValue(null);
     mocks.transformSelection.mockResolvedValue({});
     mocks.undoReplacement.mockResolvedValue(undefined);
   });
@@ -94,6 +97,32 @@ describe("selection overlays", () => {
 
     expect(mocks.undoReplacement).toHaveBeenCalledWith("Improved text");
     expect(mocks.dismissOverlays).toHaveBeenCalledOnce();
+  });
+
+  it("recovers the first note result published before its listener was ready", async () => {
+    mocks.currentNoteResult.mockResolvedValue({
+      mode: "result",
+      text: "Already translated"
+    });
+
+    render(<Overlay kind="note" />);
+
+    expect(await screen.findByText("Already translated")).toBeInTheDocument();
+    expect(screen.queryByText("Processando…")).not.toBeInTheDocument();
+  });
+
+  it("receives the first note result published after its listener was ready", async () => {
+    render(<Overlay kind="note" />);
+    await waitFor(() => expect(mocks.listener).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.listener!({
+        payload: { mode: "result", text: "Listener result" }
+      });
+    });
+
+    expect(await screen.findByText("Listener result")).toBeInTheDocument();
+    expect(mocks.currentNoteResult).toHaveBeenCalledOnce();
   });
 
   it("copies note results and dismisses from its close control", async () => {

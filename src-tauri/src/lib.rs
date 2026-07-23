@@ -19,6 +19,7 @@ use tauri::{
 
 pub(crate) struct AppRuntime {
     pub coordinator: Arc<SelectionCoordinator>,
+    pub overlay: Arc<TauriOverlay>,
     pub selection: Arc<MacAccessibility>,
     pub settings: Arc<JsonSettingsRepository>,
     pub session: Arc<KeychainSessionRepository>,
@@ -165,11 +166,12 @@ pub fn run() {
             let provider = Arc::new(RemoteTransformer::new(endpoint, anonymous_key.clone()));
             let coordinator = Arc::new(SelectionCoordinator::new(
                 selection.clone(),
-                overlay,
+                overlay.clone(),
                 provider,
             ));
             let runtime = Arc::new(AppRuntime {
                 coordinator,
+                overlay,
                 selection,
                 settings,
                 session: Arc::new(KeychainSessionRepository::new(
@@ -238,6 +240,7 @@ pub fn run() {
             has_session,
             clear_session,
             current_selection,
+            current_note_result,
             refresh_selection,
             transform_selection,
             apply_preview,

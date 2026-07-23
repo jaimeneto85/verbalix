@@ -13,6 +13,8 @@
 - Falhas externas são convertidas em erros de domínio e nunca incluem o texto selecionado.
 - O coordinator encerra transformações por uma única rotina que recupera o estado da toolbar em qualquer falha pós-`Processing`, preservando latest-wins.
 - Implementações macOS extensas ficam separadas por responsabilidade: acessibilidade, observer, restauração e overlay.
+- `RuntimePause` é o gate único para polling, AXObserver, atalho e fallback de clipboard; callbacks revalidam a pausa após o debounce.
+- Resultados da nota usam evento mais state pull: o backend publica o estado antes de emitir e o frontend registra o listener antes de consultar `current_note_result`.
 
 ## Erros Recorrentes & Soluções
 - A Accessibility API é incompleta em alguns aplicativos; ausência de atributos deve produzir degradação segura.
@@ -26,4 +28,5 @@
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.
+- O fluxo toolbar → transformação → preview → apply → undo é coberto por integração com adapters; a versão desktop real permanece gate manual por exigir AX, app externo focado e sessão remota.
 - `npm test`, `npm run test:coverage`, `npm run build`, `cargo test`, `cargo clippy` e o bundle smoke são os gates mínimos antes do handoff.

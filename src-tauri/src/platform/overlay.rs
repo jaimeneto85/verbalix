@@ -1,8 +1,9 @@
 use crate::{
     application::OverlayPort,
     domain::{Rect, VerbalixError},
+    platform::note_result::{NoteMode, NoteResultPayload, NoteResultState},
 };
-use serde_json::json;
+use std::sync::Arc;
 use tauri::{
     AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
@@ -22,6 +23,7 @@ pub fn install_mouse_dismiss_monitor(callback: std::sync::Arc<dyn Fn() + Send + 
 
 pub struct TauriOverlay {
     app: AppHandle,
+    note_result: Arc<NoteResultState>,
     visible_frames: Vec<Rect>,
 }
 
@@ -29,8 +31,13 @@ impl TauriOverlay {
     pub fn new(app: AppHandle) -> Self {
         Self {
             app,
+            note_result: Arc::new(NoteResultState::default()),
             visible_frames: macos_visible_frames(),
         }
+    }
+
+    pub fn current_note_result(&self) -> Result<Option<NoteResultPayload>, VerbalixError> {
+        self.note_result.current()
     }
 
     fn window(&self, label: &str, width: f64, height: f64) -> Result<WebviewWindow, VerbalixError> {
@@ -93,9 +100,10 @@ impl TauriOverlay {
         let _ = window.set_position(LogicalPosition::new(x, y));
     }
 
-    fn show_result(&self, bounds: Rect, payload: serde_json::Value) -> Result<(), VerbalixError> {
+    fn show_result(&self, bounds: Rect, payload: NoteResultPayload) -> Result<(), VerbalixError> {
         let window = self.window("note", 420.0, 220.0)?;
         self.place(&window, bounds, 420.0, 220.0);
+        self.note_result.publish(payload.clone())?;
         window
             .emit("note-result", payload)
             .map_err(|_| VerbalixError::LocalFailure)?;
@@ -222,7 +230,14 @@ impl OverlayPort for TauriOverlay {
     }
 
     fn show_note(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError> {
-        self.show_result(bounds, json!({ "mode": "result", "text": text }))
+        self.show_result(
+            bounds,
+            NoteResultPayload {
+                mode: NoteMode::Result,
+                request_id: None,
+                text: text.to_owned(),
+            },
+        )
     }
 
     fn show_preview(
@@ -233,12 +248,23 @@ impl OverlayPort for TauriOverlay {
     ) -> Result<(), VerbalixError> {
         self.show_result(
             bounds,
-            json!({ "mode": "preview", "requestId": request_id, "text": text }),
+            NoteResultPayload {
+                mode: NoteMode::Preview,
+                request_id: Some(request_id),
+                text: text.to_owned(),
+            },
         )
     }
 
     fn show_undo(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError> {
-        self.show_result(bounds, json!({ "mode": "undo", "text": text }))
+        self.show_result(
+            bounds,
+            NoteResultPayload {
+                mode: NoteMode::Undo,
+                request_id: None,
+                text: text.to_owned(),
+            },
+        )
     }
 
     fn hide_all(&self) -> Result<(), VerbalixError> {

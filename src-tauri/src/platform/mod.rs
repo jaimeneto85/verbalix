@@ -1,4 +1,5 @@
 mod clipboard;
+mod note_result;
 mod overlay;
 
 #[cfg(target_os = "macos")]
@@ -9,6 +10,7 @@ mod macos_observer;
 mod macos_restore;
 
 pub use clipboard::SystemClipboard;
+pub use note_result::NoteResultPayload;
 #[cfg(target_os = "macos")]
 pub use overlay::install_mouse_dismiss_monitor;
 pub use overlay::TauriOverlay;

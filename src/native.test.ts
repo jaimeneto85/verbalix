@@ -72,6 +72,7 @@ describe("native command contract", () => {
     await native.hasSession();
     await native.clearSession();
     await native.currentSelection();
+    await native.currentNoteResult();
     await native.refreshSelection();
     await native.dismissOverlays();
     await native.applyPreview("request-id");
@@ -85,6 +86,7 @@ describe("native command contract", () => {
       ["has_session"],
       ["clear_session"],
       ["current_selection"],
+      ["current_note_result"],
       ["refresh_selection"],
       ["dismiss_overlays"],
       ["apply_preview", { requestId: "request-id" }],

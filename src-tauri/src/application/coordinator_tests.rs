@@ -27,6 +27,7 @@ impl SelectionPort for FakeSelection {
             return Err(VerbalixError::StaleSelection);
         }
         self.replacements.lock().unwrap().push(text.to_owned());
+        self.snapshot.lock().unwrap().text = text.to_owned();
         Ok(())
     }
 
@@ -203,6 +204,26 @@ async fn preview_waits_for_explicit_apply() {
         .lock()
         .unwrap()
         .contains(&"preview:result".to_owned()));
+}
+
+#[tokio::test]
+async fn desktop_flow_reaches_toolbar_preview_apply_and_undo() {
+    let (coordinator, selection, overlay) = ready(true, false, false);
+    let input = request("Olá 👩🏽‍💻");
+    let id = input.request_id;
+
+    coordinator.transform(input, "token", true).await.unwrap();
+    coordinator.apply_preview(id).unwrap();
+    coordinator.undo("result").unwrap();
+
+    assert_eq!(
+        overlay.events.lock().unwrap().as_slice(),
+        ["toolbar", "preview:result", "undo:result", "hide"]
+    );
+    assert_eq!(
+        selection.replacements.lock().unwrap().as_slice(),
+        ["result", "Olá 👩🏽‍💻"]
+    );
 }
 
 #[tokio::test]

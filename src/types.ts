@@ -29,6 +29,12 @@ export type TransformResult = {
   result: string;
 };
 
+export type NoteResult = {
+  mode: "result" | "preview" | "undo";
+  requestId?: string;
+  text: string;
+};
+
 export type HistoryItem = {
   id: string;
   operation: "translate" | "improve";

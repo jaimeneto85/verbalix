@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppSettings,
   HistoryItem,
+  NoteResult,
   SelectionSnapshot,
   TransformResult
 } from "./types";
@@ -27,6 +28,9 @@ export const native = {
   },
   currentSelection() {
     return invoke<SelectionSnapshot | null>("current_selection");
+  },
+  currentNoteResult() {
+    return invoke<NoteResult | null>("current_note_result");
   },
   refreshSelection() {
     return invoke<SelectionSnapshot | null>("refresh_selection");
