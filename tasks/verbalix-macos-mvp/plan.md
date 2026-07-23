@@ -136,9 +136,9 @@
 - [ ] T4.4: [MEDIUM] Integrar ações, latest-wins, preview, aplicação segura e undo temporário.
 
 ### Fase 5: Verificação
-- [ ] T5.1: [MEDIUM] Criar testes unitários de domínio, Unicode, prompts, settings e geometria.
-- [ ] T5.2: [MEDIUM] Criar testes de integração com adapters falsos para AX/provider/concorrência.
-- [ ] T5.3: [MEDIUM] Validar build e smoke tests do bundle macOS.
+- [x] T5.1: [MEDIUM] Criar testes unitários de domínio, Unicode, prompts, settings e geometria.
+- [x] T5.2: [MEDIUM] Criar testes de integração com adapters falsos para AX/provider/concorrência.
+- [x] T5.3: [MEDIUM] Validar build e smoke tests do bundle macOS.
 - [ ] T5.4: [MEDIUM] Executar checklist manual da matriz de aplicativos e registrar limitações.
 - [ ] T5.5: [MEDIUM] Executar spike obrigatório de detectar, ler, obter bounds e substituir na matriz aprovada.
 

@@ -66,6 +66,7 @@ mod tests {
     struct FakeOverlay {
         toolbar_count: Mutex<usize>,
         notes: Mutex<Vec<String>>,
+        hidden_count: Mutex<usize>,
     }
 
     impl OverlayPort for FakeOverlay {
@@ -86,6 +87,10 @@ mod tests {
         }
 
         fn hide_all(&self) -> Result<(), VerbalixError> {
+            *self
+                .hidden_count
+                .lock()
+                .map_err(|_| VerbalixError::LocalFailure)? += 1;
             Ok(())
         }
     }
@@ -106,6 +111,37 @@ mod tests {
                 source_language: "pt".to_owned(),
                 target_language: Some("en".to_owned()),
                 result: self.result.clone(),
+            })
+        }
+    }
+
+    struct ErrorProvider;
+
+    #[async_trait]
+    impl AiProvider for ErrorProvider {
+        async fn transform(
+            &self,
+            _request: &TransformRequest,
+            _access_token: &str,
+        ) -> Result<TransformResult, VerbalixError> {
+            Err(VerbalixError::ProviderTimeout)
+        }
+    }
+
+    struct WrongRequestProvider;
+
+    #[async_trait]
+    impl AiProvider for WrongRequestProvider {
+        async fn transform(
+            &self,
+            _request: &TransformRequest,
+            _access_token: &str,
+        ) -> Result<TransformResult, VerbalixError> {
+            Ok(TransformResult {
+                request_id: Uuid::new_v4(),
+                source_language: "pt".to_owned(),
+                target_language: Some("en".to_owned()),
+                result: "result".to_owned(),
             })
         }
     }
@@ -255,6 +291,123 @@ mod tests {
 
         assert!(matches!(result, Err(VerbalixError::StaleSelection)));
         assert!(selection.replacements.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn invalidation_hides_overlays_and_clears_snapshot() {
+        let current = snapshot(true);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let overlay = Arc::new(FakeOverlay::default());
+        let coordinator = coordinator(selection, overlay.clone());
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current))
+            .unwrap();
+
+        coordinator.dispatch(SelectionEvent::Invalidated).unwrap();
+
+        assert!(coordinator.current_snapshot().is_none());
+        assert_eq!(*overlay.hidden_count.lock().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn provider_timeout_never_writes_or_shows_result() {
+        let current = snapshot(true);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let overlay = Arc::new(FakeOverlay::default());
+        let coordinator = SelectionCoordinator::new(
+            selection.clone(),
+            overlay.clone(),
+            Arc::new(ErrorProvider),
+        );
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(current.id))
+            .unwrap();
+        let request = coordinator.request_for(
+            TransformOperation::Translate,
+            current.text.clone(),
+            None,
+        );
+
+        let result = coordinator.transform(request, "token").await;
+
+        assert!(matches!(result, Err(VerbalixError::ProviderTimeout)));
+        assert!(selection.replacements.lock().unwrap().is_empty());
+        assert!(overlay.notes.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn mismatched_request_id_never_writes() {
+        let current = snapshot(true);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let coordinator = SelectionCoordinator::new(
+            selection.clone(),
+            Arc::new(FakeOverlay::default()),
+            Arc::new(WrongRequestProvider),
+        );
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current.clone()))
+            .unwrap();
+        coordinator
+            .dispatch(SelectionEvent::DebounceElapsed(current.id))
+            .unwrap();
+        let request = coordinator.request_for(
+            TransformOperation::Translate,
+            current.text.clone(),
+            None,
+        );
+
+        let result = coordinator.transform(request, "token").await;
+
+        assert!(matches!(result, Err(VerbalixError::InvalidResponse)));
+        assert!(selection.replacements.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn undo_rejects_when_transformed_content_is_no_longer_intact() {
+        let current = snapshot(true);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current.clone()),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let coordinator = coordinator(selection.clone(), Arc::new(FakeOverlay::default()));
+        coordinator
+            .dispatch(SelectionEvent::Candidate(current))
+            .unwrap();
+        selection.current.lock().unwrap().text = "edited again".to_owned();
+
+        let result = coordinator.undo("transformed");
+
+        assert!(matches!(result, Err(VerbalixError::StaleSelection)));
+        assert!(selection.replacements.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn oversized_capture_is_invalidated_before_provider_use() {
+        let mut current = snapshot(true);
+        current.text = "a".repeat(12_001);
+        let selection = Arc::new(FakeSelection {
+            current: Mutex::new(current),
+            replacements: Mutex::new(Vec::new()),
+        });
+        let overlay = Arc::new(FakeOverlay::default());
+        let coordinator = coordinator(selection, overlay.clone());
+
+        let result = coordinator.refresh_selection();
+
+        assert!(matches!(result, Err(VerbalixError::TextTooLong)));
+        assert_eq!(*overlay.hidden_count.lock().unwrap(), 1);
     }
 }
 
