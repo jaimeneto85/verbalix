@@ -32,6 +32,10 @@ Fora do escopo:
 - R8: a correção deve atacar somente uma falha comprovada; hipóteses não comprovadas permanecem observações.
 - R9: nenhum acesso AppKit ocorre fora da main thread.
 - R10: bounds inválidos de `AXBoundsForRange` não podem virar silenciosamente `(0,0,1,1)`; a origem geométrica escolhida deve ser válida, rastreável e próxima ao alvo.
+- R11: Traduzir/Aprimorar nunca podem parecer inertes; falhas de autenticação, configuração ou provider devem ser visíveis e acionáveis.
+- R12: ao faltar sessão, a UI deve orientar e permitir abrir a janela principal no fluxo de login.
+- R13: URL Supabase e anon key públicas devem ser resolvidas consistentemente no bundle Finder-launched; segredos do provider de IA continuam exclusivamente no backend.
+- R14: a janela/nota de erro deve acomodar a mensagem completa, sem clipping pela altura fixa da toolbar.
 
 ## 2. DESIGN
 
@@ -60,6 +64,24 @@ A captura passa a resolver geometria nesta ordem:
 3. posição atual do cursor obtida por API thread-safe e convertida ao mesmo sistema global em pontos usado pelo overlay.
 
 Cada snapshot registra apenas a fonte geométrica (`selected_range`, `focused_element` ou `cursor`) e os números já sanitizados. O conteúdo continua fora do trace. O fallback do cursor é amostrado no momento da captura para manter proximidade com seleção por mouse; seleção por teclado pode cair no frame do elemento.
+
+Um rect de range só é aceito se todas as coordenadas forem finitas, largura/altura forem maiores que 1 ponto e ele não corresponder ao sentinela na borda da tela. O frame AX tenta primeiro o atributo de frame e depois a composição `AXPosition + AXSize`. O último fallback usa `CGEventGetLocation`, que fornece coordenada global top-left sem introduzir AppKit no worker do observer.
+
+### Readiness das ações de IA
+
+O smoke também comprovou que ambos os botões terminam antes do provider: `transform_selection` exige sessão, enquanto o bundle atual não contém configuração Supabase utilizável. O frontend captura o erro em `.toolbar-error`, mas a janela nativa tem altura fixa de 52 px e recorta a mensagem.
+
+Antes de iniciar uma transformação, o runtime deve distinguir e expor estados sanitizados:
+
+- `login_required`: abre/revela a janela principal no fluxo de autenticação;
+- `provider_not_configured`: informa que o build não contém configuração pública do backend;
+- `provider_unavailable`: mantém erro visível e oferece retorno seguro.
+
+Configuração pública de cliente (URL Supabase e anon key) deve ter uma única política para dev e bundle: valores de build embutidos no artefato, com override de runtime apenas para execução pelo Terminal. O app iniciado pelo Finder não pode depender de variáveis herdadas do shell. Chaves OpenAI/service-role nunca entram no bundle.
+
+O erro deve ser apresentado em uma superfície dimensionada (toolbar redimensionada ou nota dedicada) e incluir ação para abrir Configurações/login. O trace registra apenas código/readiness, nunca token, URL completa, payload ou conteúdo selecionado.
+
+Se não houver URL Supabase, anon key e Edge Function implantada/saudável, tradução e aprimoramento permanecem bloqueio externo. Testes mockados podem aprovar routing/UX, mas não autorizam declarar a IA funcional sem smoke real.
 
 ### Procedimento de reprodução
 
@@ -94,6 +116,8 @@ Riscos (upsidedown):
 - remover `set_focusable` exige comprovar que o painel continua não ativante e clicável.
 - frame AX pode cobrir um editor inteiro; deve ser preferido ao cursor apenas quando a seleção não fornece bounds, e o smoke deve avaliar proximidade no Slack/TextEdit.
 - coordenadas AX, Core Graphics e Tauri devem ser comparadas em pontos globais, incluindo monitores com escala/origem diferentes.
+- anon key é pública, mas ainda deve ser tratada como configuração e nunca confundida com service-role/OpenAI secret.
+- ampliar a toolbar para erro não pode deslocar ou roubar foco da seleção sem necessidade.
 
 Oportunidades (downsideup):
 
@@ -111,7 +135,9 @@ Oportunidades (downsideup):
 - [x] T5 Reautorizar manualmente o bundle e reproduzir com tracing.
 - [x] T6 Corrigir a causa comprovada e adicionar regressão específica.
 - [ ] T6b Implementar fallback `AXBoundsForRange → frame AX → cursor`, com validação e trace da fonte.
+- [ ] T6c Implementar readiness/erros acionáveis e configuração pública consistente no bundle.
 - [ ] T7 Executar Rust, Clippy, frontend, E2E, Edge, build, bundle e codesign.
 - [ ] T8 Executar QA independente com análise dual e verdict.
 - [ ] T9 Documentar evidências, limitações e operação manual.
 - [ ] T10 Executar smoke de posição no Slack e TextEdit, por mouse e teclado.
+- [ ] T11 Executar smoke real Traduzir/Aprimorar; bloquear explicitamente se backend/configuração/credenciais externas estiverem ausentes.
