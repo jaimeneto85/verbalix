@@ -26,5 +26,4 @@ pub trait OverlayPort: Send + Sync {
 
 pub trait ClipboardPort: Send + Sync {
     fn read_text(&self) -> Result<Option<String>, VerbalixError>;
-    fn write_text(&self, text: &str) -> Result<(), VerbalixError>;
 }

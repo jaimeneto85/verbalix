@@ -11,7 +11,7 @@ use domain::{
     AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
     TransformRequest, TransformResult, VerbalixError,
 };
-use platform::{MacAccessibility, SystemClipboard, TauriOverlay};
+use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -266,10 +266,11 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let pause = MenuItem::with_id(app, "pause", "Pausar", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&settings, &pause, &quit])?;
+    let pause_item = pause.clone();
     TrayIconBuilder::new()
         .tooltip("Verbalix")
         .menu(&menu)
-        .on_menu_event(|app, event| match event.id.as_ref() {
+        .on_menu_event(move |app, event| match event.id.as_ref() {
             "settings" => {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
@@ -281,6 +282,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 let runtime = app.state::<Arc<AppRuntime>>();
                 let paused = runtime.paused.load(Ordering::Relaxed);
                 runtime.paused.store(!paused, Ordering::Relaxed);
+                let _ = pause_item.set_text(if paused { "Pausar" } else { "Retomar" });
                 if !paused {
                     let _ = runtime.coordinator.dispatch(SelectionEvent::Invalidated);
                 }
@@ -340,6 +342,12 @@ pub fn run() {
                 paused: AtomicBool::new(false),
             });
             app.manage(runtime.clone());
+            let dismiss_runtime = runtime.clone();
+            install_mouse_dismiss_monitor(Arc::new(move || {
+                let _ = dismiss_runtime
+                    .coordinator
+                    .dispatch(SelectionEvent::Invalidated);
+            }));
             let observer_runtime = runtime.clone();
             runtime.selection.start_observer(Arc::new(move || {
                 match observer_runtime.coordinator.refresh_selection() {

@@ -91,8 +91,10 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("settings.json");
         let repository = JsonSettingsRepository::new(&path);
-        let mut settings = AppSettings::default();
-        settings.formality = 0;
+        let settings = AppSettings {
+            formality: 0,
+            ..AppSettings::default()
+        };
 
         assert!(repository.save(&settings).is_err());
         assert!(!path.exists());

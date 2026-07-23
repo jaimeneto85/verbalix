@@ -7,6 +7,19 @@ use tauri::{
     AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
+#[cfg(target_os = "macos")]
+pub fn install_mouse_dismiss_monitor(callback: std::sync::Arc<dyn Fn() + Send + Sync>) {
+    use block2::RcBlock;
+    use objc2_app_kit::{NSEvent, NSEventMask};
+    let block = RcBlock::new(move |_event| callback());
+    if let Some(monitor) = NSEvent::addGlobalMonitorForEventsMatchingMask_handler(
+        NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown,
+        &block,
+    ) {
+        std::mem::forget(monitor);
+    }
+}
+
 pub struct TauriOverlay {
     app: AppHandle,
 }
@@ -116,6 +129,7 @@ fn configure_nonactivating_panel(window: &WebviewWindow) -> Result<(), VerbalixE
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 

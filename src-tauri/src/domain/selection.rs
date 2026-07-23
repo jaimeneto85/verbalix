@@ -93,13 +93,6 @@ pub enum SelectionEvent {
     Invalidated,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum OverlayKind {
-    Toolbar,
-    Note,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

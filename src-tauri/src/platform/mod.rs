@@ -5,6 +5,8 @@ mod overlay;
 mod macos_accessibility;
 
 pub use clipboard::SystemClipboard;
+#[cfg(target_os = "macos")]
+pub use overlay::install_mouse_dismiss_monitor;
 pub use overlay::TauriOverlay;
 
 #[cfg(target_os = "macos")]

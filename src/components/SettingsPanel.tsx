@@ -94,6 +94,16 @@ export function SettingsPanel({
         </div>
       </div>
 
+      <label className="setting-block shortcut-input">
+        <span>Atalho global</span>
+        <input
+          value={settings.shortcut}
+          placeholder="Option+Shift+Space"
+          onChange={(event) => patch("shortcut", event.target.value)}
+        />
+        <small>Use combinações como Option+Shift+Space.</small>
+      </label>
+
       <div className="switches">
         <Toggle
           checked={settings.confirmBeforeReplace}

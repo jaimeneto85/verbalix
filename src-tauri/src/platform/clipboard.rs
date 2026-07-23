@@ -59,14 +59,6 @@ impl ClipboardPort for SystemClipboard {
             Err(_) => Err(VerbalixError::LocalFailure),
         }
     }
-
-    fn write_text(&self, text: &str) -> Result<(), VerbalixError> {
-        self.clipboard
-            .lock()
-            .map_err(|_| VerbalixError::LocalFailure)?
-            .set_text(text.to_owned())
-            .map_err(|_| VerbalixError::LocalFailure)
-    }
 }
 
 #[cfg(target_os = "macos")]

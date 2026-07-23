@@ -117,13 +117,13 @@
 ### Fase 2: Seleção e Estado
 - [x] T2.1: [MEDIUM] Implementar adapter de confiança/permissão Accessibility.
 - [x] T2.2: [MEDIUM] Implementar captura AX de elemento, texto, range, bounds e writability.
-- [ ] T2.3: [MEDIUM] Implementar observação híbrida, debounce e filtros de segurança.
+- [x] T2.3: [MEDIUM] Implementar observação híbrida, debounce e filtros de segurança.
 - [x] T2.4: [MEDIUM] Implementar state machine, snapshots, cancelamento e revalidação.
 - [x] T2.5: [MEDIUM] Implementar escrita AX estrita para seleção gravável.
 - [x] T2.6: [MEDIUM] Implementar atalho e fallback copy-only com restauração segura do clipboard.
 
 ### Fase 3: Overlays e UI
-- [ ] T3.1: [MEDIUM] Implementar toolbar nativa não ativante e posicionamento/clamp.
+- [x] T3.1: [MEDIUM] Implementar toolbar nativa não ativante e posicionamento/clamp.
 - [x] T3.2: [MEDIUM] Implementar nota read-only com Copiar/Fechar e estados de erro/loading.
 - [x] T3.3: [MEDIUM] Implementar onboarding e Settings no frontend Tauri.
 - [x] T3.4: [LOW] Integrar menu bar, ciclo de vida e abertura das configurações.
@@ -133,7 +133,7 @@
 - [x] T4.1: [MEDIUM] Implementar `TextTransformer`, prompts técnicos e política PT/EN.
 - [x] T4.2: [MEDIUM] Implementar Edge Function com `AiProvider`, OpenAI por env, erros padronizados, timeout e limite de 12k.
 - [x] T4.3: [MEDIUM] Implementar cliente Supabase, sessão no Keychain e repositories de auth/histórico.
-- [ ] T4.4: [MEDIUM] Integrar ações, latest-wins, preview, aplicação segura e undo temporário.
+- [x] T4.4: [MEDIUM] Integrar ações, latest-wins, preview, aplicação segura e undo temporário.
 
 ### Fase 5: Verificação
 - [x] T5.1: [MEDIUM] Criar testes unitários de domínio, Unicode, prompts, settings e geometria.

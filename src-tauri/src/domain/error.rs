@@ -21,6 +21,7 @@ pub enum VerbalixError {
     ProviderRejected,
     #[error("The transformation response was invalid")]
     InvalidResponse,
+    #[cfg(not(target_os = "macos"))]
     #[error("The requested operation is not supported on this platform")]
     UnsupportedPlatform,
     #[error("A local operation failed")]

@@ -1,8 +1,8 @@
 use crate::{
     application::{OverlayPort, SelectionPort},
     domain::{
-        AiProvider, SelectionEvent, SelectionSnapshot, SelectionState, TransformOperation,
-        TransformRequest, TransformResult, VerbalixError,
+        AiProvider, SelectionEvent, SelectionSnapshot, SelectionState, TransformRequest,
+        TransformResult, VerbalixError,
     },
 };
 use std::sync::{Arc, Mutex};
@@ -16,11 +16,12 @@ pub struct SelectionCoordinator {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use crate::{
         application::{OverlayPort, SelectionPort},
-        domain::{Rect, TextRange, TransformResult},
+        domain::{Rect, TextRange, TransformOperation, TransformResult},
     };
     use async_trait::async_trait;
     use std::sync::{
@@ -753,9 +754,10 @@ impl SelectionCoordinator {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn request_for(
         &self,
-        operation: TransformOperation,
+        operation: crate::domain::TransformOperation,
         text: String,
         preferences: Option<crate::domain::TransformPreferences>,
     ) -> TransformRequest {

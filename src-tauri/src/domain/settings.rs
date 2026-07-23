@@ -73,8 +73,10 @@ mod tests {
 
     #[test]
     fn rejects_formality_outside_supported_range() {
-        let mut settings = AppSettings::default();
-        settings.formality = 6;
+        let settings = AppSettings {
+            formality: 6,
+            ..AppSettings::default()
+        };
         assert!(settings.validate().is_err());
     }
 }

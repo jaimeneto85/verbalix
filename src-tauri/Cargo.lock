@@ -4286,6 +4286,7 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "async-trait",
+ "block2",
  "core-foundation 0.10.1",
  "core-foundation-sys",
  "keyring",

@@ -363,6 +363,19 @@ input[type="range"] {
   font-size: 9px;
 }
 
+.shortcut-input input {
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid #dce0e7;
+  border-radius: 9px;
+}
+
+.shortcut-input small {
+  display: block;
+  margin-top: 6px;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
