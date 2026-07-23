@@ -1,5 +1,7 @@
 mod application;
 mod commands;
+#[cfg(test)]
+mod commands_tests;
 mod diagnostics;
 mod domain;
 mod lifecycle;

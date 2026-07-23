@@ -42,6 +42,17 @@ fn show_provider_unavailable(runtime: &AppRuntime) {
     }
 }
 
+pub(crate) fn route_refresh_failure(
+    error: &VerbalixError,
+    on_login_required: impl FnOnce(),
+    on_provider_unavailable: impl FnOnce(),
+) {
+    match classify_refresh_failure(error) {
+        RefreshFailureRoute::LoginRequired => on_login_required(),
+        RefreshFailureRoute::ProviderUnavailable => on_provider_unavailable(),
+    }
+}
+
 #[tauri::command]
 pub(crate) fn public_backend_config(runtime: State<'_, Arc<AppRuntime>>) -> PublicBackendConfig {
     runtime.backend_config.clone()
@@ -185,16 +196,17 @@ pub(crate) async fn transform_selection(
     let session = match runtime.auth.refresh(&stored).await {
         Ok(session) => session,
         Err(error) => {
-            match classify_refresh_failure(&error) {
-                RefreshFailureRoute::LoginRequired => {
+            route_refresh_failure(
+                &error,
+                || {
                     let readiness = AiReadiness::login_required();
                     show_readiness(&runtime, &readiness);
                     crate::show_main_window(&app, "login_required");
-                }
-                RefreshFailureRoute::ProviderUnavailable => {
+                },
+                || {
                     show_provider_unavailable(&runtime);
-                }
-            }
+                },
+            );
             return Err(error);
         }
     };

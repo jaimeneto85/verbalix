@@ -12,6 +12,7 @@
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
 - Providers falsos retornam sucesso, timeout ou request ID divergente sem acessar a rede.
 - O limite de Keychain é verificado pelo payload IPC; testes não gravam credenciais reais.
+- Wiring com efeitos Tauri pode ser testado por callbacks `FnOnce` que contam separadamente abertura de janela e publicação de nota, mantendo o mesmo branch usado por produção sem construir `AppHandle`.
 
 ## Erros Recorrentes & Soluções
 - Factories de `vi.mock` são hoisted; mocks compartilhados devem usar `vi.hoisted`.
