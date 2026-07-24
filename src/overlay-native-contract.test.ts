@@ -86,11 +86,13 @@ describe("macOS overlay native contract", () => {
     expect(window).toContain("caller.ns_view()");
     expect(window).toContain("current.ns_view()");
     expect(window).toContain("PageLoadEvent::Started");
-    expect(window).toContain("reload_readiness.invalidate_document");
+    expect(window).toContain("invalidate_reloaded_window");
     expect(window).toContain("window.destroy()");
     expect(window).toContain("reload_invalidation_failed");
-    expect(window).toContain("reload_destroy_failed");
-    expect(window).toContain("reload_hide_failed");
+    expect(window).toContain("window_configure_failed");
+    expect(window).toContain("creation_invalidation_failed");
+    expect(window).toContain("rollback_destroy_failed");
+    expect(window).toContain("rollback_hide_failed");
     expect(window).toContain("invalid_window_found");
   });
 });

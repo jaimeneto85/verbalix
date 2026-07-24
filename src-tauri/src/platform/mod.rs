@@ -5,6 +5,8 @@ mod overlay_dispatcher;
 mod overlay_geometry;
 mod overlay_readiness;
 mod overlay_window;
+#[cfg(test)]
+mod overlay_window_tests;
 
 #[cfg(target_os = "macos")]
 mod macos_accessibility;

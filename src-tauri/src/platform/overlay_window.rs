@@ -34,50 +34,128 @@ pub fn get_or_create(
         })?;
         diagnostics::overlay("invalid_window_destroyed", label, sequence);
     }
-    let generation = readiness.begin_document(surface)?;
-    let document_started = Arc::new(AtomicBool::new(false));
-    let reload_started = document_started.clone();
-    let reload_readiness = readiness.clone();
-    let document_url = overlay_document_url(surface, generation);
-    let window = WebviewWindowBuilder::new(app, label, WebviewUrl::App(document_url.into()))
-        .on_page_load(move |window, payload| {
-            if payload.event() == PageLoadEvent::Started
-                && reload_started.swap(true, Ordering::AcqRel)
-            {
-                match reload_readiness.invalidate_document(surface) {
-                    Ok(()) => diagnostics::overlay("reload_invalidated", label, sequence),
-                    Err(_) => diagnostics::overlay("reload_invalidation_failed", label, sequence),
-                }
-                match window.destroy() {
-                    Ok(()) => diagnostics::overlay("reload_window_destroyed", label, sequence),
-                    Err(_) => {
-                        diagnostics::overlay("reload_destroy_failed", label, sequence);
-                        match window.hide() {
-                            Ok(()) => diagnostics::overlay("reload_window_hidden", label, sequence),
-                            Err(_) => diagnostics::overlay("reload_hide_failed", label, sequence),
-                        }
+    let (window, _) = create_configured_document(
+        readiness,
+        surface,
+        sequence,
+        |generation| {
+            let document_started = Arc::new(AtomicBool::new(false));
+            let reload_started = document_started.clone();
+            let reload_readiness = readiness.clone();
+            let document_url = overlay_document_url(surface, generation);
+            WebviewWindowBuilder::new(app, label, WebviewUrl::App(document_url.into()))
+                .on_page_load(move |window, payload| {
+                    if payload.event() == PageLoadEvent::Started
+                        && reload_started.swap(true, Ordering::AcqRel)
+                    {
+                        invalidate_reloaded_window(&window, &reload_readiness, surface, sequence);
                     }
-                }
-            }
-        })
-        .title("Verbalix")
-        .inner_size(width, height)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .resizable(false)
-        .focused(false)
-        .visible(false)
-        .build()
-        .map_err(|_| VerbalixError::LocalFailure)?;
-    #[cfg(target_os = "macos")]
-    macos_overlay_panel::configure(&window)?;
+                })
+                .title("Verbalix")
+                .inner_size(width, height)
+                .decorations(false)
+                .transparent(true)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .resizable(false)
+                .focused(false)
+                .visible(false)
+                .build()
+                .map_err(|_| VerbalixError::LocalFailure)
+        },
+        configure_window,
+        |window| window.destroy().map_err(|_| VerbalixError::LocalFailure),
+        |window| window.hide().map_err(|_| VerbalixError::LocalFailure),
+    )?;
     diagnostics::overlay("window_created", label, sequence);
     Ok(window)
 }
 
-fn overlay_document_url(surface: OverlaySurface, generation: uuid::Uuid) -> String {
+pub(super) fn create_configured_document<T>(
+    readiness: &OverlayReadiness,
+    surface: OverlaySurface,
+    sequence: u64,
+    build: impl FnOnce(uuid::Uuid) -> Result<T, VerbalixError>,
+    configure: impl FnOnce(&T) -> Result<(), VerbalixError>,
+    destroy: impl FnOnce(&T) -> Result<(), VerbalixError>,
+    hide: impl FnOnce(&T) -> Result<(), VerbalixError>,
+) -> Result<(T, uuid::Uuid), VerbalixError> {
+    let label = surface.label();
+    let generation = readiness.begin_document(surface)?;
+    let window = match build(generation) {
+        Ok(window) => window,
+        Err(error) => {
+            diagnostics::overlay("window_build_failed", label, sequence);
+            invalidate_creation(readiness, surface, sequence);
+            return Err(error);
+        }
+    };
+    if let Err(error) = configure(&window) {
+        diagnostics::overlay("window_configure_failed", label, sequence);
+        invalidate_creation(readiness, surface, sequence);
+        rollback_window(&window, label, sequence, destroy, hide);
+        return Err(error);
+    }
+    Ok((window, generation))
+}
+
+fn invalidate_creation(readiness: &OverlayReadiness, surface: OverlaySurface, sequence: u64) {
+    match readiness.invalidate_document(surface) {
+        Ok(()) => diagnostics::overlay("creation_invalidated", surface.label(), sequence),
+        Err(_) => diagnostics::overlay("creation_invalidation_failed", surface.label(), sequence),
+    }
+}
+
+fn rollback_window<T>(
+    window: &T,
+    label: &str,
+    sequence: u64,
+    destroy: impl FnOnce(&T) -> Result<(), VerbalixError>,
+    hide: impl FnOnce(&T) -> Result<(), VerbalixError>,
+) {
+    match destroy(window) {
+        Ok(()) => diagnostics::overlay("rollback_window_destroyed", label, sequence),
+        Err(_) => {
+            diagnostics::overlay("rollback_destroy_failed", label, sequence);
+            match hide(window) {
+                Ok(()) => diagnostics::overlay("rollback_window_hidden", label, sequence),
+                Err(_) => diagnostics::overlay("rollback_hide_failed", label, sequence),
+            }
+        }
+    }
+}
+
+fn invalidate_reloaded_window(
+    window: &WebviewWindow,
+    readiness: &OverlayReadiness,
+    surface: OverlaySurface,
+    sequence: u64,
+) {
+    let label = surface.label();
+    match readiness.invalidate_document(surface) {
+        Ok(()) => diagnostics::overlay("reload_invalidated", label, sequence),
+        Err(_) => diagnostics::overlay("reload_invalidation_failed", label, sequence),
+    }
+    rollback_window(
+        window,
+        label,
+        sequence,
+        |window| window.destroy().map_err(|_| VerbalixError::LocalFailure),
+        |window| window.hide().map_err(|_| VerbalixError::LocalFailure),
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn configure_window(window: &WebviewWindow) -> Result<(), VerbalixError> {
+    macos_overlay_panel::configure(window)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn configure_window(_window: &WebviewWindow) -> Result<(), VerbalixError> {
+    Ok(())
+}
+
+pub(super) fn overlay_document_url(surface: OverlaySurface, generation: uuid::Uuid) -> String {
     format!(
         "index.html?overlay={}&generation={generation}",
         surface.label()
@@ -138,34 +216,5 @@ fn show_and_confirm(
         Ok(())
     } else {
         Err(VerbalixError::LocalFailure)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reload_destroy_then_recreate_uses_a_fresh_generation_and_ack() {
-        let readiness = OverlayReadiness::default();
-        let surface = OverlaySurface::Toolbar;
-        let old_generation = readiness.begin_document(surface).unwrap();
-        let old_url = overlay_document_url(surface, old_generation);
-        readiness.request(surface).unwrap();
-        assert!(readiness.mark_ready(surface, old_generation).unwrap());
-        assert!(readiness.should_show(surface).unwrap());
-
-        readiness.invalidate_document(surface).unwrap();
-        assert!(!readiness.mark_ready(surface, old_generation).unwrap());
-        assert!(!readiness.should_show(surface).unwrap());
-
-        let new_generation = readiness.begin_document(surface).unwrap();
-        let new_url = overlay_document_url(surface, new_generation);
-        assert_ne!(new_generation, old_generation);
-        assert_ne!(new_url, old_url);
-        assert_eq!(new_generation.get_version_num(), 4);
-        assert!(!readiness.mark_ready(surface, old_generation).unwrap());
-        assert!(readiness.mark_ready(surface, new_generation).unwrap());
-        assert!(readiness.should_show(surface).unwrap());
     }
 }
