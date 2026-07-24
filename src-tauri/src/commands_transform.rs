@@ -4,8 +4,8 @@ use crate::{
         current_ai_readiness, route_refresh_failure, show_provider_unavailable, show_readiness,
     },
     domain::{
-        SettingsRepository, TransformOperation, TransformPreferences, TransformRequest,
-        TransformResult, VerbalixError,
+        SelectionSnapshot, SettingsRepository, TransformOperation, TransformPreferences,
+        TransformRequest, TransformResult, VerbalixError,
     },
     AppRuntime,
 };
@@ -39,10 +39,12 @@ fn show_transform_failure(runtime: &AppRuntime, error: &VerbalixError) {
 }
 
 fn request_owns_feedback(runtime: &AppRuntime, snapshot_id: uuid::Uuid) -> bool {
-    runtime
-        .coordinator
-        .current_snapshot()
-        .is_some_and(|current| current.id == snapshot_id)
+    let current = runtime.coordinator.current_snapshot();
+    snapshot_owns_feedback(current.as_ref(), snapshot_id)
+}
+
+fn snapshot_owns_feedback(current: Option<&SelectionSnapshot>, snapshot_id: uuid::Uuid) -> bool {
+    current.is_some_and(|snapshot| snapshot.id == snapshot_id)
 }
 
 #[tauri::command]
@@ -134,4 +136,40 @@ async fn transform_pinned(
             .await;
     }
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Rect, TextRange};
+
+    fn snapshot() -> SelectionSnapshot {
+        SelectionSnapshot::new(
+            42,
+            "pid:42".to_owned(),
+            "selected".to_owned(),
+            TextRange {
+                location: 0,
+                length: 8,
+            },
+            Rect {
+                x: 1.0,
+                y: 2.0,
+                width: 3.0,
+                height: 4.0,
+            },
+            true,
+        )
+    }
+
+    #[test]
+    fn feedback_requires_the_original_snapshot_to_still_own_the_action() {
+        let current = snapshot();
+        assert!(snapshot_owns_feedback(Some(&current), current.id));
+        assert!(!snapshot_owns_feedback(
+            Some(&current),
+            uuid::Uuid::new_v4()
+        ));
+        assert!(!snapshot_owns_feedback(None, current.id));
+    }
 }
