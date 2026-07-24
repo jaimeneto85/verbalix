@@ -14,6 +14,7 @@ describe("macOS overlay native contract", () => {
     expect(panel).toContain("setBackgroundColor: clear_color");
     expect(panel).toContain("setFrameOrigin: native_origin");
     expect(panel).toContain("zero_screen_max_y");
+    expect(panel).toContain("firstObject()");
     expect(panel).not.toContain("mainScreen");
     expect(panel).not.toMatch(
       /LogicalPosition|PhysicalPosition|scale_factor|set_position/

@@ -44,8 +44,7 @@ pub fn place(
     let mtm = MainThreadMarker::new().ok_or(VerbalixError::LocalFailure)?;
     let native_screens = NSScreen::screens(mtm);
     let zero_frame = native_screens
-        .iter()
-        .next()
+        .firstObject()
         .map(|screen| screen.frame())
         .ok_or(VerbalixError::LocalFailure)?;
     let screens: Vec<_> = native_screens
