@@ -231,8 +231,8 @@ Manter o resolver system-wide e implementar o adapter mínimo de text marker cau
 - [x] T8 [MEDIUM] Implementar extração por representação no mesmo elemento com RAII e type-check estrito.
 - [x] T9 [MEDIUM] Integrar extração em capture/observer e vincular replace/restore ao mesmo target esperado.
 - [x] T10 [LOW] Limitar diagnostics repetidos sem conteúdo selecionado.
-- [ ] T11 [MEDIUM] Testar matriz direct/parameterized/value-slice/trust/self/race/ownership e regressões existentes.
-- [ ] T12 [LOW] Testar equivalência/debounce, secure field, range, geometry e mutation target.
+- [x] T11 [MEDIUM] Testar matriz direct/parameterized/value-slice/trust/self/race/ownership e regressões existentes.
+- [x] T12 [LOW] Testar equivalência/debounce, secure field, range, geometry e mutation target.
 - [ ] T13 [MEDIUM] Executar QA dual de código, concorrência, FFI e testes.
 - [ ] T14 [MEDIUM] Build/install debug e validação real por Computer Use em TextEdit e segundo app.
 - [ ] T15 [MEDIUM] Corrigir rejeições e obter verdict `APPROVED`.

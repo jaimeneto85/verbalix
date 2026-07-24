@@ -6,6 +6,7 @@
 - Contratos da Edge Function usam `deno test` sem dependências externas.
 - Smoke tests validam configuração e também executam o bundle `.app` pelo CLI do Tauri.
 - Boundaries macOS que não podem ser exercitados sem permissão real usam uma combinação de funções puras Rust para geometria e contratos estáticos Vitest para garantir APIs AX/Core Graphics, ausência de AppKit no worker e lifecycle do shell.
+- Text markers permanecem sem mocks FFI: a suíte combina matriz pura e exaustiva de categorias AX, validação de índices/length em UTF-16, fluxo read-only até nota e contrato estático das APIs públicas/RAII; o gate real cobre o adapter nativo.
 - Fluxos críticos de recuperação visual usam Playwright com `__TAURI_INTERNALS__` simulado e verificam tanto invocações IPC quanto clipping pelo bounding box.
 
 ## Estratégias de Mock
@@ -19,10 +20,11 @@
 - Clipboard e Accessibility reais não devem ser acionados em testes automatizados, pois alteram estado global do macOS.
 - Coordenadas globais negativas são válidas em monitores secundários; validação geométrica deve rejeitar valores não finitos e dimensões inválidas sem rejeitar a origem negativa.
 - Doubles Deno que implementam interfaces assíncronas sem executar `await` devem retornar `Promise.resolve`/`Promise.reject` explicitamente para satisfazer `deno lint require-await`.
+- Limites superiores de índices marker em macOS arm64 devem considerar que `isize::MAX == i64::MAX`; o maior location válido antes de um range de length 1 é `isize::MAX - 1`.
 
 ## Cobertura & Métricas
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
-- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode, settings, readiness e geometria, mas `cargo-llvm-cov` não está instalado.
+- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, target de restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 68 testes Rust e os gates `clippy -D warnings` são usados como evidência, enquanto o frontend instrumentado mantém 100%.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
