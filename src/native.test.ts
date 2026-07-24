@@ -64,6 +64,15 @@ describe("native command contract", () => {
     });
   });
 
+  it("returns the native readiness acknowledgment", async () => {
+    invoke.mockResolvedValue(true);
+
+    await expect(native.overlaySurfaceReady("note")).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("overlay_surface_ready", {
+      overlay: "note"
+    });
+  });
+
   it("maps settings, session, selection and dismissal commands exactly", async () => {
     invoke.mockResolvedValue(undefined);
 

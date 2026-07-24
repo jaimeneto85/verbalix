@@ -48,11 +48,10 @@ impl TauriOverlay {
         self.note_result.current()
     }
 
-    pub fn surface_ready(&self, label: &str) -> Result<(), VerbalixError> {
+    pub async fn surface_ready(&self, label: &str) -> Result<bool, VerbalixError> {
         self.dispatcher
-            .dispatch(OverlayCommand::SurfaceReady(OverlaySurface::from_label(
-                label,
-            )?))
+            .surface_ready(OverlaySurface::from_label(label)?)
+            .await
     }
 
     pub fn show_error(&self, bounds: Rect, message: &str) -> Result<(), VerbalixError> {
@@ -130,9 +129,11 @@ mod tests {
     #[derive(Default)]
     struct RecordingDispatcher {
         commands: Mutex<Vec<OverlayCommand>>,
+        ready: Mutex<Vec<OverlaySurface>>,
         fail: bool,
     }
 
+    #[async_trait::async_trait]
     impl OverlayDispatcher for RecordingDispatcher {
         fn dispatch(&self, command: OverlayCommand) -> Result<(), VerbalixError> {
             if self.fail {
@@ -140,6 +141,14 @@ mod tests {
             }
             self.commands.lock().unwrap().push(command);
             Ok(())
+        }
+
+        async fn surface_ready(&self, surface: OverlaySurface) -> Result<bool, VerbalixError> {
+            if self.fail {
+                return Err(VerbalixError::LocalFailure);
+            }
+            self.ready.lock().unwrap().push(surface);
+            Ok(true)
         }
     }
 
@@ -166,7 +175,6 @@ mod tests {
                 .show_preview(bounds(), uuid::Uuid::new_v4(), "preview")
                 .unwrap();
             overlay.show_undo(bounds(), "applied").unwrap();
-            overlay.surface_ready("toolbar").unwrap();
             overlay.hide_all().unwrap();
         });
 
@@ -178,17 +186,14 @@ mod tests {
         assert!(matches!(commands[2], OverlayCommand::ShowResult(_, _)));
         assert!(matches!(commands[3], OverlayCommand::ShowResult(_, _)));
         assert!(matches!(commands[4], OverlayCommand::ShowResult(_, _)));
-        assert_eq!(
-            commands[5],
-            OverlayCommand::SurfaceReady(OverlaySurface::Toolbar)
-        );
-        assert_eq!(commands[6], OverlayCommand::HideAll);
+        assert_eq!(commands[5], OverlayCommand::HideAll);
     }
 
     #[test]
     fn dispatch_failure_is_returned_without_panicking() {
         let overlay = TauriOverlay::with_dispatcher(Arc::new(RecordingDispatcher {
             commands: Mutex::new(Vec::new()),
+            ready: Mutex::new(Vec::new()),
             fail: true,
         }));
 
@@ -200,8 +205,20 @@ mod tests {
             overlay.hide_all(),
             Err(VerbalixError::LocalFailure)
         ));
+    }
+
+    #[tokio::test]
+    async fn readiness_returns_an_ack_and_rejects_unknown_surfaces() {
+        let dispatcher = Arc::new(RecordingDispatcher::default());
+        let overlay = TauriOverlay::with_dispatcher(dispatcher.clone());
+
+        assert!(overlay.surface_ready("toolbar").await.unwrap());
+        assert_eq!(
+            dispatcher.ready.lock().unwrap().as_slice(),
+            &[OverlaySurface::Toolbar]
+        );
         assert!(matches!(
-            overlay.surface_ready("main"),
+            overlay.surface_ready("main").await,
             Err(VerbalixError::LocalFailure)
         ));
     }

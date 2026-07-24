@@ -9,6 +9,7 @@ use crate::{
         overlay_window::{get_or_create, show_if_ready},
     },
 };
+use async_trait::async_trait;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
@@ -21,12 +22,13 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 pub enum OverlayCommand {
     ShowToolbar(Rect),
     ShowResult(Rect, NoteResultPayload),
-    SurfaceReady(OverlaySurface),
     HideAll,
 }
 
+#[async_trait]
 pub trait OverlayDispatcher: Send + Sync {
     fn dispatch(&self, command: OverlayCommand) -> Result<(), VerbalixError>;
+    async fn surface_ready(&self, surface: OverlaySurface) -> Result<bool, VerbalixError>;
 }
 
 pub struct MainThreadOverlayDispatcher {
@@ -65,6 +67,7 @@ impl MainThreadOverlayDispatcher {
     }
 }
 
+#[async_trait]
 impl OverlayDispatcher for MainThreadOverlayDispatcher {
     fn dispatch(&self, command: OverlayCommand) -> Result<(), VerbalixError> {
         self.execution_failure.take()?;
@@ -84,6 +87,27 @@ impl OverlayDispatcher for MainThreadOverlayDispatcher {
             })
             .map_err(|_| VerbalixError::LocalFailure)
     }
+
+    async fn surface_ready(&self, surface: OverlaySurface) -> Result<bool, VerbalixError> {
+        self.execution_failure.take()?;
+        let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
+        let label = surface.label();
+        diagnostics::overlay("scheduled", label, sequence);
+        let app = self.app.clone();
+        let readiness = self.readiness.clone();
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.app
+            .run_on_main_thread(move || {
+                diagnostics::overlay("executing", label, sequence);
+                let result = execute_surface_ready(&app, surface, sequence, &readiness);
+                if result.is_err() {
+                    diagnostics::overlay("failed", label, sequence);
+                }
+                let _ = sender.send(result);
+            })
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        receiver.await.map_err(|_| VerbalixError::LocalFailure)?
+    }
 }
 
 impl OverlayCommand {
@@ -91,7 +115,6 @@ impl OverlayCommand {
         match self {
             Self::ShowToolbar(_) => "toolbar",
             Self::ShowResult(_, _) => "note",
-            Self::SurfaceReady(surface) => surface.label(),
             Self::HideAll => "all",
         }
     }
@@ -134,13 +157,6 @@ fn execute_command(
             }
             result
         }
-        OverlayCommand::SurfaceReady(surface) => {
-            let window = app
-                .get_webview_window(surface.label())
-                .ok_or(VerbalixError::LocalFailure)?;
-            readiness.mark_ready(surface)?;
-            show_if_ready(&window, surface, sequence, readiness)
-        }
         OverlayCommand::HideAll => {
             readiness.cancel_all()?;
             for label in ["toolbar", "note"] {
@@ -158,6 +174,20 @@ fn execute_command(
             Ok(())
         }
     }
+}
+
+fn execute_surface_ready(
+    app: &AppHandle,
+    surface: OverlaySurface,
+    sequence: u64,
+    readiness: &OverlayReadiness,
+) -> Result<bool, VerbalixError> {
+    let window = app
+        .get_webview_window(surface.label())
+        .ok_or(VerbalixError::LocalFailure)?;
+    readiness.mark_ready(surface)?;
+    show_if_ready(&window, surface, sequence, readiness)?;
+    Ok(true)
 }
 
 #[cfg(target_os = "macos")]

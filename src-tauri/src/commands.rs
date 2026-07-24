@@ -262,11 +262,11 @@ pub(crate) fn dismiss_overlays(runtime: State<'_, Arc<AppRuntime>>) -> Result<()
 }
 
 #[tauri::command]
-pub(crate) fn overlay_surface_ready(
+pub(crate) async fn overlay_surface_ready(
     runtime: State<'_, Arc<AppRuntime>>,
     overlay: String,
-) -> Result<(), VerbalixError> {
-    runtime.overlay.surface_ready(&overlay)
+) -> Result<bool, VerbalixError> {
+    runtime.overlay.surface_ready(&overlay).await
 }
 
 #[tauri::command]

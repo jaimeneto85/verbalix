@@ -47,14 +47,22 @@ describe("macOS overlay native contract", () => {
       dispatcher.indexOf("OverlayCommand::ShowResult")
     );
     const ready = dispatcher.slice(
-      dispatcher.indexOf("OverlayCommand::SurfaceReady(surface) =>"),
-      dispatcher.indexOf("OverlayCommand::HideAll")
+      dispatcher.indexOf("async fn surface_ready"),
+      dispatcher.indexOf("impl OverlayCommand")
+    );
+    const readyStart = dispatcher.indexOf("fn execute_surface_ready");
+    const readyExecution = dispatcher.slice(
+      readyStart,
+      dispatcher.indexOf('#[cfg(target_os = "macos")]', readyStart)
     );
 
     expect(initialToolbar).toContain("show_if_ready");
     expect(initialToolbar).not.toContain("show_and_confirm");
-    expect(ready).toContain("mark_ready");
-    expect(ready).toContain("show_if_ready");
+    expect(ready).toContain("tokio::sync::oneshot::channel");
+    expect(ready).toContain("receiver.await");
     expect(ready).not.toContain("show_and_confirm");
+    expect(readyExecution).toContain("mark_ready");
+    expect(readyExecution).toContain("show_if_ready");
+    expect(readyExecution).toContain("Ok(true)");
   });
 });
