@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   listener: undefined as undefined | ((event: NoteEvent) => void),
   loadSettings: vi.fn(),
   openMainWindow: vi.fn(),
+  overlaySurfaceReady: vi.fn(),
   transformSelection: vi.fn(),
   undoReplacement: vi.fn(),
   unlisten: vi.fn()
@@ -32,6 +33,7 @@ vi.mock("./native", () => ({
     dismissOverlays: mocks.dismissOverlays,
     loadSettings: mocks.loadSettings,
     openMainWindow: mocks.openMainWindow,
+    overlaySurfaceReady: mocks.overlaySurfaceReady,
     transformSelection: mocks.transformSelection,
     undoReplacement: mocks.undoReplacement
   }
@@ -56,6 +58,7 @@ describe("selection overlays", () => {
       message: "A IA está pronta."
     });
     mocks.openMainWindow.mockResolvedValue(undefined);
+    mocks.overlaySurfaceReady.mockResolvedValue(true);
     mocks.applyPreview.mockResolvedValue("Improved");
     mocks.currentNoteResult.mockResolvedValue(null);
     mocks.transformSelection.mockResolvedValue({});
