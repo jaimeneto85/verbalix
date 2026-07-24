@@ -10,30 +10,35 @@ A allow-list remota do Supabase Auth passou a conter exatamente:
 
 Nenhuma alteração de código foi necessária. O cliente já enviava a callback exata, o Tauri já registrava o scheme `verbalix` e o fluxo PKCE já trocava o `code` recebido por sessão.
 
-## Evidências sanitizadas
+## Mutação anterior — histórico não auditável
 
-- identidade canônica do projeto validada: `true`;
-- schema remoto validado como string: `true`;
-- callback presente antes: `false`;
-- contagem de entradas antes: `0`;
-- wildcard presente antes: `false`;
-- PATCH mínimo executado: `true`;
-- callback presente depois: `true`;
-- contagem exata da callback depois: `1`;
-- contagem de entradas depois: `1`;
-- entradas e ordem preexistentes preservadas: `true`;
-- único delta foi o append esperado: `true`;
-- demais campos Auth permaneceram estruturalmente iguais: `true`;
-- wildcard presente depois: `false`;
-- nova escrita necessária no rerun: `false`;
-- temporários protegidos removidos: `true`;
-- verificação estrutural final: `true`.
+Uma execução anterior reportou a inclusão da callback por PATCH. Como aquela execução não deixou um artefato contemporâneo suficiente para auditoria independente, este documento não usa o relato anterior para provar o conteúdo do payload, as chaves enviadas ou o estado preexistente.
 
-Credenciais, project ref, allow-list completa, headers, respostas remotas e tokens não foram persistidos nem impressos.
+Em particular, não se alega como evidência auditada que a allow-list estivesse vazia antes, que um PATCH específico tenha sido enviado ou que a callback tenha sido introduzida por aquela execução.
+
+## Estado atual e idempotência — auditados
+
+Um novo ciclo estritamente read-only foi executado em `2026-07-24T01:55:54Z`. Ele realizou GET inicial, decisão de idempotência e GET de revalidação. Nenhum PATCH ocorreu e nenhum payload foi construído ou enviado.
+
+- categorias HTTP pre/post: `2xx` / `2xx`;
+- schema remoto validado: `true`;
+- contagem de entradas pre/post: `1` / `1`;
+- contagem exata da callback pre/post: `1` / `1`;
+- wildcard pre/post: `false` / `false`;
+- PATCH necessário: `false`;
+- conjunto de chaves do payload: vazio;
+- payload não enviado: `true`;
+- allow-list estável entre leituras: `true`;
+- hash canônico dos demais campos pre/post: `a159b4cc32ff6c1435292866ed628aeeecedd1f49cccd1c233533c2187453d10`;
+- demais campos estáveis: `true`;
+- temporários removidos: `true`;
+- auditoria final: `true`.
+
+O artefato estruturado está em `docs/evidence/supabase-auth-redirect-current-state.json`. Credenciais, project ref, allow-list completa, headers, respostas remotas e tokens não foram persistidos nem impressos.
 
 ## Rollback
 
-O baseline remoto tinha a allow-list vazia. Se um rollback for explicitamente autorizado, ele deve ocorrer somente após nova leitura confirmar que o estado atual ainda contém exclusivamente o delta desta entrega. Qualquer drift concorrente exige interrupção sem sobrescrita.
+Não há baseline histórico auditável suficiente para executar rollback automático. Qualquer rollback exigiria autorização explícita, nova leitura remota e definição humana do estado desejado. Drift concorrente exige interrupção sem sobrescrita.
 
 ## Gate pendente
 

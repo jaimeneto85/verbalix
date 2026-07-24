@@ -44,6 +44,7 @@
 - Worktrees não recebem arquivos ignorados como `.env`; o smoke pré-merge precisa provisionar o arquivo localmente sem logar valores, enquanto o checkout principal resolve `../.env` normalmente.
 - A matriz de MVP é Chrome, Safari, VS Code, Slack, Notes e TextEdit.
 - Para mutações pontuais da configuração Auth, usar GET → revalidação → PATCH contendo somente o campo necessário → GET, com evidências por booleanos/contagens, token do CLI consumido do Keychain sem output e rerun idempotente.
+- Evidência de configuração remota precisa ser contemporânea e persistida para QA: separar relato histórico não auditável de um novo ciclo GET/no-op/GET, registrar categorias HTTP, hashes canônicos, contagens, decisão de payload e cleanup sem persistir respostas ou identificadores.
 
 ## Observações
 - A promessa do produto é mensurável na matriz de aplicativos suportados e best-effort nos demais; não existe evento universal de seleção no macOS.

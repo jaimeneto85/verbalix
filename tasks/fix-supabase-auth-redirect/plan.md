@@ -120,5 +120,6 @@ Autorizar somente a mutação remota mínima quando todos os preconditions forem
 - [x] T3 Aplicar append idempotente via PATCH mínimo.
 - [x] T4 Verificar preservação integral e callback exata sem wildcard.
 - [ ] T5 Executar smoke com magic link novo e callback no app — aguarda link novo solicitado pelo usuário.
-- [ ] T6 QA independente emitir verdict.
+- [ ] T6 QA independente emitir verdict — primeiro ciclo retornou `REJECTED_TESTS`; re-QA pendente após evidência contemporânea.
 - [x] T7 Documentar evidências sanitizadas e rollback.
+- [x] T8 Executar ciclo read-only contemporâneo GET/no-op/GET e persistir evidência sanitizada.

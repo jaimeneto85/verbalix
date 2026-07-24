@@ -1,0 +1,32 @@
+{
+  "audit_version": 1,
+  "audited_at_utc": "2026-07-24T01:55:54Z",
+  "operation": "read_only_get_revalidation",
+  "pre_http_category": "2xx",
+  "post_http_category": "2xx",
+  "schema_valid": true,
+  "entry_count_pre": 1,
+  "entry_count_post": 1,
+  "exact_callback_count_pre": 1,
+  "exact_callback_count_post": 1,
+  "wildcard_pre": false,
+  "wildcard_post": false,
+  "patch_needed": false,
+  "payload_key_set": [],
+  "payload_not_sent": true,
+  "allow_list_stable": true,
+  "canonicalization": "jq -S -c del(.uri_allow_list)",
+  "canonical_other_fields_sha256_pre": "a159b4cc32ff6c1435292866ed628aeeecedd1f49cccd1c233533c2187453d10",
+  "canonical_other_fields_sha256_post": "a159b4cc32ff6c1435292866ed628aeeecedd1f49cccd1c233533c2187453d10",
+  "other_fields_stable": true,
+  "cleanup_ok": true,
+  "audit_passed": true,
+  "redacted_fields": [
+    "project_ref",
+    "credentials",
+    "uri_allow_list",
+    "request_headers",
+    "response_bodies"
+  ],
+  "historical_mutation_audited": false
+}
