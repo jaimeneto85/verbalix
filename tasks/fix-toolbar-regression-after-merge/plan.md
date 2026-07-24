@@ -7,10 +7,10 @@ Restaurar a exibição da toolbar flutuante quando texto é selecionado em apps 
 Incluído:
 
 - diagnosticar por estágio a aquisição do app/elemento focado via Accessibility;
-- preservar o caminho system-wide quando funcional e adicionar fallback seguro pelo app frontmost;
+- preservar o elemento focado system-wide comprovadamente funcional e adicionar extração segura por range quando `AXSelectedText` não está disponível;
 - excluir o próprio Verbalix como alvo de captura;
 - manter polling, AXObserver, debounce e overlay no main thread;
-- criar testes de resolução/fallback e regressão;
+- criar testes de resolução, extração por range e regressão;
 - validar em app real por Computer Use;
 - após QA aprovada, integrar na `main` preservando mudanças user-owned e gerar build release.
 
@@ -26,14 +26,14 @@ Fora do escopo:
 
 - R1: seleção real no TextEdit deve produzir snapshot e toolbar visível.
 - R2: `AXUIElementCreateSystemWide` + `AXFocusedUIElement` permanece caminho primário.
-- R3: se o caminho primário falhar, resolver o app frontmost, criar seu elemento AX e consultar `AXFocusedUIElement`.
-- R4: o fallback nunca captura Verbalix nem um PID inválido/ausente.
-- R5: falhas precisam indicar o estágio sanitizado (`system_wide`, `frontmost_app`, `focused_element`, `selected_text`, `selected_range`) sem conteúdo selecionado.
-- R6: ausência de permissão continua falhando fechada e não dispara fallback que contorne TCC.
+- R3: quando `AXSelectedText` retornar `no_value` ou `attribute_unsupported`, classificar a representação do range no mesmo elemento.
+- R4: para `AXTextMarkerRange`, extrair texto e bounds usando os atributos parametrizados públicos `AXStringForTextMarkerRange` e `AXBoundsForTextMarkerRange`.
+- R5: falhas precisam indicar o estágio sanitizado (`system_wide`, `focused_element`, `selected_text`, `selected_range_type`, `text_marker_string`, `text_marker_bounds`, `text_marker_index`) sem conteúdo selecionado.
+- R6: ausência de permissão continua falhando fechada e não dispara extração alternativa que contorne TCC.
 - R7: captura bem-sucedida preserva texto, range Unicode, writability e geometria existente.
-- R8: observer, polling, refresh/apply/restore usam a mesma resolução de elemento focado.
+- R8: observer, polling e refresh reutilizam o mesmo elemento focado; apply/restore continuam vinculados ao PID/range/texto do snapshot.
 - R9: nenhum AppKit/UI é executado fora da main thread.
-- R10: testes cobrem primário, fallback, self-exclusion, app/PID ausente e falha total.
+- R10: testes cobrem selected text direto, CFRange clássico, text marker range, self-exclusion, PID/range inválido e falha total.
 - R11: teste real por Computer Use comprova seleção e toolbar; AX tree do app alvo e screenshot/estado visual formam evidência.
 - R12: merge só ocorre após testes e QA `APPROVED`; mudanças locais user-owned na `main` permanecem byte-identical.
 - R13: release build só ocorre após merge validado e deve passar bundle, codesign e launch smoke.
@@ -50,11 +50,36 @@ Fora do escopo:
 - coordinator invalidou a seleção e executou `overlay hide`;
 - captura falhou antes da geometria.
 
-Os merges recentes não alteraram captura AX, coordinator ou overlay. A causa está concentrada na aquisição do elemento focado no runtime/macOS atual, não no rendering da janela.
+Os merges recentes não alteraram captura AX, coordinator ou overlay. O spike no mesmo bundle demonstrou que a aquisição do elemento focado funciona; a falha está na estratégia de leitura do texto selecionado.
+
+### Evidência causal confirmada
+
+Primeiro smoke:
+
+- `AXFocusedUIElement` system-wide: sucesso;
+- PID e role: sucesso;
+- `AXSelectedText`: `no_value`, depois `attribute_unsupported`;
+- toolbar ausente e processo estável.
+
+Segundo smoke:
+
+- `AXFocusedApplication` e focused element da aplicação: sucesso;
+- PID primary/secondary coerente e role em ambos: sucesso;
+- `AXSelectedText` falha com as mesmas categorias nos dois elementos.
+
+Conclusão: fallback por aplicação focada foi refutado e não será implementado.
+
+Terceiro smoke:
+
+- fetch de `AXSelectedTextRange`: sucesso;
+- interpretação como `AXValue<CFRange>`: falha nas duas rotas de foco;
+- `AXStringForRange`: não elegível porque não existe CFRange comprovado.
+
+Conclusão: não usar CFRange presumido nem ler `AXValue` do documento inteiro. A próxima sonda classifica o tipo e trata text markers como tokens opacos.
 
 ### Spike causal antes da correção
 
-Antes de habilitar o fallback, instrumentar o mesmo processo/bundle para classificar cada chamada sem payload:
+Antes de habilitar qualquer extração alternativa, instrumentar o mesmo processo/bundle para classificar cada chamada sem payload:
 
 1. trust check;
 2. criação do objeto system-wide;
@@ -66,21 +91,33 @@ Antes de habilitar o fallback, instrumentar o mesmo processo/bundle para classif
 8. PID;
 9. geometry.
 
-O spike deve demonstrar no mesmo intervalo que o caminho primário falha e que o caminho por aplicação focada retorna o elemento do TextEdit. Caso a falha esteja em outro estágio, a implementação deve parar e o plano precisa ser revisado.
+Os dois primeiros spikes demonstraram que o caminho primário de foco funciona e que o caminho por aplicação focada não recupera o texto. A próxima sonda, ainda read-only, deve provar:
 
-### Resolver AX em dois estágios
+1. classificar corretamente `AXSelectedTextRange` com `CFGetTypeID`, `AXValueGetTypeID`/`AXValueGetType` e `AXTextMarkerRangeGetTypeID`;
+2. consultar `AXSelectedTextMarkerRange` quando a representação clássica não for CFRange;
+3. se o marker opaco produz texto por `AXStringForTextMarkerRange`;
+4. se o mesmo marker produz bounds por `AXBoundsForTextMarkerRange`;
+5. se `AXTextMarkerRangeCopyStartMarker`/`CopyEndMarker` + `AXIndexForTextMarker` e `AXLengthForTextMarkerRange` fornecem location/length coerentes para `TextRange`;
+6. se PID, role e foco permanecem coerentes durante toda a leitura;
+7. se `AXSelectedText` é settable no alvo editável.
 
-1. tentar `AXFocusedUIElement` no objeto AX system-wide;
-2. somente se o erro primário for `no_value` ou `attribute_unsupported`, e `AXIsProcessTrusted` continuar verdadeiro, consultar `AXFocusedApplication` no mesmo objeto system-wide;
-3. obter o PID do elemento da aplicação focada, rejeitando PID `<= 0` e `getpid()`;
-4. criar `AXUIElementCreateApplication(pid)` e consultar seu `AXFocusedUIElement`;
-5. exigir que `AXUIElementGetPid(focused) == pid`;
-6. retornar elemento owned e origem tipada `system_wide | focused_application`, sem persistir ou transferir o elemento entre threads;
-7. prosseguir pelo pipeline atual de role, texto, range, writability e geometria.
+Se nenhuma extração por range funcionar, parar novamente e revisar o plano; não materializar seleção nem toolbar artificial.
 
-`kAXErrorAPIDisabled`, trust falso, erro de autorização, argumento inválido, elemento inválido, `cannot_complete` e falhas estruturais não habilitam fallback. O próximo ciclo de polling pode tentar novamente; não existe retry interno ilimitado.
+### Extração validada por representação
 
-O caminho usa somente Accessibility/Core Foundation no worker. Não introduzir `NSWorkspace`, `NSRunningApplication` ou outra chamada AppKit fora da main thread. O caminho primário vence sempre e o fallback não deve ser consultado quando ele funciona.
+1. resolver `AXFocusedUIElement` system-wide;
+2. validar PID `> 0`, não-self e role não protegida;
+3. tentar `AXSelectedText`;
+4. se indisponível por `no_value | attribute_unsupported`, ler `AXSelectedTextRange` e classificar `RangeRepresentation::{CfRange, TextMarker, Unsupported}`;
+5. para CFRange comprovado, manter `AXStringForRange` e geometry existentes;
+6. para text marker comprovado, manter o marker opaco e passá-lo no mesmo elemento/thread a `AXStringForTextMarkerRange` e `AXBoundsForTextMarkerRange`;
+7. copiar start/end markers via APIs públicas do SDK e obter índices parametrizados; validar location/length também contra `AXLengthForTextMarkerRange`;
+8. rejeitar índice negativo, range vazio, overflow, divergência de length, tipo CF inesperado, conteúdo vazio ou bounds inválidos;
+9. confirmar PID, role, foco e representação no mesmo elemento antes de materializar o snapshot.
+
+Trust falso, API disabled/not authorized, elemento inválido, `cannot_complete`, tipo CF inesperado e falhas estruturais encerram a captura. O próximo polling pode tentar novamente; não existe retry interno ilimitado.
+
+O caminho usa apenas APIs públicas de Accessibility/Core Foundation presentes nos headers do macOS 26.5 SDK, sem AppKit ou nova dependência. `AXSelectedText` continua o caminho rápido quando disponível. Leitura integral de `AXValue` e slice do documento ficam explicitamente fora do MVP por privacidade e custo.
 
 ### Descoberta versus mutação
 
@@ -98,17 +135,18 @@ Essa separação elimina a corrida atual entre `capture()` e uma segunda chamada
 Separar a função pura de decisão dos adapters FFI por contratos internos equivalentes a:
 
 - trust provider;
-- focused application/PID provider;
 - focused element provider;
-- resultado tipado com origem, estágio e categoria AX.
+- selected-range/text provider;
+- parameterized marker string/bounds/index provider;
+- resultado tipado com origem de extração, estágio e categoria AX.
 
-Todos os valores vindos de funções `Create`/`Copy` seguem RAII com exatamente um `CFRelease` em sucesso e em cada saída de erro. `OwnedAxElement` fica restrito à operação e à thread em que foi criado.
+Todos os valores vindos de funções `Create`/`Copy`, inclusive marker range e start/end markers, seguem RAII com exatamente um `CFRelease` em sucesso e em cada saída de erro. `OwnedAxElement` e markers ficam restritos à operação e à thread em que foram criados.
 
 ### Diagnóstico
 
 Emitir somente estágio, origem tipada e categoria AX estável. Nunca emitir texto, range bruto, bundle path, token, conteúdo de clipboard ou status AX não classificado.
 
-Estágios mínimos: `trust`, `system_wide_focused_element`, `focused_application`, `application_focused_element`, `role`, `selected_text`, `selected_range`, `pid` e `geometry`.
+Estágios mínimos: `trust`, `system_wide_focused_element`, `role`, `selected_text`, `selected_range_type`, `selected_text_marker_range`, `string_for_text_marker_range`, `bounds_for_text_marker_range`, `index_for_text_marker`, `length_for_text_marker_range`, `settable`, `pid` e `geometry`.
 
 Os diagnostics do loop devem ser limitados por transição/categoria para não gerar spam a cada 120 ms.
 
@@ -129,6 +167,8 @@ Os diagnostics do loop devem ser limitados por transição/categoria para não g
 13. confirmar que o processo permanece vivo;
 14. registrar evidência sem conteúdo sensível.
 
+Antes do gate completo, uma fixture descartável no TextEdit deve provar set/restore reversível com o mesmo target identity. Se `AXSelectedText` não for settable ou a restauração falhar, a captura marker pode ser entregue apenas como read-only/nota; não classificar TextEdit editável silenciosamente como sucesso total.
+
 ### Merge e release
 
 Após QA:
@@ -145,24 +185,26 @@ Após QA:
 
 ### 🔴 Riscos incorporados
 
-- A evidência inicial agregava todos os erros como `selection_unavailable`; foi adicionado spike causal por estágio antes do fallback.
-- O fallback agora possui matriz fechada de elegibilidade por categoria AX e nunca contorna TCC.
+- A evidência inicial agregava todos os erros como `selection_unavailable`; foram adicionados spikes causais por estágio antes de qualquer extração alternativa.
+- A extração alternativa possui matriz fechada de elegibilidade por categoria AX e nunca contorna TCC.
 - A descoberta do app focado usa AX, não AppKit em worker.
 - Mutação e restore ficam vinculados ao PID/snapshot esperado para eliminar TOCTOU e escrita cross-app.
-- Ownership Core Foundation, coerência temporal de PID, rate limiting diagnóstico, secure fields e concorrência entraram como gates explícitos.
+- Ownership Core Foundation, identidade intra-PID, coerência temporal, rate limiting diagnóstico, secure fields e concorrência entraram como gates explícitos.
+- A leitura integral de `AXValue` foi removida por risco de exposição/custo; text markers permanecem opacos.
 - A preservação da main cobre todo o dirty state user-owned, não uma whitelist fixa.
 
 ### 🟢 Oportunidades incorporadas
 
 - Reusar o boundary `focused_element` e o RAII existentes mantém a correção concentrada.
-- `AXFocusedApplication` oferece fallback nativo sem nova dependência AppKit.
-- Origem tipada permite provar em runtime qual rota restaurou a toolbar.
+- A sonda por `AXFocusedApplication` refutou rapidamente uma correção especulativa antes de entrar em produção.
+- Origem tipada permite provar em runtime qual extração (`selected_text | cf_range | text_marker`) restaurou a toolbar.
 - Polling existente absorve mudanças de app no ciclo seguinte, evitando retries internos e novos schedulers.
-- Testes puros da matriz de decisão cobrem primary-wins, fallback, trust, self-exclusion e corrida com baixo custo.
+- APIs públicas do SDK permitem derivar start/end/index/length de markers sem decodificar bytes privados ou ler o documento inteiro.
+- Testes puros da matriz de decisão cobrem caminho direto, CFRange, text marker, trust, self-exclusion e corrida com baixo custo.
 
 ### Decisão sintetizada
 
-Implementar fallback mínimo no boundary AX somente depois da prova causal. Compartilhar aquisição/ownership em capture e observer, mas vincular replace/restore ao snapshot esperado. A correção só é aprovada com testes automatizados, QA dual e smoke real correlacionado por Computer Use.
+Manter o resolver system-wide e implementar um adapter mínimo de text marker somente depois da quarta prova causal completa (texto, bounds, índices, length e settable). Compartilhar aquisição/ownership em capture e observer, mas vincular replace/restore ao snapshot e identidade forte do elemento esperado. A correção só é aprovada com testes automatizados, QA dual e smoke real correlacionado por Computer Use.
 
 ## 3. TASKS
 
@@ -170,13 +212,13 @@ Implementar fallback mínimo no boundary AX somente depois da prova causal. Comp
 - [x] T2 [LOW] Reproduzir e localizar o estágio agregado da falha.
 - [x] T3 [LOW] Executar análise dual do plano.
 - [x] T4 [LOW] Sintetizar plano final.
-- [ ] T5 [LOW] Adicionar diagnóstico tipado por estágio e executar spike causal no bundle atual.
-- [ ] T6 [MEDIUM] Implementar tipos puros de decisão, origem e categoria AX.
-- [ ] T7 [MEDIUM] Implementar fallback por `AXFocusedApplication` com RAII e coerência de PID.
-- [ ] T8 [MEDIUM] Integrar resolver em capture e observer sem AppKit em worker.
-- [ ] T9 [MEDIUM] Vincular replace/restore ao PID e snapshot esperados, eliminando TOCTOU.
+- [x] T5 [LOW] Adicionar diagnóstico tipado e executar três spikes que refutaram fallback de foco e CFRange presumido.
+- [ ] T6 [LOW] Executar sonda read-only de tipo, text marker string/bounds/index/length e settable.
+- [ ] T7 [MEDIUM] Implementar tipos puros de decisão, origem de extração e categoria AX.
+- [ ] T8 [MEDIUM] Implementar extração por representação no mesmo elemento com RAII e type-check estrito.
+- [ ] T9 [MEDIUM] Integrar extração em capture/observer e vincular replace/restore ao mesmo target esperado.
 - [ ] T10 [LOW] Limitar diagnostics repetidos sem conteúdo selecionado.
-- [ ] T11 [MEDIUM] Testar matriz primary/fallback/trust/self/race/ownership e regressões existentes.
+- [ ] T11 [MEDIUM] Testar matriz direct/parameterized/value-slice/trust/self/race/ownership e regressões existentes.
 - [ ] T12 [LOW] Testar equivalência/debounce, secure field, range, geometry e mutation target.
 - [ ] T13 [MEDIUM] Executar QA dual de código, concorrência, FFI e testes.
 - [ ] T14 [MEDIUM] Build/install debug e validação real por Computer Use em TextEdit e segundo app.
