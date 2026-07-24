@@ -65,63 +65,68 @@ impl SelectionCoordinator {
         response: &TransformResult,
         preview_writable: bool,
     ) -> Result<(), VerbalixError> {
-        if !self.is_active_request(request.request_id)? {
-            return Err(VerbalixError::StaleSelection);
-        }
         if response.request_id != request.request_id || response.result.trim().is_empty() {
             return Err(VerbalixError::InvalidResponse);
         }
-        let active = self
-            .current_snapshot()
-            .filter(|current| current.same_target(snapshot))
-            .ok_or(VerbalixError::StaleSelection)?;
+        let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+        let active = match &*state {
+            SelectionState::Processing {
+                snapshot: current,
+                request_id: active_request,
+            } if *active_request == request.request_id && current.same_target(snapshot) => {
+                current.clone()
+            }
+            _ => return Err(VerbalixError::StaleSelection),
+        };
         if !active.writable {
             self.overlay.show_note(active.bounds, &response.result)?;
-            return self.dispatch(SelectionEvent::ResultReady(request.request_id));
+            *state = SelectionState::ResultVisible(active);
+            return Ok(());
         }
         if preview_writable {
             self.overlay
                 .show_preview(active.bounds, request.request_id, &response.result)?;
-            return self.set_state(SelectionState::PreviewVisible {
+            *state = SelectionState::PreviewVisible {
                 snapshot: active,
                 request_id: request.request_id,
                 result: response.result.clone(),
-            });
+            };
+            return Ok(());
         }
-        self.apply_result(active, response.result.clone())?;
+        self.selection.replace(&active, &response.result)?;
+        *state = SelectionState::Applied {
+            snapshot: active.clone(),
+            transformed_text: response.result.clone(),
+        };
+        if self
+            .overlay
+            .show_undo(active.bounds, &response.result)
+            .is_err()
+        {
+            diagnostics::coordinator("undo_feedback_failed_after_write", Some(&active));
+        }
         Ok(())
     }
 
     pub fn apply_preview(&self, request_id: Uuid) -> Result<String, VerbalixError> {
-        let (snapshot, result) = {
-            let state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
-            match &*state {
-                SelectionState::PreviewVisible {
-                    snapshot,
-                    request_id: active,
-                    result,
-                } if *active == request_id => (snapshot.clone(), result.clone()),
-                _ => return Err(VerbalixError::StaleSelection),
-            }
+        let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+        let (snapshot, result) = match &*state {
+            SelectionState::PreviewVisible {
+                snapshot,
+                request_id: active,
+                result,
+            } if *active == request_id => (snapshot.clone(), result.clone()),
+            _ => return Err(VerbalixError::StaleSelection),
         };
-        self.apply_result(snapshot, result.clone())?;
-        Ok(result)
-    }
-
-    fn apply_result(
-        &self,
-        snapshot: SelectionSnapshot,
-        result: String,
-    ) -> Result<(), VerbalixError> {
         self.selection.replace(&snapshot, &result)?;
-        self.set_state(SelectionState::Applied {
+        *state = SelectionState::Applied {
             snapshot: snapshot.clone(),
             transformed_text: result.clone(),
-        })?;
+        };
         if self.overlay.show_undo(snapshot.bounds, &result).is_err() {
             diagnostics::coordinator("undo_feedback_failed_after_write", Some(&snapshot));
         }
-        Ok(())
+        Ok(result)
     }
 
     pub fn undo(&self, transformed_text: &str) -> Result<(), VerbalixError> {
@@ -142,17 +147,6 @@ impl SelectionCoordinator {
     fn fail<T>(&self, request_id: Uuid, error: VerbalixError) -> Result<T, VerbalixError> {
         self.recover_request(request_id)?;
         Err(error)
-    }
-
-    fn is_active_request(&self, request_id: Uuid) -> Result<bool, VerbalixError> {
-        let state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
-        Ok(matches!(
-            &*state,
-            SelectionState::Processing {
-                request_id: active,
-                ..
-            } if *active == request_id
-        ))
     }
 
     pub fn abort_transform(&self, request_id: Uuid) -> Result<(), VerbalixError> {
@@ -185,11 +179,6 @@ impl SelectionCoordinator {
                 *state = SelectionState::ToolbarVisible(snapshot.clone());
             }
         }
-        Ok(())
-    }
-
-    fn set_state(&self, next: SelectionState) -> Result<(), VerbalixError> {
-        *self.state.lock().map_err(|_| VerbalixError::LocalFailure)? = next;
         Ok(())
     }
 }

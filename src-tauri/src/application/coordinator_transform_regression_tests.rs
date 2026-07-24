@@ -190,9 +190,9 @@ async fn translate_and_improve_keep_independent_provider_and_write_contracts() {
 }
 
 #[tokio::test]
-async fn transient_polling_with_same_text_cannot_replace_the_pinned_target() {
+async fn different_target_with_same_text_cancels_before_provider_or_write() {
     let provider = Arc::new(RecordingProvider::default());
-    let (coordinator, selection, _overlay, captured) = ready(provider, false);
+    let (coordinator, selection, overlay, captured) = ready(provider.clone(), false);
     let input = request(TransformOperation::Translate, &captured.text);
     coordinator
         .begin_transform(captured.id, input.request_id)
@@ -201,6 +201,27 @@ async fn transient_polling_with_same_text_cannot_replace_the_pinned_target() {
     *selection.snapshot.lock().unwrap() = snapshot(84, &captured.text, true);
     let polled = coordinator.refresh_selection().unwrap().unwrap();
     assert_ne!(polled.id, captured.id);
+    assert!(matches!(
+        coordinator
+            .transform(captured.id, input, "token", false)
+            .await,
+        Err(VerbalixError::StaleSelection)
+    ));
+
+    assert!(provider.calls.lock().unwrap().is_empty());
+    assert!(selection.writes.lock().unwrap().is_empty());
+    assert!(overlay.events.lock().unwrap().contains(&"hide".to_owned()));
+    assert_eq!(coordinator.current_snapshot().unwrap().id, polled.id);
+}
+
+#[tokio::test]
+async fn transient_invalidation_preserves_the_pinned_target() {
+    let provider = Arc::new(RecordingProvider::default());
+    let (coordinator, selection, _overlay, captured) = ready(provider.clone(), false);
+    let input = request(TransformOperation::Translate, &captured.text);
+    coordinator
+        .begin_transform(captured.id, input.request_id)
+        .unwrap();
     coordinator
         .dispatch(SelectionEvent::TransientInvalidated)
         .unwrap();
@@ -209,6 +230,7 @@ async fn transient_polling_with_same_text_cannot_replace_the_pinned_target() {
         .await
         .unwrap();
 
+    assert_eq!(provider.calls.lock().unwrap().len(), 1);
     assert_eq!(selection.writes.lock().unwrap()[0].0, captured.id);
 }
 

@@ -38,6 +38,13 @@ fn show_transform_failure(runtime: &AppRuntime, error: &VerbalixError) {
     }
 }
 
+fn request_owns_feedback(runtime: &AppRuntime, snapshot_id: uuid::Uuid) -> bool {
+    runtime
+        .coordinator
+        .current_snapshot()
+        .is_some_and(|current| current.id == snapshot_id)
+}
+
 #[tauri::command]
 pub(crate) async fn transform_selection(
     app: AppHandle,
@@ -72,7 +79,9 @@ pub(crate) async fn transform_selection(
     let result = transform_pinned(&app, &runtime, &snapshot, &request).await;
     if let Err(error) = &result {
         let _ = runtime.coordinator.abort_transform(request.request_id);
-        show_transform_failure(&runtime, error);
+        if request_owns_feedback(&runtime, snapshot.id) {
+            show_transform_failure(&runtime, error);
+        }
     }
     result
 }
@@ -93,10 +102,16 @@ async fn transform_pinned(
             route_refresh_failure(
                 &error,
                 || {
-                    show_readiness(runtime, &AiReadiness::login_required());
-                    crate::show_main_window(app, "login_required");
+                    if request_owns_feedback(runtime, snapshot.id) {
+                        show_readiness(runtime, &AiReadiness::login_required());
+                        crate::show_main_window(app, "login_required");
+                    }
                 },
-                || show_provider_unavailable(runtime),
+                || {
+                    if request_owns_feedback(runtime, snapshot.id) {
+                        show_provider_unavailable(runtime);
+                    }
+                },
             );
             return Err(error);
         }

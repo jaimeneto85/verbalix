@@ -40,17 +40,18 @@ impl SelectionCoordinator {
     }
 
     pub fn dispatch(&self, event: SelectionEvent) -> Result<(), VerbalixError> {
+        if let SelectionEvent::Candidate(snapshot) = event {
+            return self.store_candidate(*snapshot);
+        }
+        if matches!(event, SelectionEvent::TransientInvalidated) {
+            return self.invalidate(true);
+        }
+        if matches!(event, SelectionEvent::Invalidated) {
+            return self.invalidate(false);
+        }
         let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
         match event {
-            SelectionEvent::Candidate(snapshot) => {
-                let snapshot = *snapshot;
-                if matches!(&*state, SelectionState::Processing { .. }) {
-                    diagnostics::coordinator("candidate_ignored_processing", Some(&snapshot));
-                    return Ok(());
-                }
-                diagnostics::coordinator("candidate_stored", Some(&snapshot));
-                *state = SelectionState::Candidate(snapshot);
-            }
+            SelectionEvent::Candidate(_) => unreachable!(),
             SelectionEvent::DebounceElapsed(id) => {
                 if let SelectionState::Candidate(snapshot) = &*state {
                     if snapshot.id == id {
@@ -64,31 +65,53 @@ impl SelectionCoordinator {
                     diagnostics::coordinator("debounce_ignored_state", None);
                 }
             }
-            SelectionEvent::ResultReady(request_id) => {
-                if let SelectionState::Processing {
-                    snapshot,
-                    request_id: active,
-                } = &*state
-                {
-                    if *active == request_id {
-                        *state = SelectionState::ResultVisible(snapshot.clone());
-                    }
-                }
+            SelectionEvent::TransientInvalidated | SelectionEvent::Invalidated => unreachable!(),
+        }
+        Ok(())
+    }
+
+    fn invalidate(&self, transient: bool) -> Result<(), VerbalixError> {
+        {
+            let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+            if transient && matches!(&*state, SelectionState::Processing { .. }) {
+                diagnostics::coordinator("transient_invalidation_ignored", None);
+                return Ok(());
             }
-            SelectionEvent::TransientInvalidated => {
-                if matches!(&*state, SelectionState::Processing { .. }) {
-                    diagnostics::coordinator("transient_invalidation_ignored", None);
+            diagnostics::coordinator(
+                if transient {
+                    "transient_invalidation_applied"
+                } else {
+                    "invalidated"
+                },
+                None,
+            );
+            *state = SelectionState::Idle;
+        }
+        self.overlay.hide_all()
+    }
+
+    fn store_candidate(&self, snapshot: SelectionSnapshot) -> Result<(), VerbalixError> {
+        let superseded = {
+            let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+            if let SelectionState::Processing {
+                snapshot: active, ..
+            } = &*state
+            {
+                if active.same_target(&snapshot) {
+                    diagnostics::coordinator("candidate_preserved_processing", Some(active));
                     return Ok(());
                 }
-                diagnostics::coordinator("transient_invalidation_applied", None);
-                self.overlay.hide_all()?;
-                *state = SelectionState::Idle;
+                diagnostics::coordinator("candidate_superseded_processing", Some(&snapshot));
+                *state = SelectionState::Candidate(snapshot.clone());
+                true
+            } else {
+                diagnostics::coordinator("candidate_stored", Some(&snapshot));
+                *state = SelectionState::Candidate(snapshot.clone());
+                false
             }
-            SelectionEvent::Invalidated => {
-                diagnostics::coordinator("invalidated", None);
-                self.overlay.hide_all()?;
-                *state = SelectionState::Idle;
-            }
+        };
+        if superseded && self.overlay.hide_all().is_err() {
+            diagnostics::coordinator("candidate_supersede_hide_failed", Some(&snapshot));
         }
         Ok(())
     }
