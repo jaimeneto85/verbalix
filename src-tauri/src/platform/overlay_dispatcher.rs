@@ -3,7 +3,11 @@ use crate::platform::macos_overlay_panel;
 use crate::{
     diagnostics,
     domain::{Rect, VerbalixError},
-    platform::note_result::NoteResultPayload,
+    platform::{
+        note_result::NoteResultPayload,
+        overlay_readiness::{OverlayReadiness, OverlaySurface},
+        overlay_window::{get_or_create, show_if_ready},
+    },
 };
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -11,12 +15,13 @@ use std::sync::{
 };
 #[cfg(not(target_os = "macos"))]
 use tauri::LogicalPosition;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OverlayCommand {
     ShowToolbar(Rect),
     ShowResult(Rect, NoteResultPayload),
+    SurfaceReady(OverlaySurface),
     HideAll,
 }
 
@@ -27,6 +32,7 @@ pub trait OverlayDispatcher: Send + Sync {
 pub struct MainThreadOverlayDispatcher {
     app: AppHandle,
     execution_failure: Arc<ExecutionFailure>,
+    readiness: Arc<OverlayReadiness>,
     next_sequence: AtomicU64,
 }
 
@@ -53,6 +59,7 @@ impl MainThreadOverlayDispatcher {
         Self {
             app,
             execution_failure: Arc::new(ExecutionFailure::default()),
+            readiness: Arc::new(OverlayReadiness::default()),
             next_sequence: AtomicU64::new(1),
         }
     }
@@ -66,10 +73,11 @@ impl OverlayDispatcher for MainThreadOverlayDispatcher {
         diagnostics::overlay("scheduled", label, sequence);
         let app = self.app.clone();
         let execution_failure = self.execution_failure.clone();
+        let readiness = self.readiness.clone();
         self.app
             .run_on_main_thread(move || {
                 diagnostics::overlay("executing", label, sequence);
-                if execute_command(&app, command, sequence).is_err() {
+                if execute_command(&app, command, sequence, &readiness).is_err() {
                     diagnostics::overlay("failed", label, sequence);
                     execution_failure.record();
                 }
@@ -83,6 +91,7 @@ impl OverlayCommand {
         match self {
             Self::ShowToolbar(_) => "toolbar",
             Self::ShowResult(_, _) => "note",
+            Self::SurfaceReady(surface) => surface.label(),
             Self::HideAll => "all",
         }
     }
@@ -92,23 +101,48 @@ fn execute_command(
     app: &AppHandle,
     command: OverlayCommand,
     sequence: u64,
+    readiness: &OverlayReadiness,
 ) -> Result<(), VerbalixError> {
     match command {
         OverlayCommand::ShowToolbar(bounds) => {
-            let window = window(app, "toolbar", 236.0, 52.0, sequence)?;
-            place(app, &window, bounds, 236.0, 52.0, "toolbar", sequence)?;
-            show_and_confirm(&window, "toolbar", sequence)
+            let surface = OverlaySurface::Toolbar;
+            readiness.request(surface)?;
+            let result = (|| {
+                let window = get_or_create(app, surface, 236.0, 52.0, sequence, readiness)?;
+                place(app, &window, bounds, 236.0, 52.0, "toolbar", sequence)?;
+                show_if_ready(&window, surface, sequence, readiness)
+            })();
+            if result.is_err() {
+                readiness.cancel(surface)?;
+            }
+            result
         }
         OverlayCommand::ShowResult(bounds, payload) => {
-            let window = window(app, "note", 420.0, 220.0, sequence)?;
-            place(app, &window, bounds, 420.0, 220.0, "note", sequence)?;
-            window
-                .emit("note-result", payload)
-                .map_err(|_| VerbalixError::LocalFailure)?;
-            diagnostics::overlay("emitted", "note", sequence);
-            show_and_confirm(&window, "note", sequence)
+            let surface = OverlaySurface::Note;
+            readiness.request(surface)?;
+            let result = (|| {
+                let window = get_or_create(app, surface, 420.0, 220.0, sequence, readiness)?;
+                place(app, &window, bounds, 420.0, 220.0, "note", sequence)?;
+                window
+                    .emit("note-result", payload)
+                    .map_err(|_| VerbalixError::LocalFailure)?;
+                diagnostics::overlay("emitted", "note", sequence);
+                show_if_ready(&window, surface, sequence, readiness)
+            })();
+            if result.is_err() {
+                readiness.cancel(surface)?;
+            }
+            result
+        }
+        OverlayCommand::SurfaceReady(surface) => {
+            let window = app
+                .get_webview_window(surface.label())
+                .ok_or(VerbalixError::LocalFailure)?;
+            readiness.mark_ready(surface)?;
+            show_if_ready(&window, surface, sequence, readiness)
         }
         OverlayCommand::HideAll => {
+            readiness.cancel_all()?;
             for label in ["toolbar", "note"] {
                 if let Some(window) = app.get_webview_window(label) {
                     window.hide().map_err(|_| VerbalixError::LocalFailure)?;
@@ -124,39 +158,6 @@ fn execute_command(
             Ok(())
         }
     }
-}
-
-fn window(
-    app: &AppHandle,
-    label: &str,
-    width: f64,
-    height: f64,
-    sequence: u64,
-) -> Result<WebviewWindow, VerbalixError> {
-    if let Some(window) = app.get_webview_window(label) {
-        diagnostics::overlay("window_reused", label, sequence);
-        return Ok(window);
-    }
-    let window = WebviewWindowBuilder::new(
-        app,
-        label,
-        WebviewUrl::App(format!("index.html?overlay={label}").into()),
-    )
-    .title("Verbalix")
-    .inner_size(width, height)
-    .decorations(false)
-    .transparent(true)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .resizable(false)
-    .focused(false)
-    .visible(false)
-    .build()
-    .map_err(|_| VerbalixError::LocalFailure)?;
-    #[cfg(target_os = "macos")]
-    macos_overlay_panel::configure(&window)?;
-    diagnostics::overlay("window_created", label, sequence);
-    Ok(window)
 }
 
 #[cfg(target_os = "macos")]
@@ -204,23 +205,6 @@ fn place(
         .map_err(|_| VerbalixError::LocalFailure)?;
     diagnostics::overlay_position(label, sequence, x, y);
     Ok(())
-}
-
-fn show_and_confirm(
-    window: &WebviewWindow,
-    label: &str,
-    sequence: u64,
-) -> Result<(), VerbalixError> {
-    window.show().map_err(|_| VerbalixError::LocalFailure)?;
-    let visible = window
-        .is_visible()
-        .map_err(|_| VerbalixError::LocalFailure)?;
-    diagnostics::overlay_visibility(label, sequence, visible);
-    if visible {
-        Ok(())
-    } else {
-        Err(VerbalixError::LocalFailure)
-    }
 }
 
 #[cfg(not(target_os = "macos"))]

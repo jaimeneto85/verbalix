@@ -262,6 +262,14 @@ pub(crate) fn dismiss_overlays(runtime: State<'_, Arc<AppRuntime>>) -> Result<()
 }
 
 #[tauri::command]
+pub(crate) fn overlay_surface_ready(
+    runtime: State<'_, Arc<AppRuntime>>,
+    overlay: String,
+) -> Result<(), VerbalixError> {
+    runtime.overlay.surface_ready(&overlay)
+}
+
+#[tauri::command]
 pub(crate) async fn list_history(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Vec<HistoryItem>, VerbalixError> {

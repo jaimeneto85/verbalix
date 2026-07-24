@@ -67,4 +67,24 @@ describe("overlay document surface", () => {
     expect(overlayKind("?overlay=")).toBeNull();
     expect(overlayKind("?overlay=settings")).toBeNull();
   });
+
+  it("signals native readiness only after marking and rendering the overlay", () => {
+    document.body.innerHTML = '<div id="root"></div>';
+    const order: string[] = [];
+
+    bootstrapDocument(
+      "?overlay=toolbar",
+      () => {
+        expect(document.documentElement).toHaveClass("overlay-surface");
+        order.push("render");
+      },
+      (overlay) => {
+        expect(overlay).toBe("toolbar");
+        expect(document.documentElement).toHaveClass("overlay-surface");
+        order.push("ready");
+      }
+    );
+
+    expect(order).toEqual(["render", "ready"]);
+  });
 });

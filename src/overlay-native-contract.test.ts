@@ -13,6 +13,8 @@ describe("macOS overlay native contract", () => {
     expect(panel).toContain("clearColor");
     expect(panel).toContain("setBackgroundColor: clear_color");
     expect(panel).toContain("setFrameOrigin: native_origin");
+    expect(panel).toContain("zero_screen_max_y");
+    expect(panel).not.toContain("mainScreen");
     expect(panel).not.toMatch(
       /LogicalPosition|PhysicalPosition|scale_factor|set_position/
     );
@@ -32,5 +34,26 @@ describe("macOS overlay native contract", () => {
     expect(macPath).not.toMatch(
       /LogicalPosition|PhysicalPosition|scale_factor|set_position/
     );
+  });
+
+  it("keeps a new overlay hidden until the document readiness handshake", () => {
+    const dispatcher = readFileSync(
+      "src-tauri/src/platform/overlay_dispatcher.rs",
+      "utf8"
+    );
+    const initialToolbar = dispatcher.slice(
+      dispatcher.indexOf("OverlayCommand::ShowToolbar"),
+      dispatcher.indexOf("OverlayCommand::ShowResult")
+    );
+    const ready = dispatcher.slice(
+      dispatcher.indexOf("OverlayCommand::SurfaceReady(surface) =>"),
+      dispatcher.indexOf("OverlayCommand::HideAll")
+    );
+
+    expect(initialToolbar).toContain("show_if_ready");
+    expect(initialToolbar).not.toContain("show_and_confirm");
+    expect(ready).toContain("mark_ready");
+    expect(ready).toContain("show_if_ready");
+    expect(ready).not.toContain("show_and_confirm");
   });
 });

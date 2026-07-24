@@ -290,6 +290,7 @@ pub fn run() {
             transform_selection,
             apply_preview,
             undo_replacement,
+            overlay_surface_ready,
             dismiss_overlays,
             list_history,
             delete_history

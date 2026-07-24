@@ -46,6 +46,9 @@ export const native = {
   refreshSelection() {
     return invoke<SelectionSnapshot | null>("refresh_selection");
   },
+  overlaySurfaceReady(overlay: "toolbar" | "note") {
+    return invoke<void>("overlay_surface_ready", { overlay });
+  },
   transformSelection(
     operation: "translate" | "improve",
     settings: AppSettings

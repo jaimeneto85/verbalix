@@ -4,6 +4,7 @@ use crate::{
     platform::{
         note_result::{NoteMode, NoteResultPayload, NoteResultState},
         overlay_dispatcher::{MainThreadOverlayDispatcher, OverlayCommand, OverlayDispatcher},
+        overlay_readiness::OverlaySurface,
     },
 };
 use std::sync::Arc;
@@ -45,6 +46,13 @@ impl TauriOverlay {
 
     pub fn current_note_result(&self) -> Result<Option<NoteResultPayload>, VerbalixError> {
         self.note_result.current()
+    }
+
+    pub fn surface_ready(&self, label: &str) -> Result<(), VerbalixError> {
+        self.dispatcher
+            .dispatch(OverlayCommand::SurfaceReady(OverlaySurface::from_label(
+                label,
+            )?))
     }
 
     pub fn show_error(&self, bounds: Rect, message: &str) -> Result<(), VerbalixError> {
@@ -158,6 +166,7 @@ mod tests {
                 .show_preview(bounds(), uuid::Uuid::new_v4(), "preview")
                 .unwrap();
             overlay.show_undo(bounds(), "applied").unwrap();
+            overlay.surface_ready("toolbar").unwrap();
             overlay.hide_all().unwrap();
         });
 
@@ -169,7 +178,11 @@ mod tests {
         assert!(matches!(commands[2], OverlayCommand::ShowResult(_, _)));
         assert!(matches!(commands[3], OverlayCommand::ShowResult(_, _)));
         assert!(matches!(commands[4], OverlayCommand::ShowResult(_, _)));
-        assert_eq!(commands[5], OverlayCommand::HideAll);
+        assert_eq!(
+            commands[5],
+            OverlayCommand::SurfaceReady(OverlaySurface::Toolbar)
+        );
+        assert_eq!(commands[6], OverlayCommand::HideAll);
     }
 
     #[test]
@@ -185,6 +198,10 @@ mod tests {
         ));
         assert!(matches!(
             overlay.hide_all(),
+            Err(VerbalixError::LocalFailure)
+        ));
+        assert!(matches!(
+            overlay.surface_ready("main"),
             Err(VerbalixError::LocalFailure)
         ));
     }
