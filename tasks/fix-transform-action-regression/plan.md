@@ -51,6 +51,9 @@
 - [ ] RF08: Com confirmação desligada, o resultado substitui diretamente; com confirmação ligada, zero writes ocorrem antes de Aplicar.
 - [ ] RF09: Um erro de seleção/AX não pode ser apresentado como indisponibilidade do provider.
 - [ ] RF10: Falha do feedback de undo depois de uma escrita bem-sucedida não pode reclassificar a mutação como inexistente.
+- [x] RF11: Candidate diferente ou invalidação real antes do setter revoga a escrita sem depender do mutex de estado.
+- [x] RF12: Candidate diferente ou invalidação real deve atualizar o estado enquanto revalidação/escrita/overlay da ação anterior está bloqueado.
+- [x] RF13: Nota, preview, undo e erro carregam a guarda da ação até o executor visual; uma guarda cancelada produz zero publicação.
 
 ### Requisitos não funcionais
 
@@ -110,6 +113,10 @@
 - Texto igual não equivale a alvo igual; a ação exige ID, identidade, range e conteúdo compatíveis.
 - O alvo AX não pode ser escolhido apenas pelo foco corrente depois da latência remota; a implementação deve reter uma referência com lifecycle seguro ou resolver o alvo original por PID/identidade forte antes da escrita.
 - Depois de uma escrita confirmada, o estado lógico permanece Applied mesmo se o feedback de undo falhar; a falha visual é diagnosticada separadamente.
+- O mutex protege apenas leitura e transição do estado; provider, AX e overlay nunca executam sob esse mutex.
+- Cada ação possui um `TransformLease` seguro com CAS `Active → Claimed | Cancelled`; o claim ocorre após a revalidação final e imediatamente antes do setter.
+- Cancelamento após `Claimed` não tenta desfazer a escrita já autorizada, mas impede `Applied`, undo e qualquer publicação visual stale sobre o novo alvo.
+- Feedback usa bounds e guarda da ação original. O executor de `ShowResult` revalida a guarda sem consultar o snapshot global.
 - Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
@@ -137,6 +144,7 @@
 - [x] T2.4 `[LOW]` Preservar note read-only, preview, undo e overlay lifecycle.
 - [x] T2.5 `[LOW]` Garantir consistência de estado quando o write funciona e o feedback falha.
 - [x] T2.6 `[HIGH]` Cancelar logicamente a request quando uma captura bem-sucedida identifica outro alvo, preservando apenas falhas transitórias sem candidato.
+- [x] T2.7 `[HIGH]` Remover I/O do mutex de estado, introduzir lease com claim CAS no boundary do setter e guardar publicações no executor.
 
 ### Fase 3 — Testes
 
@@ -147,6 +155,7 @@
 - [x] T3.5 `[LOW]` Executar gates automatizados e limite de linhas.
 - [x] T3.6 `[MEDIUM]` Provar insert/list do histórico após Translate e Improve bem-sucedidos.
 - [x] T3.7 `[HIGH]` Provar supersede antes/depois do provider, mesmo texto com PID/identidade diferente, same-target preservado e ausência de feedback stale.
+- [ ] T3.8 `[HIGH]` Provar com adapters bloqueáveis Candidate/Invalidated antes e depois do claim, apply preview concorrente e `ShowResult` cancelado antes da execução.
 
 ### Fase 4 — QA real
 
@@ -166,6 +175,8 @@
 - O modo `confirm_before_replace` estava ausente dos critérios e agora tem dois fluxos objetivos.
 - Erros stale/AX eram mascarados como provider e pelo `catch` frontend; o roteamento tipado passou a requisito.
 - Escrita bem-sucedida seguida de falha de undo criava estado parcial; a consistência pós-write passou a invariável.
+- Segurar o mutex durante AX/overlay impedia o próprio evento de supersede de revogar a ação; I/O foi separado das transições e a autorização final passou a um CAS no setter.
+- Verificar ownership e depois reler o snapshot para publicar erro criava TOCTOU; a publicação agora carrega bounds e guarda imutáveis da ação até a main thread.
 
 ### 🟢 Oportunidades incorporadas
 

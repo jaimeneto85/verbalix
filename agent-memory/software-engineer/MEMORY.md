@@ -15,6 +15,9 @@
 - Transformações fixam `snapshot.id + request_id` no coordinator antes do primeiro `await`; o contexto local não integra o payload remoto e uma segunda ação em `Processing` é rejeitada.
 - Polling, AXObserver e mouse dismiss usam invalidação transitória: ela fecha estados ociosos, mas não apaga `Processing`; a revalidação AX final continua impedindo escrita após mudança real.
 - Durante `Processing`, uma captura bem-sucedida equivalente preserva snapshot/request originais; um candidato diferente substitui atomicamente o lease por `Candidate`, oculta o overlay anterior e torna a conclusão antiga inerte. Isso é cancelamento lógico, não cancelamento físico do provider.
+- Transformações usam `TransformLease` com CAS `Active → Claimed | Cancelled`: Candidate diferente/invalidação real cancelam o lease, e o adapter AX faz o claim somente depois da revalidação final e imediatamente antes do setter.
+- Mutexes do coordinator protegem apenas snapshots e commits de estado. Chamadas ao provider, AX e overlay ficam fora do lock; o commit posterior compara request, alvo e identidade do mesmo lease.
+- Publicações de note, preview, undo e erro carregam `PublicationGuard` até o executor de overlay. Guarda cancelada é no-op e feedback nunca relê o snapshot global para escolher bounds.
 - Implementações macOS extensas ficam separadas por responsabilidade: acessibilidade, observer, restauração e overlay.
 - `RuntimePause` é o gate único para polling, AXObserver, atalho e fallback de clipboard; callbacks revalidam a pausa após o debounce.
 - Resultados da nota usam evento mais state pull: o backend publica o estado antes de emitir e o frontend registra o listener antes de consultar `current_note_result`.
@@ -34,7 +37,7 @@
 - Refresh de sessão deve separar autenticação inválida (`400/401/403`) de indisponibilidade transitória (`429/5xx`, transporte ou JSON inválido); somente a primeira rota abre o login.
 - Readiness de IA deve ter uma única autoridade no command Tauri; uma pré-checagem async no overlay cria uma janela de invalidação antes de `Processing`.
 - Depois que `SelectionPort::replace` retorna sucesso, `Applied` é o commit point. Feedback de undo é best-effort e não pode reclassificar a mutação.
-- Autorização final, write AX e transição para `Applied` são linearizados pelo mutex do state. Feedback de erro só pertence à request enquanto o snapshot ID atual ainda coincide; conclusão superseded não pode mostrar erro sobre o novo alvo.
+- Nunca usar o mutex de state para linearizar I/O AX: isso bloqueia Candidate/Invalidated e derrota o cancelamento. O ponto de linearização da escrita é o CAS do lease imediatamente antes do setter; `Applied` é um commit condicional posterior.
 
 ## Dependências & Integrações
 - Transformações passam exclusivamente pela Edge Function autenticada.
