@@ -27,8 +27,10 @@ describe("macOS overlay native contract", () => {
       "utf8"
     );
     const macPath = dispatcher.slice(
-      dispatcher.indexOf('#[cfg(target_os = "macos")]\nfn place'),
-      dispatcher.indexOf('#[cfg(not(target_os = "macos"))]\nfn place')
+      dispatcher.indexOf('#[cfg(target_os = "macos")]\npub(super) fn place'),
+      dispatcher.indexOf(
+        '#[cfg(not(target_os = "macos"))]\npub(super) fn place'
+      )
     );
 
     expect(macPath).toContain("macos_overlay_panel::place");
@@ -42,9 +44,17 @@ describe("macOS overlay native contract", () => {
       "src-tauri/src/platform/overlay_dispatcher.rs",
       "utf8"
     );
-    const initialToolbar = dispatcher.slice(
-      dispatcher.indexOf("OverlayCommand::ShowToolbar"),
-      dispatcher.indexOf("OverlayCommand::ShowResult")
+    const execution = readFileSync(
+      "src-tauri/src/platform/overlay_execution.rs",
+      "utf8"
+    );
+    const publication = readFileSync(
+      "src-tauri/src/platform/overlay_publication.rs",
+      "utf8"
+    );
+    const initialToolbar = execution.slice(
+      execution.indexOf("OverlayCommand::ShowToolbar"),
+      execution.indexOf("OverlayCommand::ShowResult")
     );
     const ready = dispatcher.slice(
       dispatcher.indexOf("async fn surface_ready"),
@@ -57,7 +67,10 @@ describe("macOS overlay native contract", () => {
     );
 
     expect(initialToolbar).toContain("show_if_ready");
+    expect(initialToolbar).toContain("execute_if_publishable");
     expect(initialToolbar).not.toContain("show_and_confirm");
+    expect(publication).toContain("try_claim_publication");
+    expect(dispatcher).toContain("execute_command(&app, command");
     expect(ready).toContain("tokio::sync::oneshot::channel");
     expect(ready).toContain("receiver.await");
     expect(ready).not.toContain("show_and_confirm");

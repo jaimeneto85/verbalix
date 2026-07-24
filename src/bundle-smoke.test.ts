@@ -182,6 +182,10 @@ describe("macOS bundle smoke contract", () => {
       "src-tauri/src/platform/overlay_dispatcher.rs",
       "utf8"
     );
+    const execution = readFileSync(
+      "src-tauri/src/platform/overlay_execution.rs",
+      "utf8"
+    );
     const overlay = readFileSync("src/Overlay.tsx", "utf8");
     const config = readFileSync(
       "src-tauri/src/application/ai_readiness.rs",
@@ -196,6 +200,7 @@ describe("macOS bundle smoke contract", () => {
     const gitignore = readFileSync(".gitignore", "utf8");
     const publicRuntime = [
       dispatcher,
+      execution,
       overlay,
       config,
       buildScript,
@@ -203,7 +208,7 @@ describe("macOS bundle smoke contract", () => {
       readFileSync("src/supabase.ts", "utf8")
     ].join("\n");
 
-    expect(dispatcher).toContain(
+    expect(execution).toContain(
       "get_or_create(app, surface, 420.0, 220.0, sequence, readiness)"
     );
     expect(overlay).toContain('"Ação necessária"');
