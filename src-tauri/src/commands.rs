@@ -1,5 +1,8 @@
 use crate::{
-    application::{HistoryItem, SessionRepository, StoredSession},
+    application::{
+        classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
+        HistoryItem, PublicBackendConfig, RefreshFailureRoute, SessionRepository, StoredSession,
+    },
     domain::{
         AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
         TransformRequest, TransformResult, VerbalixError,
@@ -9,15 +12,83 @@ use crate::{
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
+fn current_ai_readiness(runtime: &AppRuntime) -> Result<AiReadiness, VerbalixError> {
+    if !runtime.backend_config.configured {
+        return Ok(evaluate_ai_readiness(false, false));
+    }
+    let has_session = runtime.session.load()?.is_some();
+    Ok(evaluate_ai_readiness(true, has_session))
+}
+
+fn show_readiness(runtime: &AppRuntime, readiness: &AiReadiness) {
+    crate::diagnostics::ai_readiness(readiness.status.as_str());
+    if readiness.status == AiReadinessStatus::Ready {
+        return;
+    }
+    if let Some(snapshot) = runtime.coordinator.current_snapshot() {
+        let _ = runtime
+            .overlay
+            .show_error(snapshot.bounds, readiness.message);
+    }
+}
+
+fn show_provider_unavailable(runtime: &AppRuntime) {
+    crate::diagnostics::ai_readiness("provider_unavailable");
+    if let Some(snapshot) = runtime.coordinator.current_snapshot() {
+        let _ = runtime.overlay.show_error(
+            snapshot.bounds,
+            "O serviço de IA está indisponível. Tente novamente ou abra o Verbalix.",
+        );
+    }
+}
+
+pub(crate) fn route_refresh_failure(
+    error: &VerbalixError,
+    on_login_required: impl FnOnce(),
+    on_provider_unavailable: impl FnOnce(),
+) {
+    match classify_refresh_failure(error) {
+        RefreshFailureRoute::LoginRequired => on_login_required(),
+        RefreshFailureRoute::ProviderUnavailable => on_provider_unavailable(),
+    }
+}
+
+#[tauri::command]
+pub(crate) fn public_backend_config(runtime: State<'_, Arc<AppRuntime>>) -> PublicBackendConfig {
+    runtime.backend_config.clone()
+}
+
+#[tauri::command]
+pub(crate) fn ai_readiness(
+    app: AppHandle,
+    runtime: State<'_, Arc<AppRuntime>>,
+) -> Result<AiReadiness, VerbalixError> {
+    let readiness = current_ai_readiness(&runtime).inspect_err(|_| {
+        show_provider_unavailable(&runtime);
+    })?;
+    show_readiness(&runtime, &readiness);
+    if readiness.status == AiReadinessStatus::LoginRequired {
+        crate::show_main_window(&app, "login_required");
+    }
+    Ok(readiness)
+}
+
+#[tauri::command]
+pub(crate) fn open_main_window(app: AppHandle) {
+    crate::show_main_window(&app, "ai_action");
+}
+
 #[tauri::command]
 pub(crate) fn accessibility_status(
     runtime: State<'_, Arc<AppRuntime>>,
     prompt: Option<bool>,
 ) -> bool {
     use crate::application::SelectionPort;
-    runtime
+    let trusted = runtime
         .selection
-        .permission_granted(prompt.unwrap_or(false))
+        .permission_granted(prompt.unwrap_or(false));
+    crate::diagnostics::accessibility(trusted);
+    trusted
 }
 
 #[tauri::command]
@@ -98,10 +169,22 @@ pub(crate) fn refresh_selection(
 
 #[tauri::command]
 pub(crate) async fn transform_selection(
+    app: AppHandle,
     runtime: State<'_, Arc<AppRuntime>>,
     operation: TransformOperation,
     preferences: Option<TransformPreferences>,
 ) -> Result<TransformResult, VerbalixError> {
+    let readiness = current_ai_readiness(&runtime).inspect_err(|_| {
+        show_provider_unavailable(&runtime);
+    })?;
+    if readiness.status != AiReadinessStatus::Ready {
+        show_readiness(&runtime, &readiness);
+        if readiness.status == AiReadinessStatus::LoginRequired {
+            crate::show_main_window(&app, "login_required");
+            return Err(VerbalixError::Unauthenticated);
+        }
+        return Err(VerbalixError::ProviderNotConfigured);
+    }
     let snapshot = runtime
         .coordinator
         .current_snapshot()
@@ -110,8 +193,26 @@ pub(crate) async fn transform_selection(
         .session
         .load()?
         .ok_or(VerbalixError::Unauthenticated)?;
-    let session = runtime.auth.refresh(&stored).await?;
-    runtime.session.save(&session)?;
+    let session = match runtime.auth.refresh(&stored).await {
+        Ok(session) => session,
+        Err(error) => {
+            route_refresh_failure(
+                &error,
+                || {
+                    let readiness = AiReadiness::login_required();
+                    show_readiness(&runtime, &readiness);
+                    crate::show_main_window(&app, "login_required");
+                },
+                || {
+                    show_provider_unavailable(&runtime);
+                },
+            );
+            return Err(error);
+        }
+    };
+    runtime.session.save(&session).inspect_err(|_| {
+        show_provider_unavailable(&runtime);
+    })?;
     let request = TransformRequest {
         request_id: uuid::Uuid::new_v4(),
         operation,
@@ -119,10 +220,17 @@ pub(crate) async fn transform_selection(
         preferences,
     };
     let preview = runtime.settings.load()?.confirm_before_replace;
-    let response = runtime
+    let response = match runtime
         .coordinator
         .transform(request.clone(), &session.access_token, preview)
-        .await?;
+        .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            show_provider_unavailable(&runtime);
+            return Err(error);
+        }
+    };
     if runtime.settings.load()?.history_enabled {
         let _ = runtime
             .history

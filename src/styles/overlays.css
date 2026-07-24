@@ -41,18 +41,6 @@
   font-size: 14px;
 }
 
-.toolbar-error {
-  position: absolute;
-  top: 56px;
-  left: 0;
-  width: 236px;
-  padding: 8px;
-  border-radius: 8px;
-  color: #8f3e3e;
-  background: #fff1f1;
-  font-size: 9px;
-}
-
 .note {
   display: flex;
   flex-direction: column;

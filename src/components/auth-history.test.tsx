@@ -3,12 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  getSupabase: vi.fn(),
   signInWithOtp: vi.fn()
 }));
 
 vi.mock("../supabase", () => ({
-  supabaseConfigured: true,
-  supabase: { auth: { signInWithOtp: mocks.signInWithOtp } }
+  getSupabase: mocks.getSupabase
 }));
 
 import { AuthPanel } from "./AuthPanel";
@@ -17,6 +17,28 @@ import { HistoryPanel } from "./HistoryPanel";
 describe("account and history panels", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getSupabase.mockResolvedValue({
+      auth: { signInWithOtp: mocks.signInWithOtp }
+    });
+  });
+
+  it("explains when the bundle has no public backend configuration", async () => {
+    mocks.getSupabase.mockResolvedValue(null);
+    const user = userEvent.setup();
+    render(<AuthPanel authenticated={false} />);
+
+    await user.type(
+      screen.getByPlaceholderText("voce@empresa.com"),
+      "dev@example.com"
+    );
+    await user.click(screen.getByRole("button", { name: "Enviar link" }));
+
+    expect(
+      await screen.findByText(
+        "Este build não contém a configuração pública do backend."
+      )
+    ).toBeInTheDocument();
+    expect(mocks.signInWithOtp).not.toHaveBeenCalled();
   });
 
   it("requests a passwordless link with the Verbalix callback", async () => {

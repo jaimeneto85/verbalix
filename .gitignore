@@ -7,3 +7,5 @@ src-tauri/target/
 !.env.example
 .DS_Store
 coverage/
+test-results/
+playwright-report/

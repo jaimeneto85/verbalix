@@ -4,7 +4,9 @@ mod settings;
 mod transform;
 
 pub use error::VerbalixError;
-pub use selection::{Rect, SelectionEvent, SelectionSnapshot, SelectionState, TextRange};
+pub use selection::{
+    GeometrySource, Rect, SelectionEvent, SelectionSnapshot, SelectionState, TextRange,
+};
 pub use settings::{AppSettings, LengthPreference, SettingsRepository, TonePreference};
 pub use transform::{
     AiProvider, TransformOperation, TransformPreferences, TransformRequest, TransformResult,

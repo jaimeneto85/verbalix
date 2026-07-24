@@ -5,7 +5,7 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { PermissionCard } from "./components/PermissionCard";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { native } from "./native";
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 import type { AppSettings, HistoryItem } from "./types";
 import { defaultSettings } from "./types";
 import brandMark from "../branding/verbalix-mark.svg";
@@ -22,6 +22,8 @@ export function App() {
   const [toast, setToast] = useState("");
 
   useEffect(() => {
+    let authSubscription: { unsubscribe: () => void } | undefined;
+    let active = true;
     Promise.all([
       native.loadSettings(),
       native.accessibilityStatus(),
@@ -32,15 +34,22 @@ export function App() {
       setAuthenticated(hasSession);
     });
 
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) return;
-      native
-        .saveSession(session.access_token, session.refresh_token)
-        .then(() => setAuthenticated(true));
-    });
+    getSupabase()
+      .then((supabase) => {
+        if (!active || !supabase) return;
+        const {
+          data: { subscription }
+        } = supabase.auth.onAuthStateChange((_event, session) => {
+          if (!session) return;
+          native
+            .saveSession(session.access_token, session.refresh_token)
+            .then(() => setAuthenticated(true));
+        });
+        authSubscription = subscription;
+      });
     const deepLink = onOpenUrl(async (urls) => {
+      const supabase = await getSupabase().catch(() => null);
+      if (!supabase) return;
       for (const value of urls) {
         const code = new URL(value).searchParams.get("code");
         if (code) {
@@ -49,7 +58,8 @@ export function App() {
       }
     });
     return () => {
-      subscription.unsubscribe();
+      active = false;
+      authSubscription?.unsubscribe();
       deepLink.then((dispose) => dispose());
     };
   }, []);

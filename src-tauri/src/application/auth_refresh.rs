@@ -1,6 +1,6 @@
 use super::supabase::StoredSession;
 use crate::domain::VerbalixError;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 
 pub struct RemoteAuthRepository {
@@ -28,7 +28,7 @@ impl RemoteAuthRepository {
             access_token: String,
             refresh_token: String,
         }
-        let response: RefreshResponse = self
+        let response = self
             .client
             .post(format!(
                 "{}/auth/v1/token?grant_type=refresh_token",
@@ -40,9 +40,11 @@ impl RemoteAuthRepository {
             })
             .send()
             .await
-            .map_err(|_| VerbalixError::ProviderRejected)?
-            .error_for_status()
-            .map_err(|_| VerbalixError::Unauthenticated)?
+            .map_err(|_| VerbalixError::ProviderRejected)?;
+        if !response.status().is_success() {
+            return Err(refresh_status_error(response.status()));
+        }
+        let response: RefreshResponse = response
             .json()
             .await
             .map_err(|_| VerbalixError::InvalidResponse)?;
@@ -50,5 +52,43 @@ impl RemoteAuthRepository {
             access_token: response.access_token,
             refresh_token: response.refresh_token,
         })
+    }
+}
+
+fn refresh_status_error(status: StatusCode) -> VerbalixError {
+    match status {
+        StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+            VerbalixError::Unauthenticated
+        }
+        _ => VerbalixError::ProviderRejected,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refresh_statuses_distinguish_expired_auth_from_provider_outages() {
+        for status in [
+            StatusCode::BAD_REQUEST,
+            StatusCode::UNAUTHORIZED,
+            StatusCode::FORBIDDEN,
+        ] {
+            assert!(matches!(
+                refresh_status_error(status),
+                VerbalixError::Unauthenticated
+            ));
+        }
+        for status in [
+            StatusCode::TOO_MANY_REQUESTS,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::SERVICE_UNAVAILABLE,
+        ] {
+            assert!(matches!(
+                refresh_status_error(status),
+                VerbalixError::ProviderRejected
+            ));
+        }
     }
 }

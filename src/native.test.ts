@@ -73,6 +73,9 @@ describe("native command contract", () => {
     await native.clearSession();
     await native.currentSelection();
     await native.currentNoteResult();
+    await native.publicBackendConfig();
+    await native.aiReadiness();
+    await native.openMainWindow();
     await native.refreshSelection();
     await native.dismissOverlays();
     await native.applyPreview("request-id");
@@ -87,6 +90,9 @@ describe("native command contract", () => {
       ["clear_session"],
       ["current_selection"],
       ["current_note_result"],
+      ["public_backend_config"],
+      ["ai_readiness"],
+      ["open_main_window"],
       ["refresh_selection"],
       ["dismiss_overlays"],
       ["apply_preview", { requestId: "request-id" }],

@@ -10,6 +10,7 @@ name = "verbalix_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
+dotenvy = "0.15.7"
 tauri-build = { version = "2.5.3", features = [] }
 
 [dependencies]
