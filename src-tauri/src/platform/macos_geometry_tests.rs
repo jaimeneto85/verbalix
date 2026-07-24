@@ -62,17 +62,14 @@ fn sentinel_and_non_finite_range_fall_back_to_element_frame() {
 }
 
 #[test]
-fn cursor_is_used_when_ax_geometry_is_invalid() {
+fn cursor_is_rejected_when_element_frame_is_invalid() {
     let resolved = select_geometry(
         Some(rect(0.0, 0.0, 1.0, 1.0)),
         Some(rect(0.0, 0.0, -1.0, 10.0)),
         Some(CGPoint { x: 420.0, y: 240.0 }),
     );
 
-    assert_eq!(
-        resolved,
-        Some((rect(420.0, 240.0, 1.0, 1.0), GeometrySource::Cursor))
-    );
+    assert_eq!(resolved, None);
 }
 
 #[test]
@@ -87,10 +84,7 @@ fn negative_global_coordinates_remain_valid_for_secondary_displays() {
         select_geometry(Some(selected), None, Some(cursor)),
         Some((selected, GeometrySource::SelectedRange))
     );
-    assert_eq!(
-        select_geometry(None, None, Some(cursor)),
-        Some((rect(-800.0, 420.0, 1.0, 1.0), GeometrySource::Cursor))
-    );
+    assert_eq!(select_geometry(None, None, Some(cursor)), None);
 }
 
 #[test]

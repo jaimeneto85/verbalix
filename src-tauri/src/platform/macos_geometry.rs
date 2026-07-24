@@ -228,22 +228,32 @@ fn select_geometry(
     if let Some(bounds) = selected_range.filter(valid_selected_range) {
         return Some((bounds, GeometrySource::SelectedRange));
     }
-    if let Some(bounds) = focused_element.filter(valid_frame) {
-        return Some((bounds, GeometrySource::FocusedElement));
+    let frame = focused_element.filter(valid_frame)?;
+    if let Some(point) = cursor.filter(|point| cursor_within_frame(point, &frame)) {
+        return Some((
+            Rect {
+                x: point.x,
+                y: point.y,
+                width: 1.0,
+                height: 1.0,
+            },
+            GeometrySource::Cursor,
+        ));
     }
-    cursor
-        .filter(|point| point.x.is_finite() && point.y.is_finite())
-        .map(|point| {
-            (
-                Rect {
-                    x: point.x,
-                    y: point.y,
-                    width: 1.0,
-                    height: 1.0,
-                },
-                GeometrySource::Cursor,
-            )
-        })
+    Some((frame, GeometrySource::FocusedElement))
+}
+
+fn cursor_within_frame(point: &CGPoint, frame: &Rect) -> bool {
+    let max_x = frame.x + frame.width;
+    let max_y = frame.y + frame.height;
+    point.x.is_finite()
+        && point.y.is_finite()
+        && max_x.is_finite()
+        && max_y.is_finite()
+        && point.x >= frame.x
+        && point.x <= max_x
+        && point.y >= frame.y
+        && point.y <= max_y
 }
 
 fn finite(bounds: &Rect) -> bool {
