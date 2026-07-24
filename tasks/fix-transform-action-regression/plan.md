@@ -4,11 +4,11 @@
 
 ### Incluído
 
-- [ ] Reproduzir e instrumentar a cadeia `overlay click → IPC Tauri → transformação autenticada → coordinator → escrita AX`.
-- [ ] Corrigir Traduzir e Aprimorar para enviarem a operação correta.
-- [ ] Restaurar a substituição do texto selecionado quando o conteúdo for editável.
-- [ ] Preservar comportamento fail-closed para seleção stale, identidade AX divergente e conteúdo somente leitura.
-- [ ] Cobrir erros acionáveis de sessão/backend sem expor texto selecionado ou credenciais.
+- [x] Reproduzir e instrumentar a cadeia `overlay click → IPC Tauri → transformação autenticada → coordinator → escrita AX`.
+- [x] Corrigir Traduzir e Aprimorar para enviarem a operação correta.
+- [x] Restaurar a substituição do texto selecionado quando o conteúdo for editável.
+- [x] Preservar comportamento fail-closed para seleção stale, identidade AX divergente e conteúdo somente leitura.
+- [x] Cobrir erros acionáveis de sessão/backend sem expor texto selecionado ou credenciais.
 - [ ] Validar em app macOS real com Accessibility e backend configurado.
 
 ### Arquivos/módulos potencialmente afetados
@@ -124,18 +124,18 @@
 
 ### Fase 1 — Reprodução e causa
 
-- [ ] T1.1 `[MEDIUM]` Reproduzir ambos os botões e registrar o primeiro estágio que falha.
-- [ ] T1.2 `[MEDIUM]` Inspecionar payload IPC, readiness duplicada, settings, sessão e lifecycle do snapshot.
-- [ ] T1.3 `[MEDIUM]` Inspecionar observer/mouse dismiss durante `ToolbarVisible` e `Processing`.
-- [ ] T1.4 `[MEDIUM]` Inspecionar como o alvo AX original é retido/resolvido e como o setter é classificado.
+- [x] T1.1 `[MEDIUM]` Reproduzir ambos os botões e registrar o primeiro estágio que falha.
+- [x] T1.2 `[MEDIUM]` Inspecionar payload IPC, readiness duplicada, settings, sessão e lifecycle do snapshot.
+- [x] T1.3 `[MEDIUM]` Inspecionar observer/mouse dismiss durante `ToolbarVisible` e `Processing`.
+- [x] T1.4 `[MEDIUM]` Inspecionar como o alvo AX original é retido/resolvido e como o setter é classificado.
 
 ### Fase 2 — Implementação
 
-- [ ] T2.1 `[MEDIUM]` Fixar snapshot/request antes de awaits e tornar Processing resistente apenas a falhas transitórias do overlay.
-- [ ] T2.2 `[MEDIUM]` Corrigir a resolução/revalidação do alvo AX original sem afrouxar identidade/staleness.
-- [ ] T2.3 `[MEDIUM]` Implementar roteamento tipado e feedback acionável para falhas reais.
-- [ ] T2.4 `[LOW]` Preservar note read-only, preview, undo e overlay lifecycle.
-- [ ] T2.5 `[LOW]` Garantir consistência de estado quando o write funciona e o feedback falha.
+- [x] T2.1 `[MEDIUM]` Fixar snapshot/request antes de awaits e tornar Processing resistente apenas a falhas transitórias do overlay.
+- [x] T2.2 `[MEDIUM]` Corrigir a resolução/revalidação do alvo AX original sem afrouxar identidade/staleness.
+- [x] T2.3 `[MEDIUM]` Implementar roteamento tipado e feedback acionável para falhas reais.
+- [x] T2.4 `[LOW]` Preservar note read-only, preview, undo e overlay lifecycle.
+- [x] T2.5 `[LOW]` Garantir consistência de estado quando o write funciona e o feedback falha.
 
 ### Fase 3 — Testes
 
@@ -174,3 +174,10 @@
 ### Síntese
 
 A correção será tratada como uma transação ligada a `snapshot.id + request_id`, e não como um simples clique seguido de chamada remota. O ganho rápido é remover o mascaramento de erro e fixar a ação antes dos awaits; o núcleo de segurança é revalidar o alvo AX original sem relaxar identidade. Nenhum sleep ou atraso artificial será aceito como solução.
+
+## 🔄 Parallelization Synthesis
+
+- 🔴 Estimativa pessimista: 1 agente, devido ao acoplamento entre state machine, command, AX e feedback.
+- 🟢 Estimativa otimista: 2 agentes após fundação serial, separando transação/runtime de resolução AX.
+- Decisão: 1 agente sequencial. Os contratos centrais se sobrepõem e o limite físico de threads exigiu serializar as análises no mesmo thread reutilizado.
+- Risco de conflito: baixo.

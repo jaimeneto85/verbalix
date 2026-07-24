@@ -1,7 +1,5 @@
 mod application;
 mod commands;
-#[cfg(test)]
-mod commands_tests;
 mod commands_transform;
 mod diagnostics;
 mod domain;
@@ -155,10 +153,6 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
-}
-
-pub(crate) fn normalized_shortcut(shortcut: &str) -> String {
-    shortcut.replace("Option", "Alt")
 }
 
 pub fn run() {

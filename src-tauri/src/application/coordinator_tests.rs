@@ -1,11 +1,12 @@
 use super::*;
-use crate::domain::{Rect, TextRange, TransformOperation};
+use crate::domain::{Rect, TextRange, TransformOperation, TransformRequest, TransformResult};
 use async_trait::async_trait;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Mutex,
 };
 use tokio::sync::Notify;
+use uuid::Uuid;
 
 struct FakeSelection {
     snapshot: Mutex<SelectionSnapshot>,
@@ -161,6 +162,18 @@ fn request(text: &str) -> TransformRequest {
     }
 }
 
+async fn execute(
+    coordinator: &SelectionCoordinator,
+    input: TransformRequest,
+    preview: bool,
+) -> Result<TransformResult, VerbalixError> {
+    let snapshot_id = coordinator.current_snapshot().unwrap().id;
+    coordinator.begin_transform(snapshot_id, input.request_id)?;
+    coordinator
+        .transform(snapshot_id, input, "token", preview)
+        .await
+}
+
 fn ready(
     writable: bool,
     fail_write: bool,
@@ -192,7 +205,7 @@ async fn preview_waits_for_explicit_apply() {
     let (coordinator, selection, overlay) = ready(true, false, false);
     let input = request("Olá 👩🏽‍💻");
     let id = input.request_id;
-    coordinator.transform(input, "token", true).await.unwrap();
+    execute(&coordinator, input, true).await.unwrap();
     assert!(selection.replacements.lock().unwrap().is_empty());
     coordinator.apply_preview(id).unwrap();
     assert_eq!(
@@ -212,7 +225,7 @@ async fn desktop_flow_reaches_toolbar_preview_apply_and_undo() {
     let input = request("Olá 👩🏽‍💻");
     let id = input.request_id;
 
-    coordinator.transform(input, "token", true).await.unwrap();
+    execute(&coordinator, input, true).await.unwrap();
     coordinator.apply_preview(id).unwrap();
     coordinator.undo("result").unwrap();
 
@@ -230,18 +243,18 @@ async fn desktop_flow_reaches_toolbar_preview_apply_and_undo() {
 async fn write_failure_recovers_to_toolbar_state() {
     let (coordinator, _selection, _overlay) = ready(true, true, false);
     let first = request("Olá 👩🏽‍💻");
-    assert!(coordinator.transform(first, "token", false).await.is_err());
+    assert!(execute(&coordinator, first, false).await.is_err());
     let second = request("Olá 👩🏽‍💻");
-    assert!(coordinator.transform(second, "token", true).await.is_ok());
+    assert!(execute(&coordinator, second, true).await.is_ok());
 }
 
 #[tokio::test]
 async fn overlay_failure_recovers_to_toolbar_state() {
     let (coordinator, _selection, _overlay) = ready(false, false, true);
     let first = request("Olá 👩🏽‍💻");
-    assert!(coordinator.transform(first, "token", false).await.is_err());
+    assert!(execute(&coordinator, first, false).await.is_err());
     let second = request("Olá 👩🏽‍💻");
-    assert!(coordinator.transform(second, "token", false).await.is_err());
+    assert!(execute(&coordinator, second, false).await.is_err());
 }
 
 #[tokio::test]
@@ -249,7 +262,7 @@ async fn read_only_marker_result_uses_note_without_attempting_mutation() {
     let (coordinator, selection, overlay) = ready(false, false, false);
     let input = request("Olá 👩🏽‍💻");
 
-    coordinator.transform(input, "token", false).await.unwrap();
+    execute(&coordinator, input, false).await.unwrap();
 
     assert!(selection.replacements.lock().unwrap().is_empty());
     assert_eq!(
@@ -259,7 +272,7 @@ async fn read_only_marker_result_uses_note_without_attempting_mutation() {
 }
 
 #[tokio::test]
-async fn latest_request_wins_out_of_order_responses() {
+async fn concurrent_request_is_rejected_while_first_remains_active() {
     let captured = snapshot(true);
     let selection = Arc::new(FakeSelection {
         snapshot: Mutex::new(captured.clone()),
@@ -284,23 +297,18 @@ async fn latest_request_wins_out_of_order_responses() {
         .unwrap();
     let first_coordinator = coordinator.clone();
     let first = tokio::spawn(async move {
-        first_coordinator
-            .transform(request("Olá 👩🏽‍💻"), "token", false)
-            .await
+        execute(&first_coordinator, request("Olá 👩🏽‍💻"), false).await
     });
     provider.started.notified().await;
-    coordinator
-        .transform(request("Olá 👩🏽‍💻"), "token", false)
-        .await
-        .unwrap();
-    provider.release.notify_one();
     assert!(matches!(
-        first.await.unwrap(),
-        Err(VerbalixError::StaleSelection)
+        execute(&coordinator, request("Olá 👩🏽‍💻"), false).await,
+        Err(VerbalixError::OperationInProgress)
     ));
+    provider.release.notify_one();
+    first.await.unwrap().unwrap();
     assert_eq!(
         selection.replacements.lock().unwrap().as_slice(),
-        ["result-1"]
+        ["result-0"]
     );
 }
 

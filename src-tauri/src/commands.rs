@@ -4,10 +4,14 @@ use crate::{
         HistoryItem, PublicBackendConfig, RefreshFailureRoute, SessionRepository, StoredSession,
     },
     domain::{AppSettings, SelectionEvent, SettingsRepository, VerbalixError},
-    normalized_shortcut, AppRuntime,
+    AppRuntime,
 };
 use std::sync::Arc;
 use tauri::{AppHandle, State};
+
+pub(crate) fn normalized_shortcut(shortcut: &str) -> String {
+    shortcut.replace("Option", "Alt")
+}
 
 pub(crate) fn current_ai_readiness(runtime: &AppRuntime) -> Result<AiReadiness, VerbalixError> {
     if !runtime.backend_config.configured {
@@ -206,3 +210,7 @@ pub(crate) async fn delete_history(
     runtime.session.save(&session)?;
     runtime.history.delete(id, &session.access_token).await
 }
+
+#[cfg(test)]
+#[path = "commands_tests.rs"]
+mod tests;

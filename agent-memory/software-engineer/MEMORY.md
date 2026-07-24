@@ -12,6 +12,8 @@
 - Tipos compartilhados Rust são serializáveis em camelCase para consumo da WebView.
 - Falhas externas são convertidas em erros de domínio e nunca incluem o texto selecionado.
 - O coordinator encerra transformações por uma única rotina que recupera o estado da toolbar em qualquer falha pós-`Processing`, preservando latest-wins.
+- Transformações fixam `snapshot.id + request_id` no coordinator antes do primeiro `await`; o contexto local não integra o payload remoto e uma segunda ação em `Processing` é rejeitada.
+- Polling, AXObserver e mouse dismiss usam invalidação transitória: ela fecha estados ociosos, mas não apaga `Processing`; a revalidação AX final continua impedindo escrita após mudança real.
 - Implementações macOS extensas ficam separadas por responsabilidade: acessibilidade, observer, restauração e overlay.
 - `RuntimePause` é o gate único para polling, AXObserver, atalho e fallback de clipboard; callbacks revalidam a pausa após o debounce.
 - Resultados da nota usam evento mais state pull: o backend publica o estado antes de emitir e o frontend registra o listener antes de consultar `current_note_result`.
@@ -29,6 +31,8 @@
 - Erros de setup Tauri precisam ser convertidos para `Box<dyn std::error::Error>`.
 - Bundles ad-hoc podem manter uma entrada TCC visualmente habilitada que não corresponde ao requisito designado do build atual; nunca resetar TCC automaticamente.
 - Refresh de sessão deve separar autenticação inválida (`400/401/403`) de indisponibilidade transitória (`429/5xx`, transporte ou JSON inválido); somente a primeira rota abre o login.
+- Readiness de IA deve ter uma única autoridade no command Tauri; uma pré-checagem async no overlay cria uma janela de invalidação antes de `Processing`.
+- Depois que `SelectionPort::replace` retorna sucesso, `Applied` é o commit point. Feedback de undo é best-effort e não pode reclassificar a mutação.
 
 ## Dependências & Integrações
 - Transformações passam exclusivamente pela Edge Function autenticada.
@@ -36,6 +40,7 @@
 - O clamp do overlay usa `NSScreen.visibleFrame` capturado no setup da aplicação e mantém fallback pelos monitores do Tauri.
 - O dispatcher de overlay cria, configura, posiciona, mostra, oculta e confirma `is_visible` exclusivamente dentro de `run_on_main_thread`.
 - Snapshots derivados de text markers são sempre read-only até existir um contrato reversível de mutação; `replace` e `restore` rejeitam `writable=false`, e o caminho clássico revalida e escreve usando o mesmo handle AX.
+- Replace macOS resolve o elemento focado no PID original com `AXUIElementCreateApplication` e revalida identidade forte, texto, range UTF-16 e writability no mesmo handle antes do setter; ponteiros AX não atravessam awaits.
 - Diagnósticos AX usam estágio, origem de extração e categoria tipados, emitindo novamente apenas quando a categoria de um estágio/origem muda.
 - Depois de trocar a classe nativa de uma WebView para `NSPanel`, não chamar setters de janela do wrapper Tauri que dependam da classe/ivars originais; o painel não ativante deve ser configurado integralmente no boundary AppKit.
 - Overlays macOS usam uma única conversão de coordenadas AX top-left para Cocoa bottom-left baseada no `frame.maxY` da zero screen, `NSScreen.screens.first`; `mainScreen` representa a tela da key window e nunca pode ser a referência global. Seleção de tela usa `frame`, clamp usa `visibleFrame`, e `setFrameOrigin:` recebe diretamente pontos Cocoa sem `scale_factor`.

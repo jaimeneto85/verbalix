@@ -1,7 +1,8 @@
 use super::*;
-use crate::domain::{Rect, TextRange};
+use crate::domain::{Rect, TextRange, TransformRequest, TransformResult};
 use async_trait::async_trait;
 use std::sync::{Barrier, Mutex};
+use uuid::Uuid;
 
 struct RecapturingSelection;
 
