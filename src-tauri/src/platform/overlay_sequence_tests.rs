@@ -39,35 +39,54 @@ fn bounds() -> Rect {
     }
 }
 
-fn execute_commands(dispatcher: &SequenceDispatcher) -> Vec<&'static str> {
-    dispatcher
-        .commands
-        .lock()
-        .unwrap()
-        .iter()
-        .map(|command| match command {
-            OverlayCommand::ShowToolbar(_, permit) => {
-                assert!(
-                    execute_if_publishable(permit.as_ref(), || Ok(()), || Ok(()), || Ok(()),)
-                        .unwrap()
-                );
-                "toolbar"
-            }
-            OverlayCommand::ShowResult(_, payload, permit) => {
-                assert!(
-                    execute_if_publishable(permit.as_ref(), || Ok(()), || Ok(()), || Ok(()),)
-                        .unwrap()
-                );
-                match payload.mode {
-                    NoteMode::Preview => "preview",
-                    NoteMode::Undo => "undo",
-                    NoteMode::Error => "error",
-                    NoteMode::Result => "result",
+#[derive(Debug, Default, PartialEq)]
+struct ExecutionTrace {
+    events: Vec<&'static str>,
+    result_emits: usize,
+    visible: bool,
+}
+
+fn execute_commands(dispatcher: &SequenceDispatcher) -> ExecutionTrace {
+    dispatcher.commands.lock().unwrap().iter().fold(
+        ExecutionTrace::default(),
+        |mut trace, command| {
+            match command {
+                OverlayCommand::ShowToolbar(_, permit) => {
+                    assert!(execute_if_publishable(
+                        permit.as_ref(),
+                        || Ok(()),
+                        || Ok(()),
+                        || Ok(()),
+                    )
+                    .unwrap());
+                    trace.events.push("toolbar");
+                    trace.visible = true;
+                }
+                OverlayCommand::ShowResult(_, payload, permit) => {
+                    assert!(execute_if_publishable(
+                        permit.as_ref(),
+                        || Ok(()),
+                        || Ok(()),
+                        || Ok(()),
+                    )
+                    .unwrap());
+                    trace.events.push(match payload.mode {
+                        NoteMode::Preview => "preview",
+                        NoteMode::Undo => "undo",
+                        NoteMode::Error => "error",
+                        NoteMode::Result => "result",
+                    });
+                    trace.result_emits += 1;
+                    trace.visible = true;
+                }
+                OverlayCommand::HideAll => {
+                    trace.events.push("hide");
+                    trace.visible = false;
                 }
             }
-            OverlayCommand::HideAll => "hide",
-        })
-        .collect()
+            trace
+        },
+    )
 }
 
 fn guarded_overlay() -> (TauriOverlay, Arc<SequenceDispatcher>, Arc<TransformLease>) {
@@ -87,7 +106,14 @@ fn preview_then_apply_failure_publishes_the_guarded_error() {
         .show_error_guarded(bounds(), "apply failed", guard)
         .unwrap();
 
-    assert_eq!(execute_commands(&dispatcher), ["preview", "error"]);
+    assert_eq!(
+        execute_commands(&dispatcher),
+        ExecutionTrace {
+            events: vec!["preview", "error"],
+            result_emits: 2,
+            visible: true,
+        }
+    );
     assert_eq!(
         overlay.current_note_result().unwrap().unwrap().mode,
         NoteMode::Error
@@ -104,7 +130,14 @@ fn undo_then_restore_failure_publishes_the_guarded_error() {
         .show_error_guarded(bounds(), "undo failed", guard)
         .unwrap();
 
-    assert_eq!(execute_commands(&dispatcher), ["undo", "error"]);
+    assert_eq!(
+        execute_commands(&dispatcher),
+        ExecutionTrace {
+            events: vec!["undo", "error"],
+            result_emits: 2,
+            visible: true,
+        }
+    );
     assert_eq!(
         overlay.current_note_result().unwrap().unwrap().mode,
         NoteMode::Error
@@ -121,7 +154,14 @@ fn toolbar_then_pin_failure_publishes_the_guarded_error() {
         .show_error_guarded(bounds(), "pin failed", guard)
         .unwrap();
 
-    assert_eq!(execute_commands(&dispatcher), ["toolbar", "error"]);
+    assert_eq!(
+        execute_commands(&dispatcher),
+        ExecutionTrace {
+            events: vec!["toolbar", "error"],
+            result_emits: 1,
+            visible: true,
+        }
+    );
     assert_eq!(
         overlay.current_note_result().unwrap().unwrap().mode,
         NoteMode::Error
