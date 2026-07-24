@@ -11,6 +11,8 @@
 - Transformações do toolbar delegam readiness exclusivamente ao comando Rust; testes frontend e Playwright exigem uma única chamada `transform_selection`, não chamam `ai_readiness` e não abrem a janela principal para todo erro.
 - A transação de transformação é testada com `snapshot.id + request_id`: captura transitória durante `Processing` preserva o alvo pinado, invalidação real bloqueia provider/write, segunda ação é rejeitada e falha de undo após write mantém `Applied`.
 - Supersede durante transformação exige testes separados: candidato equivalente preserva exatamente `snapshot.id + request_id`; PID ou identidade AX diferentes substituem o lease antes do provider; resposta de provider já iniciado fica inerte; falha de hide não ressuscita `Processing`; preview superseded falha antes do write. Feedback de erro usa helper puro e só pertence ao snapshot ID original.
+- A linearização do setter usa adapter bloqueável em dois pontos: antes do claim, `Candidate`/`Invalidated` precisam adquirir imediatamente os mutexes do coordinator, cancelar o lease e manter zero setters; depois do claim, uma escrita pode concluir, mas não pode publicar `Applied` nem undo sobre o novo alvo. `apply_preview` usa a mesma matriz.
+- Publicação visual enfileirada carrega `PublicationGuard` até o executor. O teste cancela o guard depois do enqueue e exige zero execução e `current_note_result=None`, evitando que um payload stale reapareça pelo fallback de readiness.
 - Histórico remoto pode ser testado sem Supabase real com servidor HTTP loopback que cobre `/auth/v1/user`, inserts de `translate`/`improve` e listagem autenticada; o contrato causal do command exige insert somente após `coordinator.transform` bem-sucedido.
 - O budget da Responses API usa caracteres Unicode e precisa de boundaries discriminatórios: 558 caracteres ainda resultam no piso 500, 559 produzem 501, 11.806 produzem 7.999 e 11.807 alcançam 8.000; emoji não-BMP deve provar que UTF-16 não é usado.
 - Validação de envelope Responses deve ser testada com output parcial que seria semanticamente válido: status ausente, desconhecido ou incomplete e `incomplete_details` não nulo precisam falhar antes do parse; completed aceita details nulo ou ausente.
@@ -41,12 +43,13 @@
 - Doubles Deno que implementam interfaces assíncronas sem executar `await` devem retornar `Promise.resolve`/`Promise.reject` explicitamente para satisfazer `deno lint require-await`.
 - Limites superiores de índices marker em macOS arm64 devem considerar que `isize::MAX == i64::MAX`; o maior location válido antes de um range de length 1 é `isize::MAX - 1`.
 - O analyzer QA considera linhas efetivas e impõe máximo de 300 por arquivo modificado; os boundaries macOS foram divididos e devem permanecer abaixo desse limite.
+- Em sandbox restrito, o teste de histórico HTTP pode falhar ao criar `TcpListener` com `PermissionDenied`; isso não deve ser confundido com regressão quando todos os demais testes passam. O gate completo precisa de execução com socket loopback permitido.
 
 ## Cobertura & Métricas
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 121 testes, incluindo pinning e supersede da transformação, invalidação transitória/real, resposta remota fora de ordem, feedback stale, pós-write, histórico insert/list, identidade AX e a matriz de fallback geométrico.
+- A suíte Rust possui 125 testes, incluindo pinning, leases bloqueáveis antes/depois do claim, supersede da transformação, invalidação transitória/real, publicação visual cancelada, histórico insert/list, identidade AX e a matriz de fallback geométrico.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.

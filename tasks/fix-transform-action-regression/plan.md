@@ -155,7 +155,7 @@
 - [x] T3.5 `[LOW]` Executar gates automatizados e limite de linhas.
 - [x] T3.6 `[MEDIUM]` Provar insert/list do histórico após Translate e Improve bem-sucedidos.
 - [x] T3.7 `[HIGH]` Provar supersede antes/depois do provider, mesmo texto com PID/identidade diferente, same-target preservado e ausência de feedback stale.
-- [ ] T3.8 `[HIGH]` Provar com adapters bloqueáveis Candidate/Invalidated antes e depois do claim, apply preview concorrente e `ShowResult` cancelado antes da execução.
+- [x] T3.8 `[HIGH]` Provar com adapters bloqueáveis Candidate/Invalidated antes e depois do claim, apply preview concorrente e `ShowResult` cancelado antes da execução.
 
 ### Fase 4 — QA real
 
