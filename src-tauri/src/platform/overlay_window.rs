@@ -74,7 +74,7 @@ pub fn is_current_caller(
     {
         let caller_view = caller.ns_view().map_err(|_| VerbalixError::LocalFailure)?;
         let current_view = current.ns_view().map_err(|_| VerbalixError::LocalFailure)?;
-        return Ok(caller_view == current_view);
+        Ok(caller_view == current_view)
     }
     #[cfg(not(target_os = "macos"))]
     Ok(caller == &current)
