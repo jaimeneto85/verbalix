@@ -41,10 +41,11 @@ pub trait OverlayPort: Send + Sync {
         text: &str,
         guard: PublicationGuard,
     ) -> Result<(), VerbalixError> {
-        guard
-            .may_publish()
-            .then(|| self.show_note(bounds, text))
-            .unwrap_or(Ok(()))
+        if guard.may_publish() {
+            self.show_note(bounds, text)
+        } else {
+            Ok(())
+        }
     }
     fn show_preview_guarded(
         &self,
@@ -53,10 +54,11 @@ pub trait OverlayPort: Send + Sync {
         text: &str,
         guard: PublicationGuard,
     ) -> Result<(), VerbalixError> {
-        guard
-            .may_publish()
-            .then(|| self.show_preview(bounds, request_id, text))
-            .unwrap_or(Ok(()))
+        if guard.may_publish() {
+            self.show_preview(bounds, request_id, text)
+        } else {
+            Ok(())
+        }
     }
     fn show_undo_guarded(
         &self,
@@ -64,10 +66,11 @@ pub trait OverlayPort: Send + Sync {
         text: &str,
         guard: PublicationGuard,
     ) -> Result<(), VerbalixError> {
-        guard
-            .may_publish()
-            .then(|| self.show_undo(bounds, text))
-            .unwrap_or(Ok(()))
+        if guard.may_publish() {
+            self.show_undo(bounds, text)
+        } else {
+            Ok(())
+        }
     }
     fn hide_all(&self) -> Result<(), VerbalixError>;
 }
