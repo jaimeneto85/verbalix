@@ -171,4 +171,23 @@ Fora do escopo:
 - [x] Cobrir ACK antigo após cancelamento, recriação/reload e nova solicitação sem marcar ou exibir a geração atual.
 - [x] Cobrir configuração acima de três tentativas, confirmar exatamente três envios e provar que cada invoke termina antes do próximo.
 - [x] Reexecutar gates: Rust 87/87, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt/check, clippy estrito, diff-check e limite de linhas.
+- [x] Submeter nova revisão dual antes de Computer Use, merge ou release.
+
+### Veredito da quarta revisão
+
+`REJECTED_CODE`
+
+- Geração UUID, validação da `NSView` chamadora, ACK pós-main-thread, retries sequenciais e teto rígido foram aprovados.
+- No reload, o código apenas girava a geração e escondia a janela, mas mantinha a WebView com a URL antiga. O documento recarregado nunca poderia conhecer a nova geração nativa.
+- A próxima solicitação reutilizaria essa janela sem possibilidade de completar o handshake.
+- Falhas de invalidação e ocultação eram descartadas sem diagnóstico.
+
+### Remediação da quarta revisão
+
+- [x] Invalidar a geração no segundo `PageLoadEvent::Started` e destruir a WebView recarregada.
+- [x] Diagnosticar sucesso/falha de invalidação, destruição e fallback de ocultação.
+- [x] Impedir o reuso de uma janela sem documento atual; destruí-la e criar URL/UUID frescos na mesma solicitação.
+- [x] Cobrir lifecycle `reload → destroy → recreate → old ACK false → new ACK true/visible`.
+- [x] Aceitar somente UUID v4 no bootstrap e cobrir UUID ausente/inválido como root vazio.
+- [x] Reexecutar gates: Rust 88/88, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt/check, clippy estrito, diff-check e limite de linhas.
 - [ ] Submeter nova revisão dual antes de Computer Use, merge ou release.
