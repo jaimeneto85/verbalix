@@ -34,11 +34,8 @@ test.beforeEach(async ({ page }) => {
               shortcut: "Option+Shift+Space"
             };
           }
-          if (cmd === "ai_readiness") {
-            return {
-              status: "login_required",
-              message: "Entre no Verbalix para continuar."
-            };
+          if (cmd === "transform_selection") {
+            throw new Error("Remote authentication is required");
           }
           if (cmd === "current_note_result") {
             return {
@@ -54,7 +51,9 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("blocks transformation while login is required", async ({ page }) => {
+test("delegates login gating to one native transformation command", async ({
+  page
+}) => {
   await page.goto(
     "/?overlay=toolbar&generation=123e4567-e89b-42d3-a456-426614174000"
   );
@@ -67,8 +66,10 @@ test("blocks transformation while login is required", async ({ page }) => {
     };
     return runtimeWindow.__verbalixInvocations;
   });
-  expect(invocations.some(({ cmd }) => cmd === "ai_readiness")).toBe(true);
-  expect(invocations.some(({ cmd }) => cmd === "transform_selection")).toBe(false);
+  expect(invocations.some(({ cmd }) => cmd === "ai_readiness")).toBe(false);
+  expect(
+    invocations.filter(({ cmd }) => cmd === "transform_selection")
+  ).toHaveLength(1);
 });
 
 test("shows the complete actionable login error inside the note", async ({

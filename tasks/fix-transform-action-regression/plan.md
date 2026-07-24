@@ -139,11 +139,12 @@
 
 ### Fase 3 — Testes
 
-- [ ] T3.1 `[LOW]` Cobrir os dois botões e payloads no frontend.
-- [ ] T3.2 `[MEDIUM]` Cobrir translate/improve, replace/note/preview e erros tipados no boundary do comando/coordinator.
-- [ ] T3.3 `[MEDIUM]` Cobrir revalidação e escrita AX, incluindo Unicode/stale/unsupported.
-- [ ] T3.4 `[MEDIUM]` Cobrir polling/observer durante Processing, outro alvo com texto idêntico, duplo clique e falha pós-write.
-- [ ] T3.5 `[LOW]` Executar gates automatizados e limite de linhas.
+- [x] T3.1 `[LOW]` Cobrir os dois botões e payloads no frontend.
+- [x] T3.2 `[MEDIUM]` Cobrir translate/improve, replace/note/preview e erros tipados no boundary do comando/coordinator.
+- [x] T3.3 `[MEDIUM]` Cobrir revalidação e escrita AX, incluindo Unicode/stale/unsupported.
+- [x] T3.4 `[MEDIUM]` Cobrir polling/observer durante Processing, outro alvo com texto idêntico, duplo clique e falha pós-write.
+- [x] T3.5 `[LOW]` Executar gates automatizados e limite de linhas.
+- [x] T3.6 `[MEDIUM]` Provar insert/list do histórico após Translate e Improve bem-sucedidos.
 
 ### Fase 4 — QA real
 
