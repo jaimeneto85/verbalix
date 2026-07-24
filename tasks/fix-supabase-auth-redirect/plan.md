@@ -115,10 +115,10 @@ Autorizar somente a mutação remota mínima quando todos os preconditions forem
 
 ## 3. TASKS
 
-- [ ] T1 Concluir análise dual e síntese.
-- [ ] T2 Ler configuração Auth atual e produzir baseline sanitizada.
-- [ ] T3 Aplicar append idempotente via PATCH mínimo.
-- [ ] T4 Verificar preservação integral e callback exata sem wildcard.
-- [ ] T5 Executar smoke com magic link novo e callback no app.
+- [x] T1 Concluir análise dual e síntese.
+- [x] T2 Ler configuração Auth atual e produzir baseline sanitizada.
+- [x] T3 Aplicar append idempotente via PATCH mínimo.
+- [x] T4 Verificar preservação integral e callback exata sem wildcard.
+- [ ] T5 Executar smoke com magic link novo e callback no app — aguarda link novo solicitado pelo usuário.
 - [ ] T6 QA independente emitir verdict.
-- [ ] T7 Documentar evidências sanitizadas e rollback.
+- [x] T7 Documentar evidências sanitizadas e rollback.

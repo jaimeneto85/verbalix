@@ -12,6 +12,7 @@
 - O caminho primário usa Accessibility API. O fallback copy-only preserva/restaura o clipboard, só ocorre pelo atalho Option+Shift+Space e nunca simula colagem.
 - A transformação usa Supabase Edge Function com OpenAI atrás de `AiProvider`; o modelo é definido por ambiente e a chave não chega ao cliente.
 - Supabase Auth usa magic link, a sessão fica no Keychain e o histórico opcional tem RLS owner-only e retenção de 30 dias.
+- Magic links do app desktop exigem a entrada exata `verbalix://auth/callback` na allow-list remota do Supabase Auth; ausência da entrada faz o serviço retornar ao `site_url`, mesmo quando `emailRedirectTo` está correto no cliente.
 
 ## Erros Recorrentes & Soluções
 - Repositórios sem commit não permitem o worktree convencional: criar primeiro um commit-base vazio em `main`.
@@ -42,6 +43,7 @@
 - Para embutir configuração pública sem expô-la no output do build script, gerar fonte Rust em `OUT_DIR` e incluí-la no binário; não transportar valores por `cargo:rustc-env`.
 - Worktrees não recebem arquivos ignorados como `.env`; o smoke pré-merge precisa provisionar o arquivo localmente sem logar valores, enquanto o checkout principal resolve `../.env` normalmente.
 - A matriz de MVP é Chrome, Safari, VS Code, Slack, Notes e TextEdit.
+- Para mutações pontuais da configuração Auth, usar GET → revalidação → PATCH contendo somente o campo necessário → GET, com evidências por booleanos/contagens, token do CLI consumido do Keychain sem output e rerun idempotente.
 
 ## Observações
 - A promessa do produto é mensurável na matriz de aplicativos suportados e best-effort nos demais; não existe evento universal de seleção no macOS.
