@@ -93,6 +93,63 @@ describe("macOS bundle smoke contract", () => {
     expect(restore).toContain('role == "AXSecureTextField"');
   });
 
+  it("keeps fallback, mutation, bounds, and diagnostics fail-closed", () => {
+    const accessibility = readFileSync(
+      "src-tauri/src/platform/macos_accessibility.rs",
+      "utf8"
+    );
+    const selection = readFileSync(
+      "src-tauri/src/platform/macos_selection.rs",
+      "utf8"
+    );
+    const classicRange = readFileSync(
+      "src-tauri/src/platform/macos_classic_range.rs",
+      "utf8"
+    );
+    const geometry = readFileSync(
+      "src-tauri/src/platform/macos_geometry.rs",
+      "utf8"
+    );
+    const diagnostics = readFileSync(
+      "src-tauri/src/diagnostics.rs",
+      "utf8"
+    );
+
+    expect(selection).toMatch(
+      /Err\(range_failure\)[\s\S]*marker_eligible_after_range\(range_failure\)[\s\S]*marker_selection\(element\)/
+    );
+    expect(selection).not.toContain("cf_range_selection(element).or_else");
+    expect(classicRange).toContain(
+      "marker_fallback_rejects_structural_and_cross_stage_failures"
+    );
+
+    const eligibilityCheck = accessibility.indexOf(
+      "if !replacement_eligible(expected)"
+    );
+    const focusedElementLookup = accessibility.indexOf(
+      "let element = Self::focused_element()?",
+      eligibilityCheck
+    );
+    expect(eligibilityCheck).toBeGreaterThan(-1);
+    expect(focusedElementLookup).toBeGreaterThan(eligibilityCheck);
+
+    const rectDecoder = geometry.slice(
+      geometry.indexOf("pub(super) fn rect_from_value"),
+      geometry.indexOf("fn read_point")
+    );
+    expect(rectDecoder.indexOf("has_ax_value_type")).toBeLessThan(
+      rectDecoder.indexOf("AXValueGetValue")
+    );
+
+    const snapshotMetadata = diagnostics.slice(
+      diagnostics.indexOf("fn snapshot_metadata"),
+      diagnostics.indexOf("fn lifecycle_metadata")
+    );
+    expect(snapshotMetadata).not.toMatch(
+      /snapshot\.pid|snapshot\.range|snapshot\.bounds/
+    );
+  });
+
   it("preserves the visible Regular lifecycle and close-reopen paths", () => {
     const runtime = readFileSync("src-tauri/src/lib.rs", "utf8");
 

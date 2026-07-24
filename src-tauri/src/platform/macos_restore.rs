@@ -211,4 +211,31 @@ mod tests {
             ));
         }
     }
+
+    #[test]
+    fn restore_rejects_another_field_in_the_same_pid_even_with_matching_selection() {
+        let expected = snapshot(true);
+        let transformed = "A👩🏽‍💻";
+        let matching_selection = macos_selection::ClassicSelection {
+            text: transformed.to_owned(),
+            range: CFRange {
+                location: expected.range.location as isize,
+                length: transformed.encode_utf16().count() as isize,
+            },
+        };
+
+        assert!(validate_restore_selection(&expected, transformed, &matching_selection).is_ok());
+        assert!(matches!(
+            validate_restore_target(
+                &expected,
+                expected.element_identity.as_ref().unwrap(),
+                expected.pid,
+                7,
+                "AXTextArea",
+                true,
+                &identity("another-editor"),
+            ),
+            Err(VerbalixError::StaleSelection)
+        ));
+    }
 }
