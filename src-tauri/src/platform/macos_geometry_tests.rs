@@ -223,11 +223,7 @@ fn frames_crossing_the_global_origin_contain_points_on_both_sides() {
 fn no_valid_geometry_returns_none() {
     assert_eq!(select_geometry(None, None, None), None);
     assert_eq!(
-        select_geometry(
-            Some(rect(0.0, 0.0, 1.0, 1.0)),
-            None,
-            Some(point(0.0, 0.0))
-        ),
+        select_geometry(Some(rect(0.0, 0.0, 1.0, 1.0)), None, Some(point(0.0, 0.0))),
         None
     );
 }

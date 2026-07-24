@@ -13,6 +13,7 @@
 - Fluxos críticos de recuperação visual usam Playwright com `__TAURI_INTERNALS__` simulado e verificam tanto invocações IPC quanto clipping pelo bounding box.
 - Superfícies de overlay transparentes exigem teste antes do render: a classe de rota deve existir durante o callback de bootstrap e `html`, `body` e `#root` devem computar fundo transparente, dimensões mínimas zero e overflow oculto sem alterar a rota principal.
 - Posicionamento macOS em múltiplos monitores é testado como geometria pura em pontos Cocoa: conversão AX round-trip, escolha por centro/interseção, clamp nas quatro bordas, fallback vertical e coordenadas globais negativas. Um contrato estático separado impede reintroduzir `LogicalPosition`, `PhysicalPosition` ou `scale_factor` no caminho macOS.
+- O fallback de geometria da seleção segue `SelectedRange → Cursor contido inclusivamente em FocusedElement → FocusedElement → None`; cursor sem frame válido falha fechado. A matriz cobre quatro cantos, pontos imediatamente externos, não finitos, overflow das somas, coordenadas negativas e frame cruzando a origem.
 - A referência AX → Cocoa deve vir da zero screen, `NSScreen.screens.firstObject`, nunca de `mainScreen`, que acompanha a key window. O teste discriminatório usa uma key-window screen secundária com origem e altura diferentes.
 - A primeira pintura do overlay usa handshake de readiness: testes separam `ready` de `requested`, comprovam render antes do sinal frontend e garantem que `HideAll` antes de `SurfaceReady` não ressuscita a janela.
 - O handshake só deve nascer em `useLayoutEffect` depois do commit dos filhos, e o ACK nativo só pode resolver após a closure da main thread aplicar readiness/visibilidade. Retries precisam ser estritamente sequenciais, limitados a três após ACK falso/erro, parar no primeiro sucesso e reportar exaustão sem deixar invokes órfãos por `Promise.race`.
@@ -39,7 +40,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 37 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 5 testes Playwright E2E também passam.
-- A suíte Rust possui 93 testes, incluindo invalidação stale e rollback concorrente. O frontend possui 47 testes Vitest e 6 E2E Playwright.
+- A suíte Rust possui 101 testes, incluindo invalidação stale, rollback concorrente e a matriz de fallback geométrico. O frontend possui 47 testes Vitest e 6 E2E Playwright.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
