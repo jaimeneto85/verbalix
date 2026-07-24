@@ -56,6 +56,10 @@
 - [x] RF13: Nota, preview, undo e erro carregam a guarda da ação até o executor visual; uma guarda cancelada produz zero publicação.
 - [x] RF14: O executor visual revalida/lineariza a publicação depois da preparação da janela; cancelamento durante `get/create/place` produz zero `emit/show`.
 - [x] RF15: A guarda de vida da ação aceita múltiplos feedbacks legítimos; cada comando visual possui autorização atômica própria, revogada pelo cancelamento global enquanto ainda não reivindicada.
+- [ ] RF16: Quando `AXSelectedText` não existe, mas `AXValue` e `AXSelectedTextRange` são válidos, capturar e revalidar a seleção por índices UTF-16 sem afrouxar identidade, bounds, writable ou proteção contra staleness.
+- [ ] RF17: Capacidade de leitura e de escrita são independentes: o fallback só é writable quando `AXSelectedText` é comprovadamente settable; `AXValue` completo não será sobrescrito neste escopo.
+- [ ] RF18: A estratégia de extração participa de `same_target`, replace e restore; não há revalidação cruzada entre `SelectedText`, `ValueRange` e `TextMarker`.
+- [ ] RF19: O fallback acessa no máximo 262.144 code units UTF-16 do valor, copia somente o range selecionado para memória Rust e nunca loga, persiste ou envia prefixo/sufixo ao provider.
 
 ### Requisitos não funcionais
 
@@ -81,6 +85,10 @@
 - [ ] CA13: Readiness/falha de A enfileirada antes do provider nunca aparece sobre Candidate B.
 - [x] CA14: Candidate/invalidation durante a preparação visual de A vence antes do boundary de publicação e deixa zero evento, zero janela visível e zero payload corrente de A.
 - [x] CA15: Preview, undo ou toolbar já publicados não impedem erro subsequente da mesma ação; cancelamento durante a preparação do segundo comando continua produzindo zero efeito stale.
+- [ ] CA16: No TextEdit real, seleção editável com `AXSelectedText=attribute_unsupported` produz snapshot válido, exibe toolbar e permite substituir/restaurar exatamente o range selecionado via fallback seguro.
+- [ ] CA17: O smoke registra separadamente `identifier_present`, `AXSelectedText_settable`, `AXValue_cfstring` e `AXSelectedTextRange_settable`, sem conteúdo; a árvore real já evidencia o alvo `First Text View` e edição settable.
+- [ ] CA18: Campo protegido, role não textual, valor acima do limite ou `AXValue` não-CFString produz zero materialização de texto e zero escrita.
+- [ ] CA19: Falha pós-setter não reclassifica a mutação como inexistente; undo só restaura quando o mesmo alvo e o resultado transformado ainda ocupam o range esperado.
 
 ### Edge cases
 
@@ -98,6 +106,9 @@
 - EC12: Histórico remoto não responde depois de uma transformação aplicada.
 - EC13: A guarda é cancelada enquanto o executor principal cria ou posiciona a janela, antes do primeiro efeito visual.
 - EC14: A mesma ação publica uma superfície inicial e depois precisa publicar feedback de falha de Apply, Undo ou pin.
+- EC15: `AXValue` contém Unicode com pares substitutos e o range UTF-16 começa/termina somente em boundary válido.
+- EC16: Range negativo, vazio, fora do valor, no meio de surrogate pair ou valor alterado entre captura e escrita deve falhar fechado.
+- EC17: `AXValue` é legível, mas `AXSelectedText` não é settable; a seleção deve permanecer read-only e receber nota.
 
 ## 2. DESIGN
 
@@ -131,6 +142,12 @@
 - Feedback usa bounds e guarda da ação original. O executor de `ShowResult` revalida a guarda sem consultar o snapshot global.
 - Preparação visual pode ocorrer antes do boundary; `emit/show` só ocorre após um claim visual atômico ou revalidação equivalente no último ponto cancelável. Candidate/invalidation concorrente deve linearizar antes ou depois desse boundary, nunca no intervalo.
 - `TransformLease` representa a vida cancelável reutilizável da ação; cada `OverlayCommand` guardado recebe um token/claim próprio ligado à mesma vida, evitando que uma publicação legítima consuma a autorização de feedbacks posteriores.
+- O fallback clássico lê `AXValue` e fatia exclusivamente por offsets UTF-16 de `AXSelectedTextRange`; nunca trata offsets CFRange como índices de bytes/chars Rust.
+- Escrita fallback exige a mesma identidade forte, range e substring atuais e claim imediatamente antes do setter `AXSelectedText`; leitura indisponível não implica setter indisponível.
+- `AXValue` é somente fonte de leitura restrita neste escopo. Não haverá setter de documento completo, evitando sobrescrever edições externas, formatação, IME e undo nativo.
+- A origem de captura deve acompanhar o snapshot/revalidação para que um snapshot obtido por `AXValue` não seja validado por uma estratégia incompatível ou promovido a writable sem setter comprovado.
+- Antes da implementação mutável, um probe sanitizado deve decidir a identidade do TextEdit: `AXIdentifier` forte quando presente; se ausente, usar retenção causal do `AXUIElementRef` original com lifecycle limitado, nunca `role + frame` como substituto.
+- A leitura deve obter `range₁ → AXValue → range₂`, exigir igualdade e usar APIs de CFString para validar comprimento e copiar somente o range; valor maior que 262.144 code units falha fechado.
 - Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
@@ -162,6 +179,10 @@
 - [x] T2.8 `[HIGH]` Guardar readiness e erros de pin/apply/undo, tornar undo condicional e remover histórico/show_toolbar do caminho bloqueante.
 - [x] T2.9 `[HIGH]` Separar preparação de publicação visual e fechar o TOCTOU entre a checagem inicial da guarda e `emit/show`.
 - [x] T2.10 `[HIGH]` Substituir o claim visual single-use por lifetime guard reutilizável e claim independente por comando, todos revogáveis pelo cancelamento da ação.
+- [ ] T2.11 `[HIGH]` Implementar extração/revalidação/substituição/restauração por `AXValue + AXSelectedTextRange` com conversão UTF-16 validada e fallback restrito às falhas de capacidade de `AXSelectedText`/`AXStringForRange`.
+- [ ] T2.12 `[MEDIUM]` Reduzir invalidation spam somente se a captura equivalente pelo fallback comprovar o mesmo alvo/range/texto, preservando invalidação real.
+- [ ] T2.13 `[HIGH]` Executar probe sanitizado do TextEdit e implementar identidade forte por identifier ou retenção causal do elemento original, conforme evidência.
+- [ ] T2.14 `[MEDIUM]` Generalizar consulta de settable/setter por atributo, mantendo `AXSelectedText` como único writer do fallback e `AXValue` como leitura range-only.
 
 ### Fase 3 — Testes
 
@@ -176,6 +197,9 @@
 - [x] T3.9 `[HIGH]` Provar readiness pré-pin, undo bloqueável versus Candidate B, feedback de pin/apply/undo, history timeout/off-critical-path e show_toolbar sem mutex.
 - [x] T3.10 `[HIGH]` Provar deterministicamente, sem sleeps, cancelamento durante preparação visual com zero `emit/show/payload`, além da ordem após o boundary linearizado.
 - [x] T3.11 `[HIGH]` Provar Preview→erro Apply, Undo→erro Undo, Toolbar→erro pin, cancelamento durante a segunda preparação e supersede pós-claim terminando oculto.
+- [ ] T3.12 `[HIGH]` Cobrir UTF-16 BMP/emoji/combining, ranges inválidos, value read-only/settable, mutação concorrente, replace/restore e zero setter em staleness.
+- [ ] T3.13 `[MEDIUM]` Executar smoke macOS real no TextEdit para captura, toolbar, Traduzir, Aprimorar e Desfazer.
+- [ ] T3.14 `[HIGH]` Cobrir matriz independente de leitura/setter, `range₁/value/range₂`, limite, CFString inválida, protected field antes do value, identidade ausente/retida e falha pós-write.
 
 ### Fase 4 — QA real
 
@@ -199,6 +223,10 @@
 - Verificar ownership e depois reler o snapshot para publicar erro criava TOCTOU; a publicação agora carrega bounds e guarda imutáveis da ação até a main thread.
 - Uma checagem única da guarda antes de `get/create/place` ainda permite publicação stale; o boundary visual final precisa de linearização própria e teste de cancelamento durante a preparação.
 - Um claim visual único por ação corrige a primeira publicação, mas bloqueia feedback posterior legítimo; a linearização precisa ser por comando sob uma lifetime guard comum.
+- `AXStringForRange` não é universal: TextEdit pode expor `AXValue` e `AXSelectedTextRange` mesmo retornando `attribute_unsupported` para `AXSelectedText`; o fallback deve ser explícito, UTF-16-correto e transacional.
+- A nova evidência do TextEdit justifica leitura restrita de `AXValue`, mas não setter integral: somente o trecho selecionado é copiado e o writer continua sendo `AXSelectedText` quando settable.
+- O probe Swift externo falhou fechado por TCC (`-25204`) e não tentou mutação; a árvore real via Computer Use evidencia identidade `First Text View`, valor legível e edição settable, suficientes para a primeira implementação conservadora.
+- Capacidade deve ser diagnosticada uma vez por transição/categoria no build de smoke, sem texto, range concreto ou identificador.
 
 ### 🟢 Oportunidades incorporadas
 
@@ -207,14 +235,17 @@
 - Command nativo como authority de readiness, reduzindo round-trip e janela de corrida.
 - Timeline sanitizada por `request_id + snapshot_id`, útil para diagnosticar cada estágio sem conteúdo do usuário.
 - TextEdit como baseline AX e Slack como editor complexo na matriz real.
+- Reuso de `CFRange`, `macos_ax::string_value`, `macos_geometry::resolve`, setter `AXSelectedText`, strong identifier e lease existente; coordinator, provider e overlay não precisam mudar.
+- Um helper UTF-16 puro sobre code units permite testar slice/range/overflow/surrogates sem depender do macOS.
+- Capturas `ValueRange` equivalentes podem reutilizar `same_target`; observer só muda se o smoke ainda provar spam depois da equivalência correta.
 
 ### Síntese
 
-A correção será tratada como uma transação ligada a `snapshot.id + request_id`, e não como um simples clique seguido de chamada remota. O ganho rápido é remover o mascaramento de erro e fixar a ação antes dos awaits; o núcleo de segurança é revalidar o alvo AX original sem relaxar identidade. Nenhum sleep ou atraso artificial será aceito como solução.
+A transação permanece ligada a `snapshot.id + request_id`. Para RF16, o adapter adiciona `ValueRange` como estratégia explícita apenas quando as falhas anteriores forem de capacidade. O valor completo não é convertido nem escrito: CFString valida o limite e fornece somente os code units selecionados. Writability é consultada separadamente e o único writer continua `AXSelectedText`; sem setter, o resultado é nota. Identidade forte, range duplo, substring, lease e setter são revalidados no mesmo boundary já aprovado. Nenhum sleep, debounce preventivo ou relaxamento de identidade será aceito.
 
 ## 🔄 Parallelization Synthesis
 
-- 🔴 Estimativa pessimista: 1 agente, devido ao acoplamento entre state machine, command, AX e feedback.
-- 🟢 Estimativa otimista: 2 agentes após fundação serial, separando transação/runtime de resolução AX.
-- Decisão: 1 agente sequencial. Os contratos centrais se sobrepõem e o limite físico de threads exigiu serializar as análises no mesmo thread reutilizado.
+- 🔴 Estimativa pessimista RF16: 1 agente, pois captura, estratégia, replace e restore compartilham o mesmo contrato de revalidação.
+- 🟢 Estimativa otimista RF16: helper UTF-16 e testes puros podem ser delegados depois que a estratégia for implementada.
+- Decisão RF16: implementação serial por 1 agente; test-engineer independente audita matriz UTF-16/AX e gates depois.
 - Risco de conflito: baixo.
