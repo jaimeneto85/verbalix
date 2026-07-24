@@ -106,10 +106,7 @@ pub(super) fn marker_eligible_after_range(failure: AxFailure) -> bool {
     match failure.stage {
         AxStage::SelectedRange => matches!(
             failure.category,
-            AxCategory::NoValue
-                | AxCategory::AttributeUnsupported
-                | AxCategory::EmptyRange
-                | AxCategory::TextMarkerRange
+            AxCategory::NoValue | AxCategory::AttributeUnsupported | AxCategory::TextMarkerRange
         ),
         AxStage::StringForRange => matches!(
             failure.category,
@@ -130,7 +127,6 @@ mod tests {
         for failure in [
             AxFailure::new(AxStage::SelectedRange, AxCategory::NoValue),
             AxFailure::new(AxStage::SelectedRange, AxCategory::AttributeUnsupported),
-            AxFailure::new(AxStage::SelectedRange, AxCategory::EmptyRange),
             AxFailure::new(AxStage::SelectedRange, AxCategory::TextMarkerRange),
             AxFailure::new(AxStage::StringForRange, AxCategory::NoValue),
             AxFailure::new(AxStage::StringForRange, AxCategory::AttributeUnsupported),
@@ -148,6 +144,7 @@ mod tests {
         for failure in [
             AxFailure::new(AxStage::SelectedRange, AxCategory::CannotComplete),
             AxFailure::new(AxStage::SelectedRange, AxCategory::ApiDisabled),
+            AxFailure::new(AxStage::SelectedRange, AxCategory::EmptyRange),
             AxFailure::new(AxStage::SelectedRange, AxCategory::UnexpectedType),
             AxFailure::new(AxStage::StringForRange, AxCategory::CannotComplete),
             AxFailure::new(AxStage::Geometry, AxCategory::NoValue),
@@ -155,5 +152,16 @@ mod tests {
         ] {
             assert!(!marker_eligible_after_range(failure));
         }
+    }
+
+    #[test]
+    fn empty_cf_range_does_not_cross_temporal_state_into_marker_capture() {
+        let selected_text_failure = AxFailure::new(AxStage::SelectedText, AxCategory::NoValue);
+        let stale_range_failure = AxFailure::new(AxStage::SelectedRange, AxCategory::EmptyRange);
+
+        assert!(crate::platform::macos_focus::marker_fallback(
+            selected_text_failure
+        ));
+        assert!(!marker_eligible_after_range(stale_range_failure));
     }
 }
