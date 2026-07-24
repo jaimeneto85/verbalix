@@ -1,13 +1,41 @@
 use crate::domain::{SelectionSnapshot, VerbalixError};
+#[cfg(target_os = "macos")]
+use crate::platform::macos_focus::{AxCategory, AxStage, ExtractionOrigin};
 use std::sync::OnceLock;
+#[cfg(target_os = "macos")]
+use std::{collections::HashMap, sync::Mutex};
 
-fn enabled() -> bool {
+pub(crate) fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
         std::env::var("VERBALIX_DIAGNOSTICS")
             .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
             .unwrap_or(false)
     })
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn ax_resolution(stage: AxStage, origin: ExtractionOrigin, category: AxCategory) {
+    static LAST: OnceLock<Mutex<HashMap<(AxStage, ExtractionOrigin), AxCategory>>> =
+        OnceLock::new();
+    let key = (stage, origin);
+    let should_emit = LAST
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .map(|mut last| last.insert(key, category) != Some(category))
+        .unwrap_or(false);
+    if should_emit {
+        emit(
+            "ax_resolution",
+            "status",
+            &format!(
+                "stage={} origin={} category={}",
+                stage.as_str(),
+                origin.as_str(),
+                category.as_str()
+            ),
+        );
+    }
 }
 
 fn emit(stage: &str, event: &str, metadata: &str) {

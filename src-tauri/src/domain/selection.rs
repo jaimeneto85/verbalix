@@ -15,6 +15,7 @@ pub struct Rect {
 #[serde(rename_all = "snake_case")]
 pub enum GeometrySource {
     SelectedRange,
+    TextMarkerRange,
     FocusedElement,
     Cursor,
 }
@@ -23,6 +24,7 @@ impl GeometrySource {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SelectedRange => "selected_range",
+            Self::TextMarkerRange => "text_marker_range",
             Self::FocusedElement => "focused_element",
             Self::Cursor => "cursor",
         }

@@ -144,16 +144,23 @@ fn copy_attribute(element: AXUIElementRef, name: &str) -> Option<CFTypeRef> {
 }
 
 fn read_rect(value: CFTypeRef) -> Option<Rect> {
+    let rect = rect_from_value(value);
+    release(value);
+    rect
+}
+
+pub(super) fn rect_from_value(value: CFTypeRef) -> Option<Rect> {
     let mut rect = CGRect::default();
     let success =
         unsafe { AXValueGetValue(value, AX_VALUE_CG_RECT, (&mut rect as *mut CGRect).cast()) };
-    release(value);
-    (success != 0).then_some(Rect {
-        x: rect.origin.x,
-        y: rect.origin.y,
-        width: rect.size.width,
-        height: rect.size.height,
-    })
+    (success != 0)
+        .then_some(Rect {
+            x: rect.origin.x,
+            y: rect.origin.y,
+            width: rect.size.width,
+            height: rect.size.height,
+        })
+        .filter(valid_frame)
 }
 
 fn read_point(value: CFTypeRef) -> Option<CGPoint> {

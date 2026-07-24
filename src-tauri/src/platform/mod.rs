@@ -6,6 +6,8 @@ mod overlay_dispatcher;
 #[cfg(target_os = "macos")]
 mod macos_accessibility;
 #[cfg(target_os = "macos")]
+pub(crate) mod macos_focus;
+#[cfg(target_os = "macos")]
 mod macos_geometry;
 #[cfg(target_os = "macos")]
 mod macos_observer;
