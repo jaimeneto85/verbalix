@@ -62,15 +62,12 @@ pub fn lifecycle(event: &'static str, origin: &'static str) {
 }
 
 pub fn accessibility(trusted: bool) {
-    emit(
-        "accessibility",
-        "status",
-        if trusted {
-            "trusted=true"
-        } else {
-            "trusted=false"
-        },
-    );
+    let status = if trusted {
+        "trusted=true"
+    } else {
+        "trusted=false"
+    };
+    emit("accessibility", "status", status);
 }
 
 pub fn ai_readiness(status: &str) {
