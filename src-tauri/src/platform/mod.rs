@@ -2,6 +2,7 @@ mod clipboard;
 mod note_result;
 mod overlay;
 mod overlay_dispatcher;
+mod overlay_execution;
 mod overlay_geometry;
 mod overlay_publication;
 mod overlay_readiness;

@@ -126,10 +126,15 @@ fn queued_result_cancelled_before_execution_has_no_effect_or_current_payload() {
         }
     };
     let executions = std::cell::Cell::new(0);
-    let executed = execute_if_publishable(queued_guard.as_ref(), || {
-        executions.set(executions.get() + 1);
-        Ok(())
-    })
+    let executed = execute_if_publishable(
+        queued_guard.as_ref(),
+        || {
+            executions.set(executions.get() + 1);
+            Ok(())
+        },
+        || Ok(()),
+        || Ok(()),
+    )
     .unwrap();
 
     assert!(!executed);
@@ -154,10 +159,15 @@ fn queued_toolbar_cancelled_before_execution_has_no_effect() {
         }
     };
     let executions = std::cell::Cell::new(0);
-    let executed = execute_if_publishable(queued_guard.as_ref(), || {
-        executions.set(executions.get() + 1);
-        Ok(())
-    })
+    let executed = execute_if_publishable(
+        queued_guard.as_ref(),
+        || {
+            executions.set(executions.get() + 1);
+            Ok(())
+        },
+        || Ok(()),
+        || Ok(()),
+    )
     .unwrap();
 
     assert!(!executed);

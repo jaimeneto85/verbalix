@@ -14,6 +14,7 @@ pub(crate) struct TransformLease {
     snapshot_id: Uuid,
     request_id: Uuid,
     write_phase: AtomicU8,
+    visual_phase: AtomicU8,
     visual_cancelled: AtomicBool,
 }
 
@@ -41,6 +42,7 @@ impl TransformLease {
             snapshot_id,
             request_id,
             write_phase: AtomicU8::new(ACTIVE),
+            visual_phase: AtomicU8::new(ACTIVE),
             visual_cancelled: AtomicBool::new(false),
         }
     }
@@ -50,17 +52,29 @@ impl TransformLease {
     }
 
     pub(crate) fn cancel(&self) {
-        self.visual_cancelled.store(true, Ordering::Release);
         let _ = self.write_phase.compare_exchange(
             ACTIVE,
             CANCELLED,
             Ordering::AcqRel,
             Ordering::Acquire,
         );
+        let _ = self.visual_phase.compare_exchange(
+            ACTIVE,
+            CANCELLED,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+        self.visual_cancelled.store(true, Ordering::Release);
     }
 
     pub(crate) fn try_claim_write(&self) -> bool {
         self.write_phase
+            .compare_exchange(ACTIVE, CLAIMED, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    pub(crate) fn try_claim_publication(&self) -> bool {
+        self.visual_phase
             .compare_exchange(ACTIVE, CLAIMED, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
     }
@@ -80,6 +94,7 @@ mod tests {
         lease.cancel();
 
         assert!(!lease.try_claim_write());
+        assert!(!lease.try_claim_publication());
         assert!(!lease.may_publish());
     }
 
@@ -90,6 +105,17 @@ mod tests {
         lease.cancel();
 
         assert!(!lease.try_claim_write());
+        assert!(!lease.may_publish());
+    }
+
+    #[test]
+    fn claimed_publication_is_single_use_and_later_cancellation_revokes_visibility() {
+        let lease = TransformLease::new(Uuid::new_v4(), Uuid::new_v4());
+
+        assert!(lease.try_claim_publication());
+        assert!(!lease.try_claim_publication());
+        lease.cancel();
+
         assert!(!lease.may_publish());
     }
 }
