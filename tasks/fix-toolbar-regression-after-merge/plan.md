@@ -30,7 +30,7 @@ Fora do escopo:
 - R4: para `AXTextMarkerRange`, extrair texto e bounds usando os atributos parametrizados públicos `AXStringForTextMarkerRange` e `AXBoundsForTextMarkerRange`.
 - R5: falhas precisam indicar o estágio sanitizado (`system_wide`, `focused_element`, `selected_text`, `selected_range_type`, `text_marker_string`, `text_marker_bounds`, `text_marker_index`) sem conteúdo selecionado.
 - R6: ausência de permissão continua falhando fechada e não dispara extração alternativa que contorne TCC.
-- R7: captura bem-sucedida preserva texto, range Unicode, writability e geometria existente.
+- R7: captura bem-sucedida preserva texto, range Unicode e geometria; rota marker fica read-only até mutação reversível ser comprovada.
 - R8: observer, polling e refresh reutilizam o mesmo elemento focado; apply/restore continuam vinculados ao PID/range/texto do snapshot.
 - R9: nenhum AppKit/UI é executado fora da main thread.
 - R10: testes cobrem selected text direto, CFRange clássico, text marker range, self-exclusion, PID/range inválido e falha total.
@@ -77,6 +77,18 @@ Terceiro smoke:
 
 Conclusão: não usar CFRange presumido nem ler `AXValue` do documento inteiro. A próxima sonda classifica o tipo e trata text markers como tokens opacos.
 
+Quarto smoke:
+
+- seleção física por drag no TextEdit: marker range presente;
+- marker string: sucesso;
+- marker bounds: sucesso com rect válido;
+- capture/candidate/debounce/toolbar visible: sucesso;
+- processo estável;
+- seleção sintética via AX click/Cmd+A produziu range vazio/marker ausente e não é evidência representativa;
+- contrato de mutação marker não foi comprovado.
+
+Conclusão: o adapter marker de leitura e bounds está causalmente autorizado para seleção física. Nesta tarefa, snapshots marker são conservadoramente `writable=false`; escrita/undo marker ficam fora do escopo até spike reversível separado.
+
 ### Spike causal antes da correção
 
 Antes de habilitar qualquer extração alternativa, instrumentar o mesmo processo/bundle para classificar cada chamada sem payload:
@@ -101,7 +113,7 @@ Os dois primeiros spikes demonstraram que o caminho primário de foco funciona e
 6. se PID, role e foco permanecem coerentes durante toda a leitura;
 7. se `AXSelectedText` é settable no alvo editável.
 
-Se nenhuma extração por range funcionar, parar novamente e revisar o plano; não materializar seleção nem toolbar artificial.
+O quarto smoke autorizou a rota marker somente para leitura/bounds e seleção física. Não materializar seleção sintética vazia nem habilitar mutação sem contrato próprio.
 
 ### Extração validada por representação
 
@@ -113,7 +125,8 @@ Se nenhuma extração por range funcionar, parar novamente e revisar o plano; n�
 6. para text marker comprovado, manter o marker opaco e passá-lo no mesmo elemento/thread a `AXStringForTextMarkerRange` e `AXBoundsForTextMarkerRange`;
 7. copiar start/end markers via APIs públicas do SDK e obter índices parametrizados; validar location/length também contra `AXLengthForTextMarkerRange`;
 8. rejeitar índice negativo, range vazio, overflow, divergência de length, tipo CF inesperado, conteúdo vazio ou bounds inválidos;
-9. confirmar PID, role, foco e representação no mesmo elemento antes de materializar o snapshot.
+9. confirmar PID, role, foco e representação no mesmo elemento antes de materializar o snapshot;
+10. marcar snapshot marker como `writable=false`, independentemente de heurísticas do elemento.
 
 Trust falso, API disabled/not authorized, elemento inválido, `cannot_complete`, tipo CF inesperado e falhas estruturais encerram a captura. O próximo polling pode tentar novamente; não existe retry interno ilimitado.
 
@@ -159,7 +172,7 @@ Os diagnostics do loop devem ser limitados por transição/categoria para não g
 5. correlacionar a seleção do TextEdit com diagnostic de origem, capture success, candidate/debounce e overlay visible;
 6. observar toolbar com Traduzir/Aprimorar sem roubar foco;
 7. repetir seleção por teclado e mouse e conferir bounds coerentes;
-8. executar ação -> preview -> apply -> undo em campo editável;
+8. executar ação -> preview -> apply -> undo na rota clássica editável e ação -> nota na rota marker read-only;
 9. confirmar hide ao limpar seleção;
 10. alternar rapidamente de app e provar falha fechada sem escrita cross-app;
 11. provar que secure field não é capturado;
@@ -167,7 +180,7 @@ Os diagnostics do loop devem ser limitados por transição/categoria para não g
 13. confirmar que o processo permanece vivo;
 14. registrar evidência sem conteúdo sensível.
 
-Antes do gate completo, uma fixture descartável no TextEdit deve provar set/restore reversível com o mesmo target identity. Se `AXSelectedText` não for settable ou a restauração falhar, a captura marker pode ser entregue apenas como read-only/nota; não classificar TextEdit editável silenciosamente como sucesso total.
+O gate desta correção comprova toolbar e resultado em nota para a rota marker. Apply/undo por substituição só é validado para a rota clássica. Uma tarefa posterior com fixture descartável deverá provar set/restore marker reversível e target identity antes de classificar snapshots marker como editáveis.
 
 ### Merge e release
 
@@ -204,7 +217,7 @@ Após QA:
 
 ### Decisão sintetizada
 
-Manter o resolver system-wide e implementar um adapter mínimo de text marker somente depois da quarta prova causal completa (texto, bounds, índices, length e settable). Compartilhar aquisição/ownership em capture e observer, mas vincular replace/restore ao snapshot e identidade forte do elemento esperado. A correção só é aprovada com testes automatizados, QA dual e smoke real correlacionado por Computer Use.
+Manter o resolver system-wide e implementar o adapter mínimo de text marker causalmente comprovado para leitura, bounds, índices e length. Snapshots marker são read-only nesta tarefa. A rota clássica de replace/restore permanece vinculada ao snapshot esperado. A correção só é aprovada com testes automatizados, QA dual e smoke real correlacionado por Computer Use.
 
 ## 3. TASKS
 
@@ -213,7 +226,7 @@ Manter o resolver system-wide e implementar um adapter mínimo de text marker so
 - [x] T3 [LOW] Executar análise dual do plano.
 - [x] T4 [LOW] Sintetizar plano final.
 - [x] T5 [LOW] Adicionar diagnóstico tipado e executar três spikes que refutaram fallback de foco e CFRange presumido.
-- [ ] T6 [LOW] Executar sonda read-only de tipo, text marker string/bounds/index/length e settable.
+- [x] T6 [LOW] Executar sonda read-only de tipo, text marker string/bounds/index/length e settable.
 - [ ] T7 [MEDIUM] Implementar tipos puros de decisão, origem de extração e categoria AX.
 - [ ] T8 [MEDIUM] Implementar extração por representação no mesmo elemento com RAII e type-check estrito.
 - [ ] T9 [MEDIUM] Integrar extração em capture/observer e vincular replace/restore ao mesmo target esperado.
