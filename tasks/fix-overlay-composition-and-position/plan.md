@@ -51,7 +51,7 @@ Fora do escopo:
 - Marcar `document.documentElement` como overlay sincronicamente, antes de `createRoot`, e aplicar transparência explícita a `html`, `body` e `#root` somente nessa rota. A rota também neutraliza o `min-width: 320px`, dimensões mínimas, margin e overflow globais que conflitam com a toolbar de 236 pontos.
 - Reforçar no boundary AppKit que `NSWindow` não é opaca e usa `NSColor.clearColor`, preservando o painel não ativante. APIs privadas adicionais ou KVC não fazem parte da correção sem evidência.
 - Extrair `overlay_geometry.rs`, com modelos explícitos de `full_frame` e `visible_frame`. A tela é escolhida pelo centro da seleção; se não houver contenção, vence a maior interseção com `full_frame`, seguida da tela mais próxima como fallback determinístico.
-- Converter uma única vez o retângulo AX top-left para Cocoa bottom-left com a transformação global `cocoa_y = main_screen.frame.maxY - ax_y - ax_height`. O round-trip precisa ser testado em telas à esquerda, acima e abaixo da principal.
+- Converter uma única vez o retângulo AX top-left para Cocoa bottom-left com a transformação global `cocoa_y = zero_screen.frame.maxY - ax_y - ax_height`, obtendo a zero screen por `NSScreen.screens.first`. O round-trip precisa ser testado em telas à esquerda, acima e abaixo da principal.
 - Calcular em pontos Cocoa: `x = selection.midX - width / 2`; preferir `selection.maxY + gap` para posicionar acima; usar `selection.minY - gap - height` abaixo quando acima não couber; se nenhum lado couber, aplicar clamp determinístico no `visible_frame`.
 - No macOS, aplicar o ponto final diretamente ao `NSPanel` por `setFrameOrigin:` dentro do dispatcher da main thread. Não usar `LogicalPosition`, `PhysicalPosition` nem `scale_factor` no caminho macOS.
 - Manter o cálculo puro de ancoragem/clamp separado da aplicação nativa para permitir testes determinísticos e preservar o caminho Tauri fora do macOS.
@@ -142,6 +142,10 @@ Fora do escopo:
 
 ### Remediação da segunda revisão
 
-- [ ] Extrair responsabilidade de `src-tauri/src/lib.rs` até o arquivo ficar com no máximo 300 linhas, sem alterar o comportamento do runtime.
-- [ ] Reexecutar Rust, Vitest, cobertura, Playwright, clippy estrito, build, diff-check e limite de linhas.
+- [x] Extrair `AppRuntime` para `runtime.rs`, mantendo `src-tauri/src/lib.rs` com 298 linhas e sem alterar o comportamento do runtime.
+- [x] Mover a sinalização de readiness para um `useLayoutEffect` de componente, garantindo que o DOM do overlay já foi commitado antes da primeira chamada nativa.
+- [x] Fazer `overlay_surface_ready` confirmar sucesso somente depois que a main thread aplica o estado nativo, usando ACK assíncrono por oneshot.
+- [x] Implementar handshake idempotente com no máximo três tentativas, timeout por tentativa, backoff limitado, interrupção no primeiro ACK e erro observável após exaustão.
+- [x] Cobrir commit anterior ao handshake, ordem de layout effects, retry transitório, parada após sucesso, timeout limitado e preservação do hide-before-ready.
+- [x] Reexecutar Rust, Vitest, cobertura, Playwright, clippy estrito, build, diff-check e limite de linhas: 86 testes Rust, 44 Vitest e 5 E2E passaram; cobertura configurada permaneceu em 100%.
 - [ ] Submeter nova revisão QA antes de Computer Use, merge ou release.
