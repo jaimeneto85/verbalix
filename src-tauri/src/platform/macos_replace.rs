@@ -107,4 +107,32 @@ mod tests {
             Err(VerbalixError::StaleSelection)
         ));
     }
+
+    #[test]
+    fn unicode_text_and_utf16_range_must_still_match_the_original_target() {
+        let mut expected = snapshot(Some("editor"), true);
+        expected.text = "Olá 👩🏽‍💻".to_owned();
+        expected.range.length = expected.text.encode_utf16().count() as i64;
+        assert!(validate_current(&expected, &expected).is_ok());
+
+        let mut changed_text = expected.clone();
+        changed_text.text = "Olá 👩🏽‍🔧".to_owned();
+        let mut changed_length = expected.clone();
+        changed_length.range.length -= 1;
+        let mut changed_pid = expected.clone();
+        changed_pid.pid += 1;
+        let mut changed_identity = expected.clone();
+        changed_identity
+            .element_identity
+            .as_mut()
+            .unwrap()
+            .identifier = Some("another-editor".to_owned());
+
+        for changed in [changed_text, changed_length, changed_pid, changed_identity] {
+            assert!(matches!(
+                validate_current(&expected, &changed),
+                Err(VerbalixError::StaleSelection)
+            ));
+        }
+    }
 }

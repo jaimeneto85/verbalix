@@ -120,3 +120,7 @@ mod tests;
 #[cfg(test)]
 #[path = "coordinator_identity_tests.rs"]
 mod identity_tests;
+
+#[cfg(test)]
+#[path = "coordinator_transform_regression_tests.rs"]
+mod transform_regression_tests;
