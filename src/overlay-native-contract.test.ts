@@ -90,6 +90,9 @@ describe("macOS overlay native contract", () => {
     expect(window).toContain("window.destroy()");
     expect(window).toContain("reload_invalidation_failed");
     expect(window).toContain("window_configure_failed");
+    expect(window).toContain("invalidate_if_current");
+    expect(window).toContain("creation_invalidation_stale");
+    expect(window).toContain("reload_invalidation_stale");
     expect(window).toContain("creation_invalidation_failed");
     expect(window).toContain("rollback_destroy_failed");
     expect(window).toContain("rollback_hide_failed");

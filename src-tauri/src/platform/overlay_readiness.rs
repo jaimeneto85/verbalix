@@ -73,11 +73,18 @@ impl OverlayReadiness {
         Ok(true)
     }
 
-    pub fn invalidate_document(&self, surface: OverlaySurface) -> Result<(), VerbalixError> {
+    pub fn invalidate_if_current(
+        &self,
+        surface: OverlaySurface,
+        expected_generation: Uuid,
+    ) -> Result<bool, VerbalixError> {
         let mut state = self.lock()?;
+        if state.current.get(&surface) != Some(&expected_generation) {
+            return Ok(false);
+        }
         state.current.remove(&surface);
         state.ready.remove(&surface);
-        Ok(())
+        Ok(true)
     }
 
     pub fn request(&self, surface: OverlaySurface) -> Result<(), VerbalixError> {
@@ -151,6 +158,24 @@ mod tests {
             .mark_ready(OverlaySurface::Toolbar, current_generation)
             .unwrap());
         assert!(readiness.should_show(OverlaySurface::Toolbar).unwrap());
+    }
+
+    #[test]
+    fn stale_invalidation_preserves_the_current_ready_generation() {
+        let readiness = OverlayReadiness::default();
+        let surface = OverlaySurface::Toolbar;
+        let old_generation = readiness.begin_document(surface).unwrap();
+        let current_generation = readiness.begin_document(surface).unwrap();
+        readiness.request(surface).unwrap();
+        assert!(readiness.mark_ready(surface, current_generation).unwrap());
+
+        assert!(!readiness
+            .invalidate_if_current(surface, old_generation)
+            .unwrap());
+
+        assert!(readiness.has_document(surface).unwrap());
+        assert!(readiness.should_show(surface).unwrap());
+        assert!(readiness.mark_ready(surface, current_generation).unwrap());
     }
 
     #[test]

@@ -48,7 +48,13 @@ pub fn get_or_create(
                     if payload.event() == PageLoadEvent::Started
                         && reload_started.swap(true, Ordering::AcqRel)
                     {
-                        invalidate_reloaded_window(&window, &reload_readiness, surface, sequence);
+                        invalidate_reloaded_window(
+                            &window,
+                            &reload_readiness,
+                            surface,
+                            generation,
+                            sequence,
+                        );
                     }
                 })
                 .title("Verbalix")
@@ -86,22 +92,28 @@ pub(super) fn create_configured_document<T>(
         Ok(window) => window,
         Err(error) => {
             diagnostics::overlay("window_build_failed", label, sequence);
-            invalidate_creation(readiness, surface, sequence);
+            invalidate_creation(readiness, surface, generation, sequence);
             return Err(error);
         }
     };
     if let Err(error) = configure(&window) {
         diagnostics::overlay("window_configure_failed", label, sequence);
-        invalidate_creation(readiness, surface, sequence);
+        invalidate_creation(readiness, surface, generation, sequence);
         rollback_window(&window, label, sequence, destroy, hide);
         return Err(error);
     }
     Ok((window, generation))
 }
 
-fn invalidate_creation(readiness: &OverlayReadiness, surface: OverlaySurface, sequence: u64) {
-    match readiness.invalidate_document(surface) {
-        Ok(()) => diagnostics::overlay("creation_invalidated", surface.label(), sequence),
+fn invalidate_creation(
+    readiness: &OverlayReadiness,
+    surface: OverlaySurface,
+    generation: uuid::Uuid,
+    sequence: u64,
+) {
+    match readiness.invalidate_if_current(surface, generation) {
+        Ok(true) => diagnostics::overlay("creation_invalidated", surface.label(), sequence),
+        Ok(false) => diagnostics::overlay("creation_invalidation_stale", surface.label(), sequence),
         Err(_) => diagnostics::overlay("creation_invalidation_failed", surface.label(), sequence),
     }
 }
@@ -129,11 +141,13 @@ fn invalidate_reloaded_window(
     window: &WebviewWindow,
     readiness: &OverlayReadiness,
     surface: OverlaySurface,
+    generation: uuid::Uuid,
     sequence: u64,
 ) {
     let label = surface.label();
-    match readiness.invalidate_document(surface) {
-        Ok(()) => diagnostics::overlay("reload_invalidated", label, sequence),
+    match readiness.invalidate_if_current(surface, generation) {
+        Ok(true) => diagnostics::overlay("reload_invalidated", label, sequence),
+        Ok(false) => diagnostics::overlay("reload_invalidation_stale", label, sequence),
         Err(_) => diagnostics::overlay("reload_invalidation_failed", label, sequence),
     }
     rollback_window(

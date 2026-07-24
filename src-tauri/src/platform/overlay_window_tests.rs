@@ -14,7 +14,9 @@ fn reload_destroy_then_recreate_uses_a_fresh_generation_and_ack() {
     readiness.request(surface).unwrap();
     assert!(readiness.mark_ready(surface, old_generation).unwrap());
 
-    readiness.invalidate_document(surface).unwrap();
+    assert!(readiness
+        .invalidate_if_current(surface, old_generation)
+        .unwrap());
     assert!(!readiness.mark_ready(surface, old_generation).unwrap());
     assert!(!readiness.should_show(surface).unwrap());
 
@@ -131,4 +133,42 @@ fn failed_destroy_and_hide_still_leave_creation_invalidated() {
     assert!(destroy_attempted.get());
     assert!(hide_attempted.get());
     assert!(!readiness.has_document(OverlaySurface::Note).unwrap());
+}
+
+#[test]
+fn stale_transaction_rollback_preserves_a_new_ready_document() {
+    let readiness = OverlayReadiness::default();
+    let surface = OverlaySurface::Toolbar;
+    let transaction_generation = RefCell::new(None);
+    let current_generation = RefCell::new(None);
+
+    let result = create_configured_document(
+        &readiness,
+        surface,
+        4,
+        |generation| {
+            transaction_generation.replace(Some(generation));
+            Ok("old-window")
+        },
+        |_| {
+            let generation = readiness.begin_document(surface)?;
+            readiness.request(surface)?;
+            assert!(readiness.mark_ready(surface, generation)?);
+            current_generation.replace(Some(generation));
+            Err(VerbalixError::LocalFailure)
+        },
+        |_| Ok(()),
+        |_| Ok(()),
+    );
+
+    assert!(result.is_err());
+    assert_ne!(
+        *transaction_generation.borrow(),
+        *current_generation.borrow()
+    );
+    assert!(readiness.has_document(surface).unwrap());
+    assert!(readiness.should_show(surface).unwrap());
+    assert!(readiness
+        .mark_ready(surface, current_generation.borrow().unwrap())
+        .unwrap());
 }
