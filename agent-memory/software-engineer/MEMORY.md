@@ -60,6 +60,8 @@
 - A defesa de autenticação da Edge confirma o bearer no endpoint `/auth/v1/user` e rejeita a anon key e papéis anônimos mesmo com `verify_jwt=true`.
 - Limites da transformação são aplicados em três camadas: body HTTP em streaming antes do parse, caracteres Unicode no contrato e tokens/caracteres na saída do provider.
 - Timeout total usa `Promise.race` além de `AbortController`, pois um adapter defeituoso pode ignorar o sinal de cancelamento.
+- O provider da Responses API usa `reasoning.effort: none` e orçamento de output calculado por caracteres Unicode: `ceil(chars * 2/3 + 128)`, limitado entre 500 e 8.000 tokens. Isso evita pagar o teto em seleções curtas sem quebrar o contrato de 12.000 caracteres.
+- Envelopes OpenAI só são aceitos com `status === "completed"` e `incomplete_details` ausente ou nulo. Status ausente, desconhecido ou incompleto, inclusive `max_output_tokens`, falha como `INVALID_RESPONSE` antes do parse e nunca chega a replace/history.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.

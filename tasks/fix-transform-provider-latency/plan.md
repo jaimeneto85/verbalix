@@ -4,10 +4,10 @@
 
 ### Incluído
 
-- [ ] Ajustar o payload da Responses API para resposta rápida e limitada.
-- [ ] Usar `reasoning.effort: "none"` explicitamente.
-- [ ] Tornar `max_output_tokens` proporcional à entrada, com piso 500 e teto 8.000 compatível com o contrato de 12.000 caracteres.
-- [ ] Preservar timeout total de 20 segundos e erro tipado/acionável.
+- [x] Ajustar o payload da Responses API para resposta rápida e limitada.
+- [x] Usar `reasoning.effort: "none"` explicitamente.
+- [x] Tornar `max_output_tokens` proporcional à entrada, com piso 500 e teto 8.000 compatível com o contrato de 12.000 caracteres.
+- [x] Preservar timeout total de 20 segundos e erro tipado/acionável.
 - [ ] Após QA de código, atualizar `OPENAI_MODEL` remoto para `gpt-5.4-nano`, implantar a Edge Function e executar smoke autenticado.
 - [ ] Verificar que transformações bem-sucedidas geram histórico e que insert/list respeitam o usuário autenticado/RLS.
 
@@ -35,11 +35,11 @@
 ### Requisitos funcionais
 
 - [ ] RF01: Translate e Improve usam `gpt-5.4-nano` configurado por secret remoto.
-- [ ] RF02: O payload envia `reasoning: { effort: "none" }`.
-- [ ] RF03: `max_output_tokens` usa orçamento proporcional testável, com piso 500 e teto 8.000.
-- [ ] RF04: Timeout continua retornando `PROVIDER_TIMEOUT` 504 com feedback acionável no app.
+- [x] RF02: O payload envia `reasoning: { effort: "none" }`.
+- [x] RF03: `max_output_tokens` usa orçamento proporcional testável, com piso 500 e teto 8.000.
+- [x] RF04: Timeout continua retornando `PROVIDER_TIMEOUT` 504 com feedback acionável no app.
 - [ ] RF05: Transformação autenticada bem-sucedida é seguida de insert e aparece no listHistory do mesmo usuário.
-- [ ] RF06: Resposta incompleta por `max_output_tokens` é rejeitada explicitamente e nunca aplicada como sucesso truncado.
+- [x] RF06: Resposta incompleta por `max_output_tokens` é rejeitada explicitamente e nunca aplicada como sucesso truncado.
 
 ### Requisitos não funcionais
 
@@ -90,9 +90,9 @@
 
 ### Implementação
 
-- [ ] T2.1 `[LOW]` Ajustar payload do provider.
-- [ ] T2.2 `[LOW]` Preservar roteamento tipado de timeout.
-- [ ] T2.3 `[MEDIUM]` Integrar testes de insert/list de histórico ao sucesso de Translate/Improve.
+- [x] T2.1 `[LOW]` Ajustar payload do provider.
+- [x] T2.2 `[LOW]` Preservar roteamento tipado de timeout.
+- [x] T2.3 `[MEDIUM]` Integrar testes de insert/list de histórico ao sucesso de Translate/Improve.
 
 ### QA e operação
 
@@ -121,3 +121,10 @@
 ### Síntese
 
 O payload de baixa latência será otimizado sem enfraquecer o contrato de conteúdo longo: reasoning fica explicitamente desabilitado e o orçamento deixa de ser 8.000 para todos os casos, mas mantém esse teto quando a entrada realmente exige. O deploy remoto terá rollback e só ocorrerá depois do QA de código.
+
+## 🔄 Parallelization Synthesis — Software Engineer
+
+- 🔴 Estimativa pessimista: 1 agente; orçamento, envelope e testes alteram o mesmo boundary.
+- 🟢 Estimativa otimista: 2 agentes; orçamento puro poderia ser separado dos fixtures do provider.
+- Decisão: 1 agente sequencial. Os arquivos são pequenos, a sobreposição supera 30% e a implementação precisa manter payload e validação atômicos.
+- Risco de conflito: baixo.
