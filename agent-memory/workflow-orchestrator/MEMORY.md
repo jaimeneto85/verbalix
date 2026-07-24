@@ -30,6 +30,8 @@
 - Contenção cursor-frame é uma heurística espacial, não temporal. Em editores grandes, validar por Computer Use seleção por mouse, teclado e cursor movido antes de merge/release; staleness exige um sinal causal separado.
 - Readiness de overlay precisa de UUID por documento, caller `NSView`, ACK após a main thread e compare-and-invalidate. Reload e rollback devem destruir/inutilizar apenas a própria geração, nunca o documento atual.
 - A criação de overlay é transacional: falha depois do build invalida a geração e destrói a janela, com hide diagnosticado como fallback.
+- Publicação visual guardada precisa separar a lifetime cancelável da ação de um permit single-use por comando. Um claim único na lifetime bloqueia feedbacks sequenciais legítimos como Preview → erro de Apply.
+- O boundary visual correto é `prepare → claim do permit → emit/show`: cancelamento durante preparação vence com zero efeito; cancelamento depois do claim lineariza `publish → hide` e termina oculto.
 
 ## Aprendizados de QA
 - A matriz de compatibilidade precisa cobrir seleção por mouse e teclado, campos editáveis e somente leitura, múltiplos monitores e conteúdo Unicode.
@@ -39,6 +41,7 @@
 - Aprovação automatizada de código não substitui o spike manual AX/AppKit na matriz antes da distribuição.
 - Mudança frontend, mesmo restrita a UX de permissão, precisa do gate E2E além de Vitest; o E2E simulado deve declarar explicitamente que não comprova o estado real do TCC.
 - Smoke de botão sem backend deve provar erro visível/acionável, não IA funcional. Tradução real exige configuração pública do Supabase embutida no bundle, Edge implantada e sessão válida.
+- Corridas de overlay devem ser testadas com sincronização determinística, incluindo primeira e segunda publicação da mesma ação, ACK tardio e visibilidade final; sleeps não provam a ordem.
 
 ## Dependências & Integrações
 - Accessibility e AppKit exigem permissão de Acessibilidade concedida pelo usuário.

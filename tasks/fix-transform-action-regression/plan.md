@@ -54,8 +54,8 @@
 - [x] RF11: Candidate diferente ou invalidação real antes do setter revoga a escrita sem depender do mutex de estado.
 - [x] RF12: Candidate diferente ou invalidação real deve atualizar o estado enquanto revalidação/escrita/overlay da ação anterior está bloqueado.
 - [x] RF13: Nota, preview, undo e erro carregam a guarda da ação até o executor visual; uma guarda cancelada produz zero publicação.
-- [ ] RF14: O executor visual revalida/lineariza a publicação depois da preparação da janela; cancelamento durante `get/create/place` produz zero `emit/show`.
-- [ ] RF15: A guarda de vida da ação aceita múltiplos feedbacks legítimos; cada comando visual possui autorização atômica própria, revogada pelo cancelamento global enquanto ainda não reivindicada.
+- [x] RF14: O executor visual revalida/lineariza a publicação depois da preparação da janela; cancelamento durante `get/create/place` produz zero `emit/show`.
+- [x] RF15: A guarda de vida da ação aceita múltiplos feedbacks legítimos; cada comando visual possui autorização atômica própria, revogada pelo cancelamento global enquanto ainda não reivindicada.
 
 ### Requisitos não funcionais
 
@@ -79,8 +79,8 @@
 - [ ] CA11: Falhas de pin, Aplicar e Desfazer exibem feedback tipado guardado e não parecem cliques inertes.
 - [ ] CA12: Undo de A concorrente com Candidate B nunca apaga, oculta ou substitui B.
 - [ ] CA13: Readiness/falha de A enfileirada antes do provider nunca aparece sobre Candidate B.
-- [ ] CA14: Candidate/invalidation durante a preparação visual de A vence antes do boundary de publicação e deixa zero evento, zero janela visível e zero payload corrente de A.
-- [ ] CA15: Preview, undo ou toolbar já publicados não impedem erro subsequente da mesma ação; cancelamento durante a preparação do segundo comando continua produzindo zero efeito stale.
+- [x] CA14: Candidate/invalidation durante a preparação visual de A vence antes do boundary de publicação e deixa zero evento, zero janela visível e zero payload corrente de A.
+- [x] CA15: Preview, undo ou toolbar já publicados não impedem erro subsequente da mesma ação; cancelamento durante a preparação do segundo comando continua produzindo zero efeito stale.
 
 ### Edge cases
 
@@ -160,8 +160,8 @@
 - [x] T2.6 `[HIGH]` Cancelar logicamente a request quando uma captura bem-sucedida identifica outro alvo, preservando apenas falhas transitórias sem candidato.
 - [x] T2.7 `[HIGH]` Remover I/O do mutex de estado, introduzir lease com claim CAS no boundary do setter e guardar publicações no executor.
 - [x] T2.8 `[HIGH]` Guardar readiness e erros de pin/apply/undo, tornar undo condicional e remover histórico/show_toolbar do caminho bloqueante.
-- [ ] T2.9 `[HIGH]` Separar preparação de publicação visual e fechar o TOCTOU entre a checagem inicial da guarda e `emit/show`.
-- [ ] T2.10 `[HIGH]` Substituir o claim visual single-use por lifetime guard reutilizável e claim independente por comando, todos revogáveis pelo cancelamento da ação.
+- [x] T2.9 `[HIGH]` Separar preparação de publicação visual e fechar o TOCTOU entre a checagem inicial da guarda e `emit/show`.
+- [x] T2.10 `[HIGH]` Substituir o claim visual single-use por lifetime guard reutilizável e claim independente por comando, todos revogáveis pelo cancelamento da ação.
 
 ### Fase 3 — Testes
 
@@ -174,8 +174,8 @@
 - [x] T3.7 `[HIGH]` Provar supersede antes/depois do provider, mesmo texto com PID/identidade diferente, same-target preservado e ausência de feedback stale.
 - [x] T3.8 `[HIGH]` Provar com adapters bloqueáveis Candidate/Invalidated antes e depois do claim, apply preview concorrente e `ShowResult` cancelado antes da execução.
 - [x] T3.9 `[HIGH]` Provar readiness pré-pin, undo bloqueável versus Candidate B, feedback de pin/apply/undo, history timeout/off-critical-path e show_toolbar sem mutex.
-- [ ] T3.10 `[HIGH]` Provar deterministicamente, sem sleeps, cancelamento durante preparação visual com zero `emit/show/payload`, além da ordem após o boundary linearizado.
-- [ ] T3.11 `[HIGH]` Provar Preview→erro Apply, Undo→erro Undo, Toolbar→erro pin, cancelamento durante a segunda preparação e supersede pós-claim terminando oculto.
+- [x] T3.10 `[HIGH]` Provar deterministicamente, sem sleeps, cancelamento durante preparação visual com zero `emit/show/payload`, além da ordem após o boundary linearizado.
+- [x] T3.11 `[HIGH]` Provar Preview→erro Apply, Undo→erro Undo, Toolbar→erro pin, cancelamento durante a segunda preparação e supersede pós-claim terminando oculto.
 
 ### Fase 4 — QA real
 
