@@ -122,15 +122,8 @@ pub fn overlay_position(label: &str, sequence: u64, x: f64, y: f64) {
 
 fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
     format!(
-        "snapshot_id={} pid={} range_location={} range_length={} bounds={:.1},{:.1},{:.1},{:.1} geometry_source={} writable={}",
+        "snapshot_id={} geometry_source={} writable={}",
         snapshot.id,
-        snapshot.pid,
-        snapshot.range.location,
-        snapshot.range.length,
-        snapshot.bounds.x,
-        snapshot.bounds.y,
-        snapshot.bounds.width,
-        snapshot.bounds.height,
         snapshot
             .geometry_source
             .map(|source| source.as_str())
@@ -190,8 +183,10 @@ mod tests {
         let metadata = snapshot_metadata(&snapshot);
 
         assert!(!metadata.contains("secret selected text"));
-        assert!(metadata.contains("pid=42"));
-        assert!(metadata.contains("range_location=3"));
+        assert!(!metadata.contains("pid=42"));
+        assert!(!metadata.contains("range_location"));
+        assert!(!metadata.contains("range_length"));
+        assert!(!metadata.contains("bounds="));
         assert!(metadata.contains("geometry_source=unknown"));
     }
 

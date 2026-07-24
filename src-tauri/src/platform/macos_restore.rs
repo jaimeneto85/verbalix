@@ -1,4 +1,7 @@
-use super::macos_accessibility::{AXUIElementRef, MacAccessibility, AX_SUCCESS};
+use super::{
+    macos_accessibility::{MacAccessibility, AX_SUCCESS},
+    macos_ax::AXUIElementRef,
+};
 use crate::domain::{SelectionSnapshot, VerbalixError};
 use core_foundation::{
     base::{CFRelease, CFTypeRef, TCFType},

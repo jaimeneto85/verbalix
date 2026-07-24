@@ -40,6 +40,15 @@ pub struct TextRange {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SelectionElementIdentity {
+    pub role: String,
+    pub subrole: Option<String>,
+    pub identifier: Option<String>,
+    pub frame: Rect,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SelectionSnapshot {
     pub id: Uuid,
     pub pid: i32,
@@ -48,6 +57,8 @@ pub struct SelectionSnapshot {
     pub range: TextRange,
     pub bounds: Rect,
     pub geometry_source: Option<GeometrySource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub element_identity: Option<SelectionElementIdentity>,
     pub writable: bool,
     pub captured_at_ms: u128,
 }
@@ -69,6 +80,7 @@ impl SelectionSnapshot {
             range,
             bounds,
             geometry_source: None,
+            element_identity: None,
             writable,
             captured_at_ms: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -82,11 +94,17 @@ impl SelectionSnapshot {
         self
     }
 
+    pub fn with_element_identity(mut self, identity: SelectionElementIdentity) -> Self {
+        self.element_identity = Some(identity);
+        self
+    }
+
     pub fn same_target(&self, other: &Self) -> bool {
         self.pid == other.pid
             && self.bundle_id == other.bundle_id
             && self.text == other.text
             && self.range == other.range
+            && self.element_identity == other.element_identity
     }
 }
 
@@ -196,5 +214,18 @@ mod tests {
         changed.geometry_source = Some(GeometrySource::TextMarkerRange);
         changed.writable = false;
         assert!(first.same_target(&changed));
+
+        changed.element_identity = Some(SelectionElementIdentity {
+            role: "AXTextArea".to_owned(),
+            subrole: None,
+            identifier: None,
+            frame: Rect {
+                x: 2.0,
+                y: 3.0,
+                width: 100.0,
+                height: 40.0,
+            },
+        });
+        assert!(!first.same_target(&changed));
     }
 }

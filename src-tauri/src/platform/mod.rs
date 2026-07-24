@@ -6,13 +6,23 @@ mod overlay_dispatcher;
 #[cfg(target_os = "macos")]
 mod macos_accessibility;
 #[cfg(target_os = "macos")]
+mod macos_ax;
+#[cfg(target_os = "macos")]
+mod macos_classic_range;
+#[cfg(target_os = "macos")]
 pub(crate) mod macos_focus;
+#[cfg(all(target_os = "macos", test))]
+mod macos_focus_tests;
 #[cfg(target_os = "macos")]
 mod macos_geometry;
 #[cfg(target_os = "macos")]
 mod macos_observer;
 #[cfg(target_os = "macos")]
 mod macos_restore;
+#[cfg(target_os = "macos")]
+mod macos_selection;
+#[cfg(target_os = "macos")]
+mod macos_text_marker;
 
 pub use clipboard::SystemClipboard;
 pub use note_result::NoteResultPayload;

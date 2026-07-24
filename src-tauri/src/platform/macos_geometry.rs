@@ -1,7 +1,7 @@
-use super::macos_accessibility::AXUIElementRef;
+use super::macos_ax::AXUIElementRef;
 use crate::domain::{GeometrySource, Rect};
 use core_foundation::{
-    base::{CFRelease, CFTypeRef, TCFType},
+    base::{CFGetTypeID, CFRelease, CFTypeRef, TCFType},
     string::{CFString, CFStringRef},
 };
 use std::{ffi::c_void, ptr};
@@ -58,6 +58,8 @@ extern "C" {
         value: *mut CFTypeRef,
     ) -> AXError;
     fn AXValueCreate(value_type: i32, value: *const c_void) -> AXValueRef;
+    fn AXValueGetType(value: AXValueRef) -> i32;
+    fn AXValueGetTypeID() -> usize;
     fn AXValueGetValue(value: AXValueRef, value_type: i32, output: *mut c_void) -> u8;
     fn CGEventCreate(source: *const c_void) -> CGEventRef;
     fn CGEventGetLocation(event: CGEventRef) -> CGPoint;
@@ -115,6 +117,10 @@ fn focused_element_frame(element: AXUIElementRef) -> Option<Rect> {
     })
 }
 
+pub(super) fn element_frame(element: AXUIElementRef) -> Option<Rect> {
+    focused_element_frame(element)
+}
+
 fn cursor_position() -> Option<CGPoint> {
     let event = unsafe { CGEventCreate(ptr::null()) };
     if event.is_null() {
@@ -150,6 +156,9 @@ fn read_rect(value: CFTypeRef) -> Option<Rect> {
 }
 
 pub(super) fn rect_from_value(value: CFTypeRef) -> Option<Rect> {
+    if !has_ax_value_type(value, AX_VALUE_CG_RECT) {
+        return None;
+    }
     let mut rect = CGRect::default();
     let success =
         unsafe { AXValueGetValue(value, AX_VALUE_CG_RECT, (&mut rect as *mut CGRect).cast()) };
@@ -164,6 +173,10 @@ pub(super) fn rect_from_value(value: CFTypeRef) -> Option<Rect> {
 }
 
 fn read_point(value: CFTypeRef) -> Option<CGPoint> {
+    if !has_ax_value_type(value, AX_VALUE_CG_POINT) {
+        release(value);
+        return None;
+    }
     let mut point = CGPoint::default();
     let success = unsafe {
         AXValueGetValue(
@@ -177,11 +190,21 @@ fn read_point(value: CFTypeRef) -> Option<CGPoint> {
 }
 
 fn read_size(value: CFTypeRef) -> Option<CGSize> {
+    if !has_ax_value_type(value, AX_VALUE_CG_SIZE) {
+        release(value);
+        return None;
+    }
     let mut size = CGSize::default();
     let success =
         unsafe { AXValueGetValue(value, AX_VALUE_CG_SIZE, (&mut size as *mut CGSize).cast()) };
     release(value);
     (success != 0).then_some(size)
+}
+
+fn has_ax_value_type(value: CFTypeRef, expected_type: i32) -> bool {
+    !value.is_null()
+        && unsafe { CFGetTypeID(value) == AXValueGetTypeID() }
+        && unsafe { AXValueGetType(value) == expected_type }
 }
 
 fn release(value: CFTypeRef) {
