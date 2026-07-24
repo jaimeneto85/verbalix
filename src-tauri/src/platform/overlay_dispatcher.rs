@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+use crate::platform::macos_overlay_panel;
 use crate::{
     diagnostics,
     domain::{Rect, VerbalixError},
@@ -7,9 +9,9 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
-use tauri::{
-    AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-};
+#[cfg(not(target_os = "macos"))]
+use tauri::LogicalPosition;
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OverlayCommand {
@@ -152,11 +154,27 @@ fn window(
     .build()
     .map_err(|_| VerbalixError::LocalFailure)?;
     #[cfg(target_os = "macos")]
-    configure_nonactivating_panel(&window)?;
+    macos_overlay_panel::configure(&window)?;
     diagnostics::overlay("window_created", label, sequence);
     Ok(window)
 }
 
+#[cfg(target_os = "macos")]
+fn place(
+    _app: &AppHandle,
+    window: &WebviewWindow,
+    bounds: Rect,
+    width: f64,
+    height: f64,
+    label: &str,
+    sequence: u64,
+) -> Result<(), VerbalixError> {
+    let origin = macos_overlay_panel::place(window, bounds, width, height)?;
+    diagnostics::overlay_position(label, sequence, origin.x, origin.y);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
 fn place(
     app: &AppHandle,
     window: &WebviewWindow,
@@ -166,33 +184,21 @@ fn place(
     label: &str,
     sequence: u64,
 ) -> Result<(), VerbalixError> {
-    let frame = visible_frames().into_iter().find(|frame| {
-        bounds.x >= frame.x
-            && bounds.x <= frame.x + frame.width
-            && bounds.y >= frame.y
-            && bounds.y <= frame.y + frame.height
-    });
-    let frame = frame.or_else(|| {
-        app.available_monitors().ok().and_then(|monitors| {
-            monitors.into_iter().find_map(|monitor| {
-                let scale = monitor.scale_factor();
-                let position = monitor.position();
-                let size = monitor.size();
-                let frame = Rect {
-                    x: f64::from(position.x) / scale,
-                    y: f64::from(position.y) / scale,
-                    width: f64::from(size.width) / scale,
-                    height: f64::from(size.height) / scale,
-                };
-                let contained = bounds.x >= frame.x
-                    && bounds.x <= frame.x + frame.width
-                    && bounds.y >= frame.y
-                    && bounds.y <= frame.y + frame.height;
-                contained.then_some(frame)
-            })
+    let frame = app.available_monitors().ok().and_then(|monitors| {
+        monitors.into_iter().find_map(|monitor| {
+            let scale = monitor.scale_factor();
+            let position = monitor.position();
+            let size = monitor.size();
+            let frame = Rect {
+                x: f64::from(position.x) / scale,
+                y: f64::from(position.y) / scale,
+                width: f64::from(size.width) / scale,
+                height: f64::from(size.height) / scale,
+            };
+            contains(frame, bounds).then_some(frame)
         })
     });
-    let (x, y) = anchored_origin(bounds, width, height, frame);
+    let (x, y) = legacy_anchored_origin(bounds, width, height, frame);
     window
         .set_position(LogicalPosition::new(x, y))
         .map_err(|_| VerbalixError::LocalFailure)?;
@@ -217,36 +223,16 @@ fn show_and_confirm(
     }
 }
 
-#[cfg(target_os = "macos")]
-fn visible_frames() -> Vec<Rect> {
-    use objc2::MainThreadMarker;
-    use objc2_app_kit::NSScreen;
-    let Some(mtm) = MainThreadMarker::new() else {
-        return Vec::new();
-    };
-    let primary_height = NSScreen::mainScreen(mtm)
-        .map(|screen| screen.frame().size.height)
-        .unwrap_or_default();
-    NSScreen::screens(mtm)
-        .iter()
-        .map(|screen| {
-            let visible = screen.visibleFrame();
-            Rect {
-                x: visible.origin.x,
-                y: primary_height - visible.origin.y - visible.size.height,
-                width: visible.size.width,
-                height: visible.size.height,
-            }
-        })
-        .collect()
+#[cfg(not(target_os = "macos"))]
+fn contains(frame: Rect, bounds: Rect) -> bool {
+    bounds.x >= frame.x
+        && bounds.x <= frame.x + frame.width
+        && bounds.y >= frame.y
+        && bounds.y <= frame.y + frame.height
 }
 
 #[cfg(not(target_os = "macos"))]
-fn visible_frames() -> Vec<Rect> {
-    Vec::new()
-}
-
-pub fn anchored_origin(
+fn legacy_anchored_origin(
     bounds: Rect,
     width: f64,
     height: f64,
@@ -261,30 +247,6 @@ pub fn anchored_origin(
         );
     }
     (x.max(8.0), y.max(8.0))
-}
-
-#[cfg(target_os = "macos")]
-fn configure_nonactivating_panel(window: &WebviewWindow) -> Result<(), VerbalixError> {
-    use objc2::{
-        msg_send,
-        runtime::{AnyClass, AnyObject},
-    };
-    let pointer = window
-        .ns_window()
-        .map_err(|_| VerbalixError::LocalFailure)?
-        .cast::<AnyObject>();
-    let object = unsafe { pointer.as_ref() }.ok_or(VerbalixError::LocalFailure)?;
-    let panel_class = AnyClass::get(c"NSPanel").ok_or(VerbalixError::LocalFailure)?;
-    unsafe {
-        AnyObject::set_class(object, panel_class);
-        let style: usize = msg_send![object, styleMask];
-        let _: () = msg_send![object, setStyleMask: style | (1 << 7)];
-        let _: () = msg_send![object, setHidesOnDeactivate: false];
-        let _: () = msg_send![object, setBecomesKeyOnlyIfNeeded: true];
-        let _: () = msg_send![object, setLevel: 101isize];
-        let _: () = msg_send![object, setCollectionBehavior: (1usize << 0) | (1usize << 8)];
-    }
-    Ok(())
 }
 
 #[cfg(test)]

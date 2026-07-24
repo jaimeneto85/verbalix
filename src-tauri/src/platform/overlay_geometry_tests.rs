@@ -122,6 +122,32 @@ fn chooses_largest_intersection_when_center_is_in_a_display_gap() {
 }
 
 #[test]
+fn resolves_a_center_on_a_display_boundary_deterministically() {
+    let left = screen(
+        rect(-1000.0, 0.0, 1000.0, 900.0),
+        rect(-1000.0, 0.0, 1000.0, 800.0),
+    );
+    let right = primary();
+    let selected = CocoaRect(rect(-100.0, 200.0, 200.0, 20.0));
+
+    assert_eq!(select_screen(selected, &[left, right]), Some(right));
+    assert_eq!(select_screen(selected, &[right, left]), Some(right));
+}
+
+#[test]
+fn chooses_the_nearest_display_for_a_selection_outside_all_frames() {
+    let left = screen(
+        rect(-1000.0, 0.0, 1000.0, 900.0),
+        rect(-1000.0, 0.0, 1000.0, 800.0),
+    );
+    let right = primary();
+    let selected = CocoaRect(rect(1800.0, 200.0, 20.0, 20.0));
+
+    assert_eq!(select_screen(selected, &[left, right]), Some(right));
+    assert_eq!(select_screen(selected, &[right, left]), Some(right));
+}
+
+#[test]
 fn handles_displays_left_above_and_below_the_main_screen() {
     let left = screen(
         rect(-1200.0, 0.0, 1200.0, 900.0),
@@ -159,6 +185,31 @@ fn point_geometry_is_identical_for_one_x_and_two_x_displays() {
     let two_x = anchored_origin(selection, 236.0, 52.0, primary());
 
     assert_eq!(one_x, two_x);
+}
+
+#[test]
+fn toolbar_and_note_heights_use_the_same_stateless_layout() {
+    let selection = CocoaRect(rect(200.0, 740.0, 100.0, 20.0));
+
+    let toolbar = anchored_origin(selection, 236.0, 52.0, primary());
+    let note = anchored_origin(selection, 420.0, 220.0, primary());
+    let toolbar_again = anchored_origin(selection, 236.0, 52.0, primary());
+
+    assert_eq!(toolbar, Some(CocoaPoint { x: 132.0, y: 678.0 }));
+    assert_eq!(note, Some(CocoaPoint { x: 40.0, y: 510.0 }));
+    assert_eq!(toolbar_again, toolbar);
+}
+
+#[test]
+fn clamps_deterministically_when_neither_direction_fits() {
+    let origin = anchored_origin(
+        CocoaRect(rect(300.0, 350.0, 100.0, 20.0)),
+        236.0,
+        780.0,
+        primary(),
+    );
+
+    assert_eq!(origin, Some(CocoaPoint { x: 232.0, y: 12.0 }));
 }
 
 #[test]

@@ -117,7 +117,6 @@ impl OverlayPort for TauriOverlay {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::overlay_dispatcher::anchored_origin;
     use std::sync::Mutex;
 
     #[derive(Default)]
@@ -188,22 +187,5 @@ mod tests {
             overlay.hide_all(),
             Err(VerbalixError::LocalFailure)
         ));
-    }
-
-    #[test]
-    fn centers_toolbar_above_selection() {
-        assert_eq!(anchored_origin(bounds(), 236.0, 52.0, None), (132.0, 238.0));
-    }
-
-    #[test]
-    fn clamps_overlay_to_top_and_left_safe_margin() {
-        let selection = Rect {
-            x: 0.0,
-            y: 4.0,
-            width: 1.0,
-            height: 1.0,
-        };
-
-        assert_eq!(anchored_origin(selection, 420.0, 220.0, None), (8.0, 8.0));
     }
 }
