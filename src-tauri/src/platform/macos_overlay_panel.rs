@@ -1,7 +1,8 @@
 use crate::{
     domain::{Rect, VerbalixError},
     platform::overlay_geometry::{
-        anchored_origin, ax_to_cocoa, select_screen, AxRect, CocoaPoint, CocoaRect, ScreenFrame,
+        anchored_origin, ax_to_cocoa, select_screen, zero_screen_max_y, AxRect, CocoaPoint,
+        CocoaRect, ScreenFrame,
     },
 };
 use objc2::{
@@ -41,22 +42,27 @@ pub fn place(
     height: f64,
 ) -> Result<CocoaPoint, VerbalixError> {
     let mtm = MainThreadMarker::new().ok_or(VerbalixError::LocalFailure)?;
-    let main_screen = NSScreen::mainScreen(mtm).ok_or(VerbalixError::LocalFailure)?;
-    let main_frame = main_screen.frame();
-    let main_max_y = main_frame.origin.y + main_frame.size.height;
-    let screens: Vec<_> = NSScreen::screens(mtm)
+    let native_screens = NSScreen::screens(mtm);
+    let zero_frame = native_screens
+        .iter()
+        .next()
+        .map(|screen| screen.frame())
+        .ok_or(VerbalixError::LocalFailure)?;
+    let screens: Vec<_> = native_screens
         .iter()
         .map(|screen| ScreenFrame {
             full: CocoaRect(rect(screen.frame())),
             visible: CocoaRect(rect(screen.visibleFrame())),
         })
         .collect();
-    let selection = ax_to_cocoa(AxRect(bounds), main_max_y).ok_or(VerbalixError::LocalFailure)?;
+    let reference_max_y = zero_screen_max_y(&screens).ok_or(VerbalixError::LocalFailure)?;
+    let selection =
+        ax_to_cocoa(AxRect(bounds), reference_max_y).ok_or(VerbalixError::LocalFailure)?;
     let screen = select_screen(selection, &screens).ok_or(VerbalixError::LocalFailure)?;
     let origin =
         anchored_origin(selection, width, height, screen).ok_or(VerbalixError::LocalFailure)?;
     let object = native_object(window)?;
-    let mut native_origin = main_frame.origin;
+    let mut native_origin = zero_frame.origin;
     native_origin.x = origin.x;
     native_origin.y = origin.y;
     unsafe {

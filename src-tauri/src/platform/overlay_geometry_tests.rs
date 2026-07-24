@@ -178,13 +178,20 @@ fn handles_displays_left_above_and_below_the_main_screen() {
 }
 
 #[test]
-fn point_geometry_is_identical_for_one_x_and_two_x_displays() {
-    let selection = CocoaRect(rect(320.0, 240.0, 120.0, 30.0));
+fn zero_screen_is_the_reference_when_the_key_window_is_on_another_display() {
+    let zero = primary();
+    let key_window_screen = screen(
+        rect(0.0, 900.0, 1200.0, 1200.0),
+        rect(0.0, 900.0, 1200.0, 1160.0),
+    );
+    let screens = [zero, key_window_screen];
 
-    let one_x = anchored_origin(selection, 236.0, 52.0, primary());
-    let two_x = anchored_origin(selection, 236.0, 52.0, primary());
+    let reference_max_y = zero_screen_max_y(&screens).unwrap();
+    let selection = ax_to_cocoa(AxRect(rect(320.0, -250.0, 120.0, 30.0)), reference_max_y).unwrap();
 
-    assert_eq!(one_x, two_x);
+    assert_eq!(reference_max_y, 900.0);
+    assert_eq!(selection, CocoaRect(rect(320.0, 1120.0, 120.0, 30.0)));
+    assert_eq!(select_screen(selection, &screens), Some(key_window_screen));
 }
 
 #[test]

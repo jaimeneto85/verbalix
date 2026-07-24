@@ -70,6 +70,14 @@ pub fn select_screen(selection: CocoaRect, screens: &[ScreenFrame]) -> Option<Sc
     )
 }
 
+pub fn zero_screen_max_y(screens: &[ScreenFrame]) -> Option<f64> {
+    let zero = screens
+        .first()
+        .copied()
+        .filter(|screen| valid_screen(*screen))?;
+    Some(zero.full.0.y + zero.full.0.height)
+}
+
 pub fn anchored_origin(
     selection: CocoaRect,
     width: f64,
