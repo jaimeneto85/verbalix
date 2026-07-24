@@ -2,11 +2,7 @@ use super::{macos_ax, macos_selection};
 use crate::domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError};
 
 pub fn restore(expected: &SelectionSnapshot, transformed_text: &str) -> Result<(), VerbalixError> {
-    let expected_identity = expected
-        .writable
-        .then_some(expected.element_identity.as_ref())
-        .flatten()
-        .ok_or(VerbalixError::StaleSelection)?;
+    let expected_identity = expected_strong_identity(expected)?;
     let element = macos_ax::focused_element().map_err(|_| VerbalixError::StaleSelection)?;
     let pid = macos_ax::pid(element.as_ref()).map_err(|_| VerbalixError::StaleSelection)?;
     let own_pid = i32::try_from(std::process::id()).map_err(|_| VerbalixError::StaleSelection)?;
@@ -49,11 +45,44 @@ fn validate_restore_target(
         || pid != expected.pid
         || role.is_empty()
         || !writable
-        || current_identity != expected_identity
+        || !same_strong_identity(expected_identity, current_identity)
     {
         return Err(VerbalixError::StaleSelection);
     }
     Ok(())
+}
+
+fn expected_strong_identity(
+    expected: &SelectionSnapshot,
+) -> Result<&SelectionElementIdentity, VerbalixError> {
+    let identity = expected
+        .writable
+        .then_some(expected.element_identity.as_ref())
+        .flatten()
+        .ok_or(VerbalixError::StaleSelection)?;
+    strong_identifier(identity)
+        .is_some()
+        .then_some(identity)
+        .ok_or(VerbalixError::StaleSelection)
+}
+
+fn same_strong_identity(
+    expected: &SelectionElementIdentity,
+    current: &SelectionElementIdentity,
+) -> bool {
+    match (strong_identifier(expected), strong_identifier(current)) {
+        (Some(expected_identifier), Some(current_identifier)) => {
+            expected_identifier == current_identifier && expected == current
+        }
+        _ => false,
+    }
+}
+
+fn strong_identifier(identity: &SelectionElementIdentity) -> Option<&str> {
+    identity
+        .identifier
+        .as_deref()
+        .filter(|identifier| !identifier.trim().is_empty())
 }
 
 fn validate_restore_selection(
@@ -75,167 +104,5 @@ fn validate_restore_selection(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        domain::{Rect, TextRange},
-        platform::macos_classic_range::CFRange,
-    };
-
-    fn identity(identifier: &str) -> SelectionElementIdentity {
-        SelectionElementIdentity {
-            role: "AXTextArea".to_owned(),
-            subrole: None,
-            identifier: Some(identifier.to_owned()),
-            frame: Rect {
-                x: 1.0,
-                y: 2.0,
-                width: 3.0,
-                height: 4.0,
-            },
-        }
-    }
-
-    fn snapshot(writable: bool) -> SelectionSnapshot {
-        SelectionSnapshot::new(
-            42,
-            "pid:42".to_owned(),
-            "original".to_owned(),
-            TextRange {
-                location: 3,
-                length: 8,
-            },
-            Rect {
-                x: 1.0,
-                y: 2.0,
-                width: 3.0,
-                height: 4.0,
-            },
-            writable,
-        )
-        .with_element_identity(identity("editor"))
-    }
-
-    #[test]
-    fn marker_snapshot_never_reaches_restore_mutation() {
-        let expected = snapshot(false);
-        assert!(matches!(
-            validate_restore_target(
-                &expected,
-                expected.element_identity.as_ref().unwrap(),
-                42,
-                7,
-                "AXTextArea",
-                true,
-                expected.element_identity.as_ref().unwrap(),
-            ),
-            Err(VerbalixError::StaleSelection)
-        ));
-    }
-
-    #[test]
-    fn restore_rejects_self_wrong_pid_secure_read_only_and_changed_element() {
-        let expected = snapshot(true);
-        let expected_identity = expected.element_identity.as_ref().unwrap();
-
-        for (pid, own_pid, role, writable, current_identity) in [
-            (42, 42, "AXTextArea", true, identity("editor")),
-            (43, 7, "AXTextArea", true, identity("editor")),
-            (42, 7, "AXTextArea", false, identity("editor")),
-            (42, 7, "AXTextArea", true, identity("another-editor")),
-        ] {
-            assert!(matches!(
-                validate_restore_target(
-                    &expected,
-                    expected_identity,
-                    pid,
-                    own_pid,
-                    role,
-                    writable,
-                    &current_identity,
-                ),
-                Err(VerbalixError::StaleSelection)
-            ));
-        }
-        assert!(matches!(
-            validate_restore_target(
-                &expected,
-                expected_identity,
-                42,
-                7,
-                "AXSecureTextField",
-                true,
-                expected_identity,
-            ),
-            Err(VerbalixError::ProtectedField)
-        ));
-    }
-
-    #[test]
-    fn restore_accepts_only_the_current_transformed_selection_and_utf16_range() {
-        let expected = snapshot(true);
-        let transformed = "A👩🏽‍💻";
-        let current = macos_selection::ClassicSelection {
-            text: transformed.to_owned(),
-            range: CFRange {
-                location: 3,
-                length: transformed.encode_utf16().count() as isize,
-            },
-        };
-
-        assert!(validate_restore_selection(&expected, transformed, &current).is_ok());
-
-        for stale in [
-            macos_selection::ClassicSelection {
-                text: "another".to_owned(),
-                range: current.range,
-            },
-            macos_selection::ClassicSelection {
-                text: transformed.to_owned(),
-                range: CFRange {
-                    location: 4,
-                    ..current.range
-                },
-            },
-            macos_selection::ClassicSelection {
-                text: transformed.to_owned(),
-                range: CFRange {
-                    length: current.range.length - 1,
-                    ..current.range
-                },
-            },
-        ] {
-            assert!(matches!(
-                validate_restore_selection(&expected, transformed, &stale),
-                Err(VerbalixError::StaleSelection)
-            ));
-        }
-    }
-
-    #[test]
-    fn restore_rejects_another_field_in_the_same_pid_even_with_matching_selection() {
-        let expected = snapshot(true);
-        let transformed = "A👩🏽‍💻";
-        let matching_selection = macos_selection::ClassicSelection {
-            text: transformed.to_owned(),
-            range: CFRange {
-                location: expected.range.location as isize,
-                length: transformed.encode_utf16().count() as isize,
-            },
-        };
-
-        assert!(validate_restore_selection(&expected, transformed, &matching_selection).is_ok());
-        assert!(matches!(
-            validate_restore_target(
-                &expected,
-                expected.element_identity.as_ref().unwrap(),
-                expected.pid,
-                7,
-                "AXTextArea",
-                true,
-                &identity("another-editor"),
-            ),
-            Err(VerbalixError::StaleSelection)
-        ));
-    }
-}
+#[path = "macos_restore_tests.rs"]
+mod tests;
