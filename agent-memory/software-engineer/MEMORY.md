@@ -20,6 +20,7 @@
 
 ## Erros Recorrentes & Soluções
 - A Accessibility API é incompleta em alguns aplicativos; ausência de atributos deve produzir degradação segura.
+- No macOS 26, uma seleção física pode expor `AXSelectedTextMarkerRange` mesmo quando `AXSelectedText` retorna `no_value`/`attribute_unsupported` e `AXSelectedTextRange` é um CFRange vazio. A rota segura usa o marker opaco com `AXStringForTextMarkerRange`, `AXBoundsForTextMarkerRange`, start/end markers e índices/length parametrizados; nunca lê `AXValue` do documento inteiro.
 - Testes assíncronos Rust exigem `macros` e um runtime habilitados no Tokio.
 - Erros de setup Tauri precisam ser convertidos para `Box<dyn std::error::Error>`.
 - Bundles ad-hoc podem manter uma entrada TCC visualmente habilitada que não corresponde ao requisito designado do build atual; nunca resetar TCC automaticamente.
@@ -30,6 +31,8 @@
 - Sessões sensíveis usam Keychain; preferências não sensíveis usam store local.
 - O clamp do overlay usa `NSScreen.visibleFrame` capturado no setup da aplicação e mantém fallback pelos monitores do Tauri.
 - O dispatcher de overlay cria, configura, posiciona, mostra, oculta e confirma `is_visible` exclusivamente dentro de `run_on_main_thread`.
+- Snapshots derivados de text markers são sempre read-only até existir um contrato reversível de mutação; `replace` e `restore` rejeitam `writable=false`, e o caminho clássico revalida e escreve usando o mesmo handle AX.
+- Diagnósticos AX usam estágio, origem de extração e categoria tipados, emitindo novamente apenas quando a categoria de um estágio/origem muda.
 - Depois de trocar a classe nativa de uma WebView para `NSPanel`, não chamar setters de janela do wrapper Tauri que dependam da classe/ivars originais; o painel não ativante deve ser configurado integralmente no boundary AppKit.
 - Durante o MVP diagnosticável, `ActivationPolicy::Regular`, fechamento da janela principal como hide e reabertura centralizada por Dock/tray mantêm o processo observável.
 - Configuração pública do backend usa pares completos na ordem processo `VITE_*`, processo legado `VERBALIX_*`, embedded `VITE_*`, embedded legado; o build gera constantes em `OUT_DIR` para não transportar valores por stdout.

@@ -30,7 +30,7 @@ pub(super) const AX_SUCCESS: AXError = 0;
 const AX_VALUE_CF_RANGE: i32 = 4;
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct CFRange {
     location: isize,
     length: isize,
@@ -136,6 +136,24 @@ struct ExtractedSelection {
     writable: bool,
 }
 
+fn marker_cf_range(
+    start_index: i64,
+    end_index: i64,
+    reported_length: i64,
+) -> Result<CFRange, VerbalixError> {
+    let calculated_length = end_index
+        .checked_sub(start_index)
+        .filter(|length| *length > 0 && *length == reported_length)
+        .ok_or(VerbalixError::SelectionUnavailable)?;
+    let location = isize::try_from(start_index).map_err(|_| VerbalixError::SelectionUnavailable)?;
+    let length =
+        isize::try_from(calculated_length).map_err(|_| VerbalixError::SelectionUnavailable)?;
+    if location < 0 {
+        return Err(VerbalixError::SelectionUnavailable);
+    }
+    Ok(CFRange { location, length })
+}
+
 pub struct MacAccessibility;
 
 impl MacAccessibility {
@@ -195,9 +213,8 @@ impl MacAccessibility {
             crate::diagnostics::ax_resolution(stage, origin, category);
             return Err(AxFailure::new(stage, category));
         }
-        let value = OwnedCfValue::from_created(value, stage).map_err(|failure| {
+        let value = OwnedCfValue::from_created(value, stage).inspect_err(|failure| {
             crate::diagnostics::ax_resolution(stage, origin, failure.category);
-            failure
         })?;
         crate::diagnostics::ax_resolution(stage, origin, AxCategory::Success);
         Ok(value)
@@ -282,13 +299,15 @@ impl MacAccessibility {
 
     fn range_representation(value: &OwnedCfValue, origin: ExtractionOrigin) -> RangeRepresentation {
         let type_id = unsafe { CFGetTypeID(value.as_ref()) };
-        let representation = if type_id == unsafe { AXValueGetTypeID() } {
+        if type_id == unsafe { AXValueGetTypeID() } {
             let value_type = unsafe { AXValueGetType(value.as_ref()) };
             let category = AxCategory::from_value_type(value_type);
             crate::diagnostics::ax_resolution(AxStage::SelectedRangeType, origin, category);
-            (value_type == AX_VALUE_CF_RANGE)
-                .then_some(RangeRepresentation::CfRange)
-                .unwrap_or(RangeRepresentation::Unsupported)
+            if value_type == AX_VALUE_CF_RANGE {
+                RangeRepresentation::CfRange
+            } else {
+                RangeRepresentation::Unsupported
+            }
         } else if type_id == unsafe { AXTextMarkerRangeGetTypeID() } {
             crate::diagnostics::ax_resolution(
                 AxStage::SelectedRangeType,
@@ -303,8 +322,7 @@ impl MacAccessibility {
                 AxCategory::UnexpectedType,
             );
             RangeRepresentation::Unsupported
-        };
-        representation
+        }
     }
 
     fn direct_selection(
@@ -458,16 +476,9 @@ impl MacAccessibility {
             marker_range,
             AxStage::LengthForTextMarkerRange,
         )?;
-        let calculated_length = end_index
-            .checked_sub(start_index)
-            .filter(|length| *length > 0 && *length == reported_length)
-            .ok_or(VerbalixError::SelectionUnavailable)?;
-        let location =
-            isize::try_from(start_index).map_err(|_| VerbalixError::SelectionUnavailable)?;
-        let length =
-            isize::try_from(calculated_length).map_err(|_| VerbalixError::SelectionUnavailable)?;
+        let range = marker_cf_range(start_index, end_index, reported_length)?;
         crate::diagnostics::ax_resolution(AxStage::IndexForTextMarker, origin, AxCategory::Success);
-        Ok(CFRange { location, length })
+        Ok(range)
     }
 
     fn marker_number(
@@ -646,5 +657,38 @@ impl SelectionPort for MacAccessibility {
         transformed_text: &str,
     ) -> Result<(), VerbalixError> {
         super::macos_restore::restore(expected, transformed_text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn marker_coordinates_require_positive_matching_length() {
+        let range = marker_cf_range(5, 9, 4).unwrap();
+
+        assert_eq!(range.location, 5);
+        assert_eq!(range.length, 4);
+        assert!(matches!(
+            marker_cf_range(5, 9, 3),
+            Err(VerbalixError::SelectionUnavailable)
+        ));
+        assert!(matches!(
+            marker_cf_range(5, 5, 0),
+            Err(VerbalixError::SelectionUnavailable)
+        ));
+        assert!(matches!(
+            marker_cf_range(-1, 3, 4),
+            Err(VerbalixError::SelectionUnavailable)
+        ));
+    }
+
+    #[test]
+    fn marker_range_length_matches_utf16_surrogate_pairs() {
+        let text = "A🚀B";
+        let range = marker_cf_range(10, 14, 4).unwrap();
+
+        assert_eq!(text.encode_utf16().count(), range.length as usize);
     }
 }

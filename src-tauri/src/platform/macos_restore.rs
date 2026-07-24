@@ -28,12 +28,22 @@ extern "C" {
 }
 
 pub fn restore(expected: &SelectionSnapshot, transformed_text: &str) -> Result<(), VerbalixError> {
-    let element = MacAccessibility::focused_element()?;
-    let mut pid = 0;
-    if unsafe { AXUIElementGetPid(element.as_ref(), &mut pid) } != AX_SUCCESS || pid != expected.pid
-    {
+    if !expected.writable {
         return Err(VerbalixError::StaleSelection);
     }
+    let element = MacAccessibility::focused_element()?;
+    let mut pid = 0;
+    let pid_status = unsafe { AXUIElementGetPid(element.as_ref(), &mut pid) };
+    let own_pid = i32::try_from(std::process::id()).map_err(|_| VerbalixError::StaleSelection)?;
+    let role = MacAccessibility::string_attribute(element.as_ref(), "AXRole")?;
+    validate_restore_target(
+        expected,
+        pid_status == AX_SUCCESS,
+        pid,
+        own_pid,
+        &role,
+        MacAccessibility::writable(element.as_ref()),
+    )?;
     let value = MacAccessibility::string_attribute(element.as_ref(), "AXValue")?;
     let utf16: Vec<u16> = value.encode_utf16().collect();
     let start =
@@ -63,6 +73,30 @@ pub fn restore(expected: &SelectionSnapshot, transformed_text: &str) -> Result<(
         .ok_or(VerbalixError::LocalFailure)
 }
 
+fn validate_restore_target(
+    expected: &SelectionSnapshot,
+    pid_available: bool,
+    pid: i32,
+    own_pid: i32,
+    role: &str,
+    writable: bool,
+) -> Result<(), VerbalixError> {
+    if role == "AXSecureTextField" {
+        return Err(VerbalixError::ProtectedField);
+    }
+    if !expected.writable
+        || !pid_available
+        || pid <= 0
+        || pid == own_pid
+        || pid != expected.pid
+        || role.is_empty()
+        || !writable
+    {
+        return Err(VerbalixError::StaleSelection);
+    }
+    Ok(())
+}
+
 fn select_range(
     element: AXUIElementRef,
     location: usize,
@@ -83,4 +117,64 @@ fn select_range(
     (status == AX_SUCCESS)
         .then_some(())
         .ok_or(VerbalixError::LocalFailure)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Rect, TextRange};
+
+    fn snapshot(writable: bool) -> SelectionSnapshot {
+        SelectionSnapshot::new(
+            42,
+            "pid:42".to_owned(),
+            "original".to_owned(),
+            TextRange {
+                location: 3,
+                length: 8,
+            },
+            Rect {
+                x: 1.0,
+                y: 2.0,
+                width: 3.0,
+                height: 4.0,
+            },
+            writable,
+        )
+    }
+
+    #[test]
+    fn marker_snapshot_never_reaches_restore_mutation() {
+        assert!(matches!(
+            validate_restore_target(&snapshot(false), true, 42, 7, "AXTextArea", true),
+            Err(VerbalixError::StaleSelection)
+        ));
+    }
+
+    #[test]
+    fn restore_rejects_self_wrong_pid_secure_and_read_only_targets() {
+        let expected = snapshot(true);
+
+        assert!(matches!(
+            validate_restore_target(&expected, true, 42, 42, "AXTextArea", true),
+            Err(VerbalixError::StaleSelection)
+        ));
+        assert!(matches!(
+            validate_restore_target(&expected, true, 43, 7, "AXTextArea", true),
+            Err(VerbalixError::StaleSelection)
+        ));
+        assert!(matches!(
+            validate_restore_target(&expected, true, 42, 7, "AXSecureTextField", true),
+            Err(VerbalixError::ProtectedField)
+        ));
+        assert!(matches!(
+            validate_restore_target(&expected, true, 42, 7, "AXTextArea", false),
+            Err(VerbalixError::StaleSelection)
+        ));
+    }
+
+    #[test]
+    fn restore_accepts_the_expected_classic_target() {
+        assert!(validate_restore_target(&snapshot(true), true, 42, 7, "AXTextArea", true).is_ok());
+    }
 }

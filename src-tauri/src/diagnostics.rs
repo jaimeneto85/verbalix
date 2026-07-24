@@ -22,7 +22,7 @@ pub(crate) fn ax_resolution(stage: AxStage, origin: ExtractionOrigin, category: 
     let should_emit = LAST
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
-        .map(|mut last| last.insert(key, category) != Some(category))
+        .map(|mut last| should_emit_ax_transition(&mut last, key, category))
         .unwrap_or(false);
     if should_emit {
         emit(
@@ -36,6 +36,15 @@ pub(crate) fn ax_resolution(stage: AxStage, origin: ExtractionOrigin, category: 
             ),
         );
     }
+}
+
+#[cfg(target_os = "macos")]
+fn should_emit_ax_transition(
+    last: &mut HashMap<(AxStage, ExtractionOrigin), AxCategory>,
+    key: (AxStage, ExtractionOrigin),
+    category: AxCategory,
+) -> bool {
+    last.insert(key, category) != Some(category)
 }
 
 fn emit(stage: &str, event: &str, metadata: &str) {
@@ -156,6 +165,8 @@ fn error_code(error: &VerbalixError) -> &'static str {
 mod tests {
     use super::*;
     use crate::domain::{Rect, TextRange};
+    #[cfg(target_os = "macos")]
+    use crate::platform::macos_focus::{AxCategory, AxStage, ExtractionOrigin};
 
     #[test]
     fn snapshot_diagnostics_never_include_selected_text() {
@@ -224,5 +235,33 @@ mod tests {
 
         assert_eq!(metadata, "origin=dock_reopen");
         assert!(!metadata.contains("secret selected text"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ax_diagnostics_emit_only_when_a_stage_category_transitions() {
+        let mut last = HashMap::new();
+        let key = (AxStage::SelectedText, ExtractionOrigin::SelectedText);
+
+        assert!(should_emit_ax_transition(
+            &mut last,
+            key,
+            AxCategory::NoValue
+        ));
+        assert!(!should_emit_ax_transition(
+            &mut last,
+            key,
+            AxCategory::NoValue
+        ));
+        assert!(should_emit_ax_transition(
+            &mut last,
+            key,
+            AxCategory::Success
+        ));
+        assert!(should_emit_ax_transition(
+            &mut last,
+            key,
+            AxCategory::NoValue
+        ));
     }
 }

@@ -227,10 +227,10 @@ Manter o resolver system-wide e implementar o adapter mínimo de text marker cau
 - [x] T4 [LOW] Sintetizar plano final.
 - [x] T5 [LOW] Adicionar diagnóstico tipado e executar três spikes que refutaram fallback de foco e CFRange presumido.
 - [x] T6 [LOW] Executar sonda read-only de tipo, text marker string/bounds/index/length e settable.
-- [ ] T7 [MEDIUM] Implementar tipos puros de decisão, origem de extração e categoria AX.
-- [ ] T8 [MEDIUM] Implementar extração por representação no mesmo elemento com RAII e type-check estrito.
-- [ ] T9 [MEDIUM] Integrar extração em capture/observer e vincular replace/restore ao mesmo target esperado.
-- [ ] T10 [LOW] Limitar diagnostics repetidos sem conteúdo selecionado.
+- [x] T7 [MEDIUM] Implementar tipos puros de decisão, origem de extração e categoria AX.
+- [x] T8 [MEDIUM] Implementar extração por representação no mesmo elemento com RAII e type-check estrito.
+- [x] T9 [MEDIUM] Integrar extração em capture/observer e vincular replace/restore ao mesmo target esperado.
+- [x] T10 [LOW] Limitar diagnostics repetidos sem conteúdo selecionado.
 - [ ] T11 [MEDIUM] Testar matriz direct/parameterized/value-slice/trust/self/race/ownership e regressões existentes.
 - [ ] T12 [LOW] Testar equivalência/debounce, secure field, range, geometry e mutation target.
 - [ ] T13 [MEDIUM] Executar QA dual de código, concorrência, FFI e testes.
