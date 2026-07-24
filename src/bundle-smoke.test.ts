@@ -237,4 +237,20 @@ describe("macOS bundle smoke contract", () => {
     expect(gitignore.split("\n")).toContain(".env");
     expect(publicRuntime).not.toMatch(/OPENAI_API_KEY|SERVICE_ROLE/i);
   });
+
+  it("inserts successful transformations into synchronized history", () => {
+    const command = readFileSync(
+      "src-tauri/src/commands_transform.rs",
+      "utf8"
+    );
+    const transform = command.indexOf(".coordinator\n        .transform(");
+    const success = command.indexOf(".await?;", transform);
+    const historyGate = command.indexOf("if settings.history_enabled", success);
+    const insert = command.indexOf(".insert(request, &response", historyGate);
+
+    expect(transform).toBeGreaterThan(-1);
+    expect(success).toBeGreaterThan(transform);
+    expect(historyGate).toBeGreaterThan(success);
+    expect(insert).toBeGreaterThan(historyGate);
+  });
 });

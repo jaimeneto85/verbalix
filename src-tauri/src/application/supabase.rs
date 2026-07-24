@@ -255,3 +255,7 @@ impl AiProvider for RemoteTransformer {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+#[path = "supabase_history_tests.rs"]
+mod history_tests;
