@@ -22,23 +22,25 @@ Traduzir e Aprimorar não falham mais silenciosamente. O runtime distingue login
 
 Configuração pública pode ser embutida no build do bundle, com override de runtime para desenvolvimento. Segredos OpenAI e service-role continuam exclusivos ao backend.
 
-Os nomes canônicos são `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. O build Tauri lê o par completo do `.env` ignorado na raiz e o embute no nativo; variáveis completas do processo prevalecem em desenvolvimento. `VERBALIX_SUPABASE_URL` e `VERBALIX_SUPABASE_ANON_KEY` permanecem apenas como aliases legados e nunca são combinados parcialmente com o par canônico.
+Os nomes canônicos são `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. O build Tauri lê o par completo do `.env` ignorado na raiz e gera configuração privada em `OUT_DIR`, embutida no nativo sem enviar valores por stdout ou `cargo:rustc-env`. Variáveis completas do processo prevalecem em desenvolvimento. `VERBALIX_SUPABASE_URL` e `VERBALIX_SUPABASE_ANON_KEY` permanecem apenas como aliases legados e nunca são combinados parcialmente com o par canônico.
 
-No smoke deste artefato, a interação exibiu corretamente a mensagem de backend ausente. A transformação real permanece bloqueada porque não existem URL/anon key configuradas, projeto Supabase/Edge Function implantado nem sessão autenticada. Portanto, este documento não declara tradução ou aprimoramento por IA funcionais.
+O smoke de compatibilidade confirmou readiness configurada sem imprimir URL ou anon key. A transformação real ainda depende de projeto Supabase/Edge Function implantado e sessão autenticada; este documento não declara tradução ou aprimoramento por IA funcionais sem esse smoke externo.
 
 ## Evidências
 
 - QA independente: `APPROVED`.
-- Rust: 49/49.
+- Rust: 52/52.
 - Clippy com warnings como erro.
 - Vitest: 28/28.
 - Playwright: 3/3.
 - Edge Function: 6/6.
 - Build e analyzer aprovados.
+- Bundle smoke: 5/5.
+- Configuração canônica incorporada sem valores em logs; fallback legado e precedência aprovados.
 - Computer Use: processo vivo, toolbar interativa e erro explícito de backend ausente.
 
 ## Status
 
-Branch `hotfix-visible-runtime-debug`, HEAD base de QA `0e4edbf`. Nenhum merge ou push foi realizado.
+Branch `hotfix-visible-runtime-debug`, HEAD base de QA `c5de846`. Nenhum merge ou push foi realizado por este pipeline.
 
-Próximo gate externo: provisionar Supabase URL/anon key, implantar a Edge Function, criar sessão válida e repetir Traduzir/Aprimorar com resposta real.
+Próximo gate externo: confirmar a Edge Function implantada, criar sessão válida e repetir Traduzir/Aprimorar com resposta real.

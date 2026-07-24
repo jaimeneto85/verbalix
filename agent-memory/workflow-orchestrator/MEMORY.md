@@ -38,6 +38,9 @@
 - Conteúdo selecionado só pode sair da máquina depois de ação explícita.
 - Segredos nunca pertencem à WebView, ao repositório ou aos logs.
 - Finder não herda variáveis do shell; configuração pública necessária ao cliente deve ser embutida no build do bundle ou carregada de fonte persistida, enquanto segredos permanecem no backend.
+- `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` são o par canônico compartilhado. O nativo aceita `VERBALIX_*` apenas como par legado completo; nunca misturar URL de uma fonte com key de outra.
+- Para embutir configuração pública sem expô-la no output do build script, gerar fonte Rust em `OUT_DIR` e incluí-la no binário; não transportar valores por `cargo:rustc-env`.
+- Worktrees não recebem arquivos ignorados como `.env`; o smoke pré-merge precisa provisionar o arquivo localmente sem logar valores, enquanto o checkout principal resolve `../.env` normalmente.
 - A matriz de MVP é Chrome, Safari, VS Code, Slack, Notes e TextEdit.
 
 ## Observações

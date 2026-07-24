@@ -71,6 +71,12 @@ O frontend continua obtendo `PublicBackendConfig` pelo comando nativo; não exis
 - [x] T2 Carregar `VITE_SUPABASE_*` do `.env` no build Rust/Tauri sem logar valores.
 - [x] T3 Restaurar `.env.example` para somente os dois nomes `VITE_*`.
 - [x] T4 Atualizar regressões Rust, bundle-smoke e documentação.
-- [ ] T5 Executar Rust, Clippy, Vitest, Playwright, Edge, build Tauri e analyzer.
-- [ ] T6 Smoke do bundle confirma readiness configurada sem expor URL/key.
-- [ ] T7 QA independente emite verdict.
+- [x] T5 Executar Rust, Clippy, Vitest, Playwright, Edge, build Tauri e analyzer.
+- [x] T6 Smoke do bundle confirma readiness configurada sem expor URL/key.
+- [x] T7 QA independente emite verdict `APPROVED`.
+
+## 4. DECISÃO
+
+`APPROVED`. O bundle e o nativo compartilham o par canônico `VITE_SUPABASE_*`, aliases `VERBALIX_*` permanecem compatíveis por par completo e nenhum valor percorre logs ou o protocolo `cargo:rustc-env`.
+
+Implantação da Edge Function e sessão autenticada continuam gates externos separados da resolução de configuração.
