@@ -269,4 +269,29 @@ mod tests {
         });
         assert!(!first.same_target(&changed));
     }
+
+    #[test]
+    fn every_extraction_strategy_is_a_distinct_target_identity() {
+        let strategies = [
+            SelectionExtractionStrategy::SelectedText,
+            SelectionExtractionStrategy::StringForRange,
+            SelectionExtractionStrategy::ValueRange,
+            SelectionExtractionStrategy::TextMarker,
+        ];
+        let base = snapshot(
+            "same",
+            TextRange {
+                location: 0,
+                length: 4,
+            },
+        );
+
+        for expected in strategies {
+            for current in strategies {
+                let first = base.clone().with_extraction_strategy(expected);
+                let second = base.clone().with_extraction_strategy(current);
+                assert_eq!(first.same_target(&second), expected == current);
+            }
+        }
+    }
 }

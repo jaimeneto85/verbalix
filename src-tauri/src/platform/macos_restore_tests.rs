@@ -130,6 +130,11 @@ fn restore_accepts_only_the_current_transformed_selection_and_utf16_range() {
             },
             strategy: current.strategy,
         },
+        macos_selection_revalidation::CurrentSelection {
+            text: transformed.to_owned(),
+            range: current.range,
+            strategy: crate::domain::SelectionExtractionStrategy::ValueRange,
+        },
     ] {
         assert!(matches!(
             validate_restore_selection(&expected, transformed, &stale),

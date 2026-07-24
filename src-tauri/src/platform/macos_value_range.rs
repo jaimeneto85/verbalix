@@ -31,20 +31,7 @@ pub(super) fn extract(element: AXUIElementRef) -> Result<ValueRangeSelection, Ax
     )?;
     let second =
         macos_classic_range::selected_range_with_origin(element, ExtractionOrigin::ValueRange)?;
-    if first != second {
-        let failure = AxFailure::new(AxStage::RangeStability, AxCategory::RangeChanged);
-        crate::diagnostics::ax_resolution(
-            failure.stage,
-            ExtractionOrigin::ValueRange,
-            failure.category,
-        );
-        return Err(failure);
-    }
-    crate::diagnostics::ax_resolution(
-        AxStage::RangeStability,
-        ExtractionOrigin::ValueRange,
-        AxCategory::Success,
-    );
+    validate_stable_range(first, second)?;
     let value_length = validate_value(&value, first)?;
     let text = copy_selected_range(&value, first, value_length)?;
     Ok(ValueRangeSelection { text, range: first })
@@ -72,6 +59,24 @@ pub(super) fn role_eligible(role: &str) -> bool {
     matches!(role, "AXTextArea" | "AXTextField" | "AXStaticText")
 }
 
+fn validate_stable_range(first: CFRange, second: CFRange) -> Result<(), AxFailure> {
+    let category = if first == second {
+        AxCategory::Success
+    } else {
+        AxCategory::RangeChanged
+    };
+    crate::diagnostics::ax_resolution(
+        AxStage::RangeStability,
+        ExtractionOrigin::ValueRange,
+        category,
+    );
+    if first == second {
+        Ok(())
+    } else {
+        Err(AxFailure::new(AxStage::RangeStability, category))
+    }
+}
+
 fn validate_value(value: &OwnedCfValue, range: CFRange) -> Result<usize, AxFailure> {
     if unsafe { CFGetTypeID(value.as_ref()) != CFStringGetTypeID() } {
         return diagnostic_failure(AxStage::ValueType, AxCategory::UnexpectedType);
@@ -81,7 +86,11 @@ fn validate_value(value: &OwnedCfValue, range: CFRange) -> Result<usize, AxFailu
         ExtractionOrigin::ValueRange,
         AxCategory::Success,
     );
-    let length = unsafe { CFStringGetLength(as_string(value)) };
+    validate_string(as_string(value), range)
+}
+
+fn validate_string(value: CFStringRef, range: CFRange) -> Result<usize, AxFailure> {
+    let length = unsafe { CFStringGetLength(value) };
     let length = usize::try_from(length)
         .map_err(|_| failure(AxStage::ValueLength, AxCategory::InvalidRange))?;
     if length > MAX_VALUE_UTF16_UNITS {
@@ -102,9 +111,17 @@ fn copy_selected_range(
     range: CFRange,
     value_length: usize,
 ) -> Result<String, AxFailure> {
+    copy_string_range(as_string(value), range, value_length)
+}
+
+fn copy_string_range(
+    value: CFStringRef,
+    range: CFRange,
+    value_length: usize,
+) -> Result<String, AxFailure> {
     let (_, selection_length, _) = validated_offsets(range, value_length)?;
     let mut units = vec![0_u16; selection_length];
-    unsafe { CFStringGetCharacters(as_string(value), system_range(range)?, units.as_mut_ptr()) };
+    unsafe { CFStringGetCharacters(value, system_range(range)?, units.as_mut_ptr()) };
     String::from_utf16(&units).map_err(|_| failure(AxStage::Value, AxCategory::InvalidRange))
 }
 
@@ -130,7 +147,7 @@ fn validated_offsets(
 }
 
 fn validate_scalar_boundaries(
-    value: &OwnedCfValue,
+    value: CFStringRef,
     range: CFRange,
     value_length: usize,
 ) -> Result<(), AxFailure> {
@@ -143,10 +160,10 @@ fn validate_scalar_boundaries(
     Ok(())
 }
 
-fn character(value: &OwnedCfValue, index: usize) -> Result<u16, AxFailure> {
+fn character(value: CFStringRef, index: usize) -> Result<u16, AxFailure> {
     let index =
         isize::try_from(index).map_err(|_| failure(AxStage::Value, AxCategory::InvalidRange))?;
-    Ok(unsafe { CFStringGetCharacterAtIndex(as_string(value), index) })
+    Ok(unsafe { CFStringGetCharacterAtIndex(value, index) })
 }
 
 fn is_low_surrogate(unit: u16) -> bool {
@@ -174,70 +191,5 @@ fn diagnostic_failure<T>(stage: AxStage, category: AxCategory) -> Result<T, AxFa
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn validates_checked_utf16_offsets_without_byte_indexing() {
-        assert_eq!(
-            validated_offsets(
-                CFRange {
-                    location: 1,
-                    length: 4
-                },
-                6
-            ),
-            Ok((1, 4, 5))
-        );
-        for range in [
-            CFRange {
-                location: -1,
-                length: 1,
-            },
-            CFRange {
-                location: 0,
-                length: 0,
-            },
-            CFRange {
-                location: 4,
-                length: 3,
-            },
-            CFRange {
-                location: isize::MAX,
-                length: isize::MAX,
-            },
-        ] {
-            assert!(validated_offsets(range, 6).is_err());
-        }
-    }
-
-    #[test]
-    fn fallback_categories_are_explicit_and_stage_bound() {
-        assert!(fallback_eligible(AxFailure::new(
-            AxStage::StringForRange,
-            AxCategory::ParameterizedAttributeUnsupported
-        )));
-        assert!(!fallback_eligible(AxFailure::new(
-            AxStage::StringForRange,
-            AxCategory::CannotComplete
-        )));
-        assert!(marker_eligible(AxFailure::new(
-            AxStage::Value,
-            AxCategory::AttributeUnsupported
-        )));
-        assert!(!marker_eligible(AxFailure::new(
-            AxStage::ValueType,
-            AxCategory::UnexpectedType
-        )));
-    }
-
-    #[test]
-    fn value_range_roles_are_conservative() {
-        for role in ["AXTextArea", "AXTextField", "AXStaticText"] {
-            assert!(role_eligible(role));
-        }
-        for role in ["AXSecureTextField", "AXWebArea", "AXButton", ""] {
-            assert!(!role_eligible(role));
-        }
-    }
-}
+#[path = "macos_value_range_tests.rs"]
+mod tests;

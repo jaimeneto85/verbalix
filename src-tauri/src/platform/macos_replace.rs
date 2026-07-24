@@ -128,6 +128,10 @@ mod tests {
             validate_current(&expected, &read_only),
             Err(VerbalixError::StaleSelection)
         ));
+        let mut another_strategy = expected.clone();
+        another_strategy.extraction_strategy =
+            crate::domain::SelectionExtractionStrategy::ValueRange;
+        assert!(validate_current(&expected, &another_strategy).is_err());
     }
 
     #[test]

@@ -45,23 +45,56 @@ fn attribute_settable(
     let status = unsafe {
         AXUIElementIsAttributeSettable(element, attribute.as_concrete_TypeRef(), &mut settable)
     };
+    match classify_settable(status, settable) {
+        Ok((is_settable, category)) => {
+            crate::diagnostics::ax_resolution(stage, origin, category);
+            Ok(is_settable)
+        }
+        Err(category) => {
+            crate::diagnostics::ax_resolution(stage, origin, category);
+            Err(AxFailure::new(stage, category))
+        }
+    }
+}
+
+fn classify_settable(status: AXError, settable: Boolean) -> Result<(bool, AxCategory), AxCategory> {
     let category = AxCategory::from_status(status);
     if status == AX_SUCCESS {
-        let category = if settable != 0 {
-            AxCategory::Settable
+        return Ok(if settable != 0 {
+            (true, AxCategory::Settable)
         } else {
-            AxCategory::NotSettable
-        };
-        crate::diagnostics::ax_resolution(stage, origin, category);
-        return Ok(settable != 0);
+            (false, AxCategory::NotSettable)
+        });
     }
-    crate::diagnostics::ax_resolution(stage, origin, category);
     if matches!(
         category,
         AxCategory::NoValue | AxCategory::AttributeUnsupported
     ) {
-        Ok(false)
+        Ok((false, category))
     } else {
-        Err(AxFailure::new(stage, category))
+        Err(category)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_and_write_capabilities_remain_independent() {
+        assert_eq!(
+            classify_settable(AX_SUCCESS, 1),
+            Ok((true, AxCategory::Settable))
+        );
+        assert_eq!(
+            classify_settable(AX_SUCCESS, 0),
+            Ok((false, AxCategory::NotSettable))
+        );
+        for status in [-25205, -25212] {
+            assert!(matches!(classify_settable(status, 1), Ok((false, _))));
+        }
+        for status in [-25204, -25211, -25202, -1] {
+            assert!(classify_settable(status, 0).is_err());
+        }
     }
 }
