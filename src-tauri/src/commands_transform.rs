@@ -156,11 +156,12 @@ fn persist_history(
         )
         .await
         {
-            Ok(Ok(())) => crate::diagnostics::history("inserted", None),
-            Ok(Err(error)) => crate::diagnostics::history("insert_failed", Some(&error)),
-            Err(_) => {
-                crate::diagnostics::history("insert_timeout", Some(&VerbalixError::ProviderTimeout))
-            }
+            Ok(Ok(())) => crate::diagnostics::history::record("inserted", None),
+            Ok(Err(error)) => crate::diagnostics::history::record("insert_failed", Some(&error)),
+            Err(_) => crate::diagnostics::history::record(
+                "insert_timeout",
+                Some(&VerbalixError::ProviderTimeout),
+            ),
         }
     });
 }

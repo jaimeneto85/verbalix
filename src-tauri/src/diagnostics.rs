@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 #[cfg(target_os = "macos")]
 use std::{collections::HashMap, sync::Mutex};
 
+pub(crate) mod history;
 pub(crate) fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
@@ -13,7 +14,6 @@ pub(crate) fn enabled() -> bool {
             .unwrap_or(false)
     })
 }
-
 #[cfg(target_os = "macos")]
 pub(crate) fn ax_resolution(stage: AxStage, origin: ExtractionOrigin, category: AxCategory) {
     static LAST: OnceLock<Mutex<HashMap<(AxStage, ExtractionOrigin), AxCategory>>> =
@@ -77,13 +77,6 @@ pub fn ai_readiness(status: &str) {
     emit("ai", "readiness", &format!("status={status}"));
 }
 
-pub fn history(event: &str, error: Option<&VerbalixError>) {
-    let metadata = error
-        .map(|error| format!("error={}", error_code(error)))
-        .unwrap_or_else(|| "error=none".to_owned());
-    emit("history", event, &metadata);
-}
-
 pub fn capture_success(snapshot: &SelectionSnapshot) {
     emit("capture", "success", &snapshot_metadata(snapshot));
 }
@@ -142,7 +135,7 @@ fn lifecycle_metadata(origin: &'static str) -> String {
     format!("origin={origin}")
 }
 
-fn error_code(error: &VerbalixError) -> &'static str {
+pub(super) fn error_code(error: &VerbalixError) -> &'static str {
     match error {
         VerbalixError::PermissionDenied => "permission_denied",
         VerbalixError::SelectionUnavailable => "selection_unavailable",
