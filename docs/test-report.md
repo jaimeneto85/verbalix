@@ -65,3 +65,17 @@ Gates independentes desta revisão:
 - Playwright: 6/6.
 - Cobertura frontend configurada: 100%.
 - Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
+## Revisão da recuperação após reload
+
+O segundo início de carregamento agora invalida a geração e destrói a WebView. Uma solicitação posterior detecta qualquer janela sem documento atual, remove essa instância e cria UUID/URL novos; ACK da geração anterior permanece rejeitado. Falhas de invalidação, destruição e fallback de ocultação possuem diagnósticos próprios.
+
+O bootstrap aceita somente UUID v4. Geração ausente ou inválida mantém a rota transparente, sem renderizar toolbar, nota ou aplicação principal.
+
+Gates independentes desta revisão:
+
+- Rust: 88/88.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.

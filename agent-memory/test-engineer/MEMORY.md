@@ -17,6 +17,7 @@
 - A primeira pintura do overlay usa handshake de readiness: testes separam `ready` de `requested`, comprovam render antes do sinal frontend e garantem que `HideAll` antes de `SurfaceReady` não ressuscita a janela.
 - O handshake só deve nascer em `useLayoutEffect` depois do commit dos filhos, e o ACK nativo só pode resolver após a closure da main thread aplicar readiness/visibilidade. Retries precisam ser estritamente sequenciais, limitados a três após ACK falso/erro, parar no primeiro sucesso e reportar exaustão sem deixar invokes órfãos por `Promise.race`.
 - Readiness é uma capacidade por documento: Rust emite geração UUID na URL, o estado nativo compara geração atual/pronta e o comando valida label mais identidade da WebView chamadora. ACK antigo, reload e rota sem geração devem falhar fechados.
+- Reload não pode apenas girar a geração mantendo a URL antiga: no segundo `PageLoadEvent::Started`, a geração é invalidada e a WebView destruída; a próxima solicitação deve recriar janela, UUID e URL. Testes combinam lifecycle puro e contrato estático de destroy/diagnósticos/fallback.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -36,7 +37,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 37 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 5 testes Playwright E2E também passam.
-- A suíte Rust possui 87 testes, incluindo 14 casos determinísticos da geometria do overlay e a máquina geracional de readiness. O frontend possui 47 testes Vitest e 6 E2E Playwright.
+- A suíte Rust possui 88 testes, incluindo lifecycle de reload/recriação e a máquina geracional de readiness. O frontend possui 47 testes Vitest e 6 E2E Playwright.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
