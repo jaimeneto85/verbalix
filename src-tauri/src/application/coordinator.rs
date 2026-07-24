@@ -115,10 +115,10 @@ impl SelectionCoordinator {
                 *state = SelectionState::Candidate(snapshot.clone());
                 true
             } else {
-                self.cancel_active_transform_if_different(&snapshot)?;
+                let superseded = self.cancel_active_transform_if_different(&snapshot)?;
                 diagnostics::coordinator("candidate_stored", Some(&snapshot));
                 *state = SelectionState::Candidate(snapshot.clone());
-                false
+                superseded
             }
         };
         if superseded && self.overlay.hide_all().is_err() {
@@ -179,7 +179,7 @@ impl SelectionCoordinator {
     fn cancel_active_transform_if_different(
         &self,
         snapshot: &SelectionSnapshot,
-    ) -> Result<(), VerbalixError> {
+    ) -> Result<bool, VerbalixError> {
         let mut active = self
             .active_transform
             .lock()
@@ -191,8 +191,9 @@ impl SelectionCoordinator {
             if let Some(active) = active.take() {
                 active.lease.cancel();
             }
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
     pub fn refresh_selection(&self) -> Result<Option<SelectionSnapshot>, VerbalixError> {
