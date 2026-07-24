@@ -1,6 +1,6 @@
 use super::execute_if_publishable;
 use crate::{
-    application::TransformLease,
+    application::{PublicationPermit, TransformLease},
     platform::{
         note_result::{NoteMode, NoteResultPayload, NoteResultState},
         overlay_readiness::{OverlayReadiness, OverlaySurface},
@@ -62,6 +62,9 @@ impl Surface {
 
 fn cancellation_during_preparation(surface: Surface) {
     let guard = Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
+    let first_permit = PublicationPermit::new(guard.clone());
+    assert!(execute_if_publishable(Some(&first_permit), || Ok(()), || Ok(()), || Ok(()),).unwrap());
+    let second_permit = PublicationPermit::new(guard.clone());
     let gate = Arc::new(PreparationGate::default());
     let readiness = Arc::new(OverlayReadiness::default());
     let generation = readiness.begin_document(surface.overlay()).unwrap();
@@ -82,7 +85,7 @@ fn cancellation_during_preparation(surface: Surface) {
             .unwrap();
     }
     let worker = {
-        let guard = guard.clone();
+        let permit = second_permit.clone();
         let gate = gate.clone();
         let readiness = readiness.clone();
         let emitted = emitted.clone();
@@ -90,7 +93,7 @@ fn cancellation_during_preparation(surface: Surface) {
         let cleaned = cleaned.clone();
         thread::spawn(move || {
             execute_if_publishable(
-                Some(&guard),
+                Some(&permit),
                 || {
                     readiness.request(surface.overlay())?;
                     gate.enter_and_wait();
@@ -137,10 +140,11 @@ fn note_cancelled_during_preparation_never_emits_or_shows() {
 #[test]
 fn publication_claim_is_the_boundary_before_final_effects() {
     let guard = Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
+    let permit = PublicationPermit::new(guard.clone());
     let published = AtomicUsize::new(0);
 
     assert!(execute_if_publishable(
-        Some(&guard),
+        Some(&permit),
         || Ok(()),
         || {
             published.fetch_add(1, Ordering::SeqCst);
@@ -158,17 +162,20 @@ fn publication_claim_is_the_boundary_before_final_effects() {
 #[test]
 fn cancellation_after_claim_allows_one_publication_before_serial_hide() {
     let guard = Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
+    let first_permit = PublicationPermit::new(guard.clone());
+    assert!(execute_if_publishable(Some(&first_permit), || Ok(()), || Ok(()), || Ok(()),).unwrap());
+    let second_permit = PublicationPermit::new(guard.clone());
     let gate = Arc::new(PreparationGate::default());
     let effects = Arc::new(Mutex::new(Vec::new()));
     let visible = Arc::new(Mutex::new(false));
     let worker = {
-        let guard = guard.clone();
+        let permit = second_permit.clone();
         let gate = gate.clone();
         let effects = effects.clone();
         let visible = visible.clone();
         thread::spawn(move || {
             execute_if_publishable(
-                Some(&guard),
+                Some(&permit),
                 || Ok(()),
                 || {
                     gate.enter_and_wait();
