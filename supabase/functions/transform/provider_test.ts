@@ -39,6 +39,27 @@ Deno.test("provider maps network and malformed payload failures", async () => {
   );
 });
 
+Deno.test("provider maps upstream HTTP and incomplete envelopes", async () => {
+  for (
+    const response of [
+      new Response(null, { status: 500 }),
+      Response.json({ output: [] }),
+      Response.json({
+        output: [{ content: [{ type: "refusal", text: "Unavailable" }] }],
+      }),
+    ]
+  ) {
+    await assertRejects(
+      () =>
+        providerReturning(response).transform(
+          request,
+          new AbortController().signal,
+        ),
+      "INVALID_RESPONSE",
+    );
+  }
+});
+
 Deno.test("provider preserves AbortError for timeout mapping", async () => {
   const provider = new OpenAiProvider(
     "key",

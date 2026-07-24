@@ -51,6 +51,33 @@ Deno.test("handler caps body bytes before parsing or provider use", async () => 
   assertEquals(state.providerCalls, 0);
 });
 
+Deno.test("handler accepts body exactly at the byte limit", async () => {
+  const state = createState();
+  const body = validBody();
+  const byteLength = new TextEncoder().encode(body).byteLength;
+  const response = await createTransformHandler(state.dependencies)(
+    validRequest(body + " ".repeat(MAX_BODY_BYTES - byteLength)),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(state.providerCalls, 1);
+});
+
+Deno.test("handler rejects declared oversized body before provider use", async () => {
+  const state = createState();
+  const response = await createTransformHandler(state.dependencies)(
+    new Request("https://example.test", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer user-token",
+        "Content-Length": String(MAX_BODY_BYTES + 1),
+      },
+      body: validBody(),
+    }),
+  );
+  await assertError(response, 413, "TEXT_TOO_LONG");
+  assertEquals(state.providerCalls, 0);
+});
+
 Deno.test("handler rejects malformed payload and fractional formality", async () => {
   const malformed = createState();
   await assertError(
@@ -107,6 +134,7 @@ Deno.test("handler maps provider rate limits and invalid output", async () => {
     429,
     "RATE_LIMITED",
   );
+  assertEquals(limited.cancelCalls, 1);
 
   const invalid = createState({
     result: {

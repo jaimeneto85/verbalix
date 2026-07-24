@@ -150,6 +150,90 @@ Deno.test("rejects provider output over the character limit", () => {
   );
 });
 
+Deno.test("accepts output exactly at the limit for each operation", () => {
+  const translation = parseRequest({
+    requestId: "b65c8888-fb0e-4a8f-9fee-95268995bf68",
+    operation: "translate",
+    text: "Translate this",
+  });
+  validateResponse(translation, {
+    requestId: translation.requestId,
+    sourceLanguage: "English",
+    targetLanguage: "Portuguese",
+    result: "界".repeat(MAX_RESULT_CHARACTERS),
+  });
+
+  const improvement = parseRequest({
+    requestId: "ae63a86a-b5a2-4893-aea3-d78653385ed9",
+    operation: "improve",
+    text: "Improve this",
+    preferences: {
+      formality: 4,
+      length: "concise",
+      tone: "technical",
+    },
+  });
+  validateResponse(improvement, {
+    requestId: improvement.requestId,
+    sourceLanguage: "English",
+    targetLanguage: null,
+    result: "Improved",
+  });
+});
+
+for (
+  const [label, invalidResponse] of [
+    [
+      "request id",
+      {
+        requestId: "different-request",
+        sourceLanguage: "English",
+        targetLanguage: "Portuguese",
+        result: "Resultado",
+      },
+    ],
+    [
+      "source language",
+      {
+        requestId: "b65c8888-fb0e-4a8f-9fee-95268995bf68",
+        sourceLanguage: " ",
+        targetLanguage: "Portuguese",
+        result: "Resultado",
+      },
+    ],
+    [
+      "target language",
+      {
+        requestId: "b65c8888-fb0e-4a8f-9fee-95268995bf68",
+        sourceLanguage: "English",
+        targetLanguage: " ",
+        result: "Resultado",
+      },
+    ],
+    [
+      "result",
+      {
+        requestId: "b65c8888-fb0e-4a8f-9fee-95268995bf68",
+        sourceLanguage: "English",
+        targetLanguage: "Portuguese",
+        result: " ",
+      },
+    ],
+  ]
+) {
+  Deno.test(`rejects invalid translation ${label}`, () => {
+    const request = parseRequest({
+      requestId: "b65c8888-fb0e-4a8f-9fee-95268995bf68",
+      operation: "translate",
+      text: "Translate this",
+    });
+    assertError(
+      () => validateResponse(request, invalidResponse),
+      "INVALID_RESPONSE",
+    );
+  });
+}
+
 function assertError(callback: () => unknown, code: string) {
   let actual = "";
   try {

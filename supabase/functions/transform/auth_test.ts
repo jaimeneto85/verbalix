@@ -37,6 +37,7 @@ Deno.test("authenticator rejects anonymous roles and invalid sessions", async ()
   for (
     const response of [
       Response.json({ id: "user-id", role: "anon" }),
+      Response.json({ id: "user-id", role: "anonymous" }),
       new Response(null, { status: 401 }),
       new Response("not-json"),
     ]
