@@ -43,6 +43,7 @@
 - Worktrees não recebem arquivos ignorados como `.env`; o smoke pré-merge precisa provisionar o arquivo localmente sem logar valores, enquanto o checkout principal resolve `../.env` normalmente.
 - Deploy de Edge Function com provider externo é bloqueado antes da publicação quando qualquer secret obrigatório está ausente; nunca publicar deliberadamente um endpoint que só responderá 500.
 - Chave pública Supabase no formato JWT legado não prova sessão de usuário. Além de `verify_jwt`, confirmar o bearer no Auth endpoint e rejeitar papel/token anônimo antes de chamar o provider.
+- A Edge Function `transform` foi implantada com `verify_jwt=true`; endpoint non-404 e rejeições de request sem autenticação/token anônimo foram comprovados. O smoke autenticado de IA permanece gate operacional dependente de sessão de usuário.
 - A matriz de MVP é Chrome, Safari, VS Code, Slack, Notes e TextEdit.
 
 ## Observações

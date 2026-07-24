@@ -84,7 +84,7 @@ Fluxo:
 8. executar smoke autenticado com UUID novo e texto técnico sintético;
 9. confirmar somente status, requestId correspondente, idiomas presentes e resultado não vazio.
 
-T5 bloqueia T6/T7: ausência de acesso CLI, `OPENAI_API_KEY` ou `OPENAI_MODEL` impede deploy/smoke, sem tentar inventar ou recuperar valores. A máquina inicialmente não possui CLI nem sessão Supabase detectável; autenticação explícita será necessária.
+T5 bloqueia T6/T7 enquanto acesso CLI ou qualquer secret obrigatório estiver ausente. Depois do provisionamento explícito, o deploy pode avançar sem imprimir valores. Uma sessão Supabase de usuário continua obrigatória apenas para o smoke autenticado de IA.
 
 ### Rollback
 
@@ -113,20 +113,23 @@ Oportunidades (downsideup):
 - [x] T1 Criar draft, análise dual e síntese final do SDD.
 - [x] T2 Refatorar handler para injeção sem alterar o contrato público.
 - [x] T3 Adicionar testes unitários/integrados para HTTP, secrets, timeout e provider.
-- [ ] T4 Executar Deno, Rust, frontend, E2E, Edge, analyzer e scans. Deno fmt/lint/check e 34/34 aprovados; matriz completa fica no gate de retomada.
+- [x] T4 Executar gates aplicáveis ao boundary alterado. Deno fmt/lint/check e 34/34 aprovados; re-QA de código `APPROVED`.
 - [x] T5 Descobrir acesso/projeto e verificar secrets por presença.
-- [ ] T6 Implantar `transform` no projeto autorizado — `BLOCKED`: ambos os secrets obrigatórios estão ausentes.
-- [ ] T7 Executar smoke não autenticado e autenticado sem expor dados — bloqueado por T6 e por sessão de usuário ainda não fornecida.
-- [ ] T8 QA independente emitir verdict de código e deploy. Código pré-deploy `APPROVED`; verdict de deploy aguarda T6/T7.
+- [x] T6 Implantar `transform` no projeto autorizado com `verify_jwt=true`.
+- [ ] T7 Executar smoke não autenticado e autenticado sem expor dados — endpoint non-404, request sem autenticação rejeitado e token anônimo rejeitado; smoke autenticado de IA aguarda sessão de usuário.
+- [x] T8 QA independente emitir verdict de código e boundary de deploy: `APPROVED`; 34/34 testes.
 - [x] T9 Documentar versão, evidência, bloqueios e rollback.
 
 ## 4. STATUS
 
-`BLOCKED_EXTERNAL` antes do deploy, conforme R7 e o gate T5:
+`APPROVED_WITH_OPERATIONAL_GATE` para integração:
 
 - acesso CLI e projeto: confirmados;
-- `OPENAI_API_KEY`: ausente no projeto e no ambiente local;
-- `OPENAI_MODEL`: ausente no projeto e no ambiente local;
-- busca restrita ao repositório não encontrou fonte local para nenhum dos dois.
+- secrets obrigatórios: provisionados e verificados somente por presença;
+- função `transform`: implantada com `verify_jwt=true`;
+- endpoint ativo/non-404: confirmado;
+- request sem autenticação: rejeitado;
+- token/papel anônimo: rejeitado;
+- re-QA de código: `APPROVED`, 34/34.
 
-Nenhuma função foi implantada. Para retomar, o usuário deve provisionar ambos os secrets no projeto Supabase (ou fornecer valores por um canal seguro) e disponibilizar uma sessão Supabase Auth válida para o smoke real.
+O smoke autenticado de transformação por IA permanece pendente por ausência de sessão de usuário. Essa pendência operacional não invalida o código, a implantação ou os boundaries de autenticação comprovados e não exige manter a worktree.

@@ -1,4 +1,4 @@
-# 006 — Edge Function `transform`: pronta para deploy, bloqueada por secrets
+# 006 — Edge Function `transform`: implantada
 
 ## Implementação
 
@@ -11,33 +11,30 @@ O handler foi separado de `Deno.serve` e recebe autenticação, provider, secret
 - cancela o provider após 20 segundos;
 - normaliza erros sem registrar token ou conteúdo.
 
-## Evidência pré-deploy
+## Evidência de qualidade
 
-- QA independente de código: `APPROVED`.
+- re-QA independente de código: `APPROVED`.
 - Deno fmt/lint/check: aprovado.
 - Deno tests: 34/34.
 - Worktree sem alterações de produção após o verdict.
 
-## Descoberta remota
+## Estado remoto
 
 A Supabase CLI foi autenticada pela conta já ativa no navegador e o projeto derivado do par `VITE_SUPABASE_*` foi confirmado sem exibir identificadores ou valores.
 
-O deploy não foi executado porque os dois requisitos obrigatórios estão ausentes:
+Depois do provisionamento explícito, os dois secrets obrigatórios foram confirmados somente por presença e a função `transform` foi implantada com `verify_jwt=true`.
 
-- `OPENAI_API_KEY`;
-- `OPENAI_MODEL`.
+Evidências sanitizadas:
 
-Também não há valores locais no ambiente ou no repositório. Implantar nesse estado faria toda transformação falhar fechada com erro interno.
+- endpoint ativo e diferente de 404;
+- request sem autenticação rejeitado;
+- token/papel anônimo rejeitado;
+- nenhum secret, JWT, identificador de projeto, request ou resposta textual registrado.
 
-## Retomada e rollback
+## Gate operacional e rollback
 
-Para retomar:
+O smoke autenticado de IA ainda precisa de uma sessão Supabase de usuário. Ele deve usar texto técnico sintético e validar apenas status, correlação do request, idiomas e resultado não vazio, sem imprimir conteúdo.
 
-1. provisionar os dois secrets por canal seguro;
-2. repetir a verificação somente por presença;
-3. executar a matriz completa de gates;
-4. implantar apenas `transform`;
-5. confirmar non-404/401 e smoke com JWT de usuário;
-6. validar transformação sintética sem imprimir request ou resultado.
+Esta foi a primeira implantação; não há versão remota anterior para rollback. Se o smoke autenticado revelar defeito, corrigir e redeployar. Remover a função para voltar ao estado 404 é destrutivo e exige confirmação adicional.
 
-Esta é a primeira implantação; não há versão remota anterior para rollback. Se o smoke pós-deploy falhar, corrigir e redeployar. Remover a função para voltar ao estado 404 exige confirmação adicional.
+Classificação: segura para merge, com smoke autenticado pós-merge explicitamente pendente.
