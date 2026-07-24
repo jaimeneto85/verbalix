@@ -12,10 +12,31 @@ export interface AiProvider {
 }
 
 type OpenAiPayload = {
+  status?: string;
+  incomplete_details?: { reason?: string } | null;
   output?: Array<{
     content?: Array<{ type?: string; text?: string }>;
   }>;
 };
+
+const MIN_OUTPUT_TOKENS = 500;
+const MAX_OUTPUT_TOKENS = 8_000;
+const OUTPUT_EXPANSION_NUMERATOR = 2;
+const OUTPUT_EXPANSION_DENOMINATOR = 3;
+const STRUCTURED_OUTPUT_OVERHEAD = 128;
+
+export function outputTokenBudget(text: string) {
+  const unicodeCharacterCount = [...text].length;
+  const proportional = Math.ceil(
+    unicodeCharacterCount * OUTPUT_EXPANSION_NUMERATOR /
+        OUTPUT_EXPANSION_DENOMINATOR +
+      STRUCTURED_OUTPUT_OVERHEAD,
+  );
+  return Math.min(
+    MAX_OUTPUT_TOKENS,
+    Math.max(MIN_OUTPUT_TOKENS, proportional),
+  );
+}
 
 export class OpenAiProvider implements AiProvider {
   constructor(
@@ -39,7 +60,8 @@ export class OpenAiProvider implements AiProvider {
         signal,
         body: JSON.stringify({
           model: this.model,
-          max_output_tokens: 8_000,
+          reasoning: { effort: "none" },
+          max_output_tokens: outputTokenBudget(request.text),
           input: [
             {
               role: "system",
@@ -87,6 +109,13 @@ export class OpenAiProvider implements AiProvider {
     try {
       payload = await response.json() as OpenAiPayload;
     } catch {
+      throw new Error("INVALID_RESPONSE");
+    }
+    if (
+      payload.status !== "completed" ||
+      payload.incomplete_details !== undefined &&
+        payload.incomplete_details !== null
+    ) {
       throw new Error("INVALID_RESPONSE");
     }
     const text = payload.output

@@ -1,5 +1,5 @@
 import type { TransformRequest } from "./contract.ts";
-import { OpenAiProvider } from "./provider.ts";
+import { OpenAiProvider, outputTokenBudget } from "./provider.ts";
 
 const request: TransformRequest = {
   requestId: "b65c8888-fb0e-4a8f-9fee-95268995bf68",
@@ -27,9 +27,7 @@ Deno.test("provider maps network and malformed payload failures", async () => {
   );
 
   const malformedProvider = providerReturning(
-    Response.json({
-      output: [{ content: [{ type: "output_text", text: "not-json" }] }],
-    }),
+    Response.json(completedPayload("not-json")),
   );
   await assertRejects(
     () => malformedProvider.transform(request, new AbortController().signal),
@@ -73,22 +71,15 @@ Deno.test("provider preserves AbortError for timeout mapping", async () => {
 
 Deno.test("provider validates structured output invariants", async () => {
   const provider = providerReturning(
-    Response.json({
-      output: [
-        {
-          content: [
-            {
-              type: "output_text",
-              text: JSON.stringify({
-                sourceLanguage: "English",
-                targetLanguage: null,
-                result: "Resultado",
-              }),
-            },
-          ],
-        },
-      ],
-    }),
+    Response.json(
+      completedPayload(
+        JSON.stringify({
+          sourceLanguage: "English",
+          targetLanguage: null,
+          result: "Resultado",
+        }),
+      ),
+    ),
   );
   await assertRejects(
     () => provider.transform(request, new AbortController().signal),
@@ -96,7 +87,7 @@ Deno.test("provider validates structured output invariants", async () => {
   );
 });
 
-Deno.test("provider requests a bounded model output", async () => {
+Deno.test("provider requests low-latency reasoning and a bounded output", async () => {
   let body = "";
   const provider = new OpenAiProvider(
     "key",
@@ -104,35 +95,80 @@ Deno.test("provider requests a bounded model output", async () => {
     (_input, init) => {
       body = String((init as { body?: BodyInit } | undefined)?.body);
       return Promise.resolve(
-        Response.json({
-          output: [
-            {
-              content: [
-                {
-                  type: "output_text",
-                  text: JSON.stringify({
-                    sourceLanguage: "English",
-                    targetLanguage: "Portuguese",
-                    result: "Resultado",
-                  }),
-                },
-              ],
-            },
-          ],
-        }),
+        Response.json(
+          completedPayload(
+            JSON.stringify({
+              sourceLanguage: "English",
+              targetLanguage: "Portuguese",
+              result: "Resultado",
+            }),
+          ),
+        ),
       );
     },
   );
 
   await provider.transform(request, new AbortController().signal);
   const payload = JSON.parse(body);
-  if (payload.max_output_tokens !== 8_000) {
+  if (
+    payload.model !== "model" ||
+    payload.reasoning?.effort !== "none" ||
+    payload.max_output_tokens !== 500
+  ) {
     throw new Error("expected bounded model output");
   }
 });
 
+Deno.test("output budget is Unicode-aware, proportional and capped", () => {
+  assertEquals(outputTokenBudget("a"), 500);
+  assertEquals(outputTokenBudget("👩🏽‍💻".repeat(100)), 500);
+  assertEquals(outputTokenBudget("a".repeat(1_000)), 795);
+  assertEquals(outputTokenBudget("a".repeat(12_000)), 8_000);
+});
+
+Deno.test("provider rejects incomplete and unknown response envelopes", async () => {
+  for (
+    const envelope of [
+      {
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+        output: [],
+      },
+      { status: "incomplete", output: [] },
+      { status: "unknown", output: [] },
+      completedPayload("{}", { reason: "max_output_tokens" }),
+    ]
+  ) {
+    await assertRejects(
+      () =>
+        providerReturning(Response.json(envelope)).transform(
+          request,
+          new AbortController().signal,
+        ),
+      "INVALID_RESPONSE",
+    );
+  }
+});
+
+function completedPayload(
+  text: string,
+  incompleteDetails: { reason?: string } | null = null,
+) {
+  return {
+    status: "completed",
+    incomplete_details: incompleteDetails,
+    output: [{ content: [{ type: "output_text", text }] }],
+  };
+}
+
 function providerReturning(response: Response) {
   return new OpenAiProvider("key", "model", () => Promise.resolve(response));
+}
+
+function assertEquals(actual: unknown, expected: unknown) {
+  if (actual !== expected) {
+    throw new Error(`expected ${expected}, received ${actual}`);
+  }
 }
 
 async function assertRejects(
