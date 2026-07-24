@@ -31,7 +31,7 @@ describe("overlay document surface", () => {
       });
 
       const resolved = bootstrapDocument(
-        `?overlay=${kind}&generation=current-document`,
+        `?overlay=${kind}&generation=123e4567-e89b-42d3-a456-426614174000`,
         render
       );
 
@@ -40,7 +40,7 @@ describe("overlay document surface", () => {
       expect(render).toHaveBeenCalledWith(
         document.getElementById("root"),
         kind,
-        "current-document"
+        "123e4567-e89b-42d3-a456-426614174000"
       );
       for (const element of [
         document.documentElement,
@@ -81,7 +81,17 @@ describe("overlay document surface", () => {
   });
 
   it("reads the Rust-issued document generation from the overlay URL", () => {
-    expect(overlayGeneration("?generation=95a1")).toBe("95a1");
+    expect(
+      overlayGeneration(
+        "?generation=123e4567-e89b-42d3-a456-426614174000"
+      )
+    ).toBe("123e4567-e89b-42d3-a456-426614174000");
+    expect(overlayGeneration("?generation=test-generation")).toBeNull();
+    expect(
+      overlayGeneration(
+        "?generation=123e4567-e89b-12d3-a456-426614174000"
+      )
+    ).toBeNull();
     expect(overlayGeneration("?generation=")).toBeNull();
     expect(overlayGeneration("")).toBeNull();
   });

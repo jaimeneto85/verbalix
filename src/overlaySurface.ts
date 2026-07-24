@@ -13,7 +13,12 @@ export function overlayKind(search: string): OverlayKind | null {
 
 export function overlayGeneration(search: string): string | null {
   const generation = new URLSearchParams(search).get("generation");
-  return generation?.trim() || null;
+  const uuid = generation?.trim() ?? "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    uuid
+  )
+    ? uuid
+    : null;
 }
 
 export function bootstrapDocument(

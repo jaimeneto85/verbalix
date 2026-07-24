@@ -41,6 +41,10 @@ struct SurfaceState {
 }
 
 impl OverlayReadiness {
+    pub fn has_document(&self, surface: OverlaySurface) -> Result<bool, VerbalixError> {
+        Ok(self.lock()?.current.contains_key(&surface))
+    }
+
     pub fn should_show(&self, surface: OverlaySurface) -> Result<bool, VerbalixError> {
         let state = self.lock()?;
         Ok(state.current.get(&surface) == state.ready.get(&surface)
@@ -67,6 +71,13 @@ impl OverlayReadiness {
         }
         state.ready.insert(surface, generation);
         Ok(true)
+    }
+
+    pub fn invalidate_document(&self, surface: OverlaySurface) -> Result<(), VerbalixError> {
+        let mut state = self.lock()?;
+        state.current.remove(&surface);
+        state.ready.remove(&surface);
+        Ok(())
     }
 
     pub fn request(&self, surface: OverlaySurface) -> Result<(), VerbalixError> {

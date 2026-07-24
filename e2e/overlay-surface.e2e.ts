@@ -4,7 +4,9 @@ test("toolbar and note documents are transparent outside their cards", async ({
   page
 }) => {
   for (const overlay of ["toolbar", "note"]) {
-    await page.goto(`/?overlay=${overlay}&generation=test-generation`);
+    await page.goto(
+      `/?overlay=${overlay}&generation=123e4567-e89b-42d3-a456-426614174000`
+    );
     const surface = await page.evaluate(() => {
       const root = document.getElementById("root")!;
       return {
@@ -28,15 +30,20 @@ test("toolbar and note documents are transparent outside their cards", async ({
   }
 });
 
-test("an overlay route without a Rust generation fails closed", async ({
+test("an overlay route without a valid Rust UUID fails closed", async ({
   page
 }) => {
-  await page.goto("/?overlay=toolbar");
+  for (const path of [
+    "/?overlay=toolbar",
+    "/?overlay=toolbar&generation=test-generation"
+  ]) {
+    await page.goto(path);
 
-  await expect(page.locator("html")).toHaveClass("overlay-surface");
-  await expect(page.locator(".toolbar")).toHaveCount(0);
-  await expect(page.getByText("Acesso ao Verbalix")).toHaveCount(0);
-  await expect(page.locator("#root")).toBeEmpty();
+    await expect(page.locator("html")).toHaveClass("overlay-surface");
+    await expect(page.locator(".toolbar")).toHaveCount(0);
+    await expect(page.getByText("Acesso ao Verbalix")).toHaveCount(0);
+    await expect(page.locator("#root")).toBeEmpty();
+  }
 });
 
 test("main and unsupported routes preserve the opaque application surface", async ({
