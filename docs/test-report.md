@@ -51,3 +51,17 @@ O analisador de tamanho não encontrou arquivos acima do limite de 300 linhas ef
 Os gates independentes da terceira revisão passaram: Rust 86/86, Vitest 44/44, Playwright 5/5, cobertura frontend configurada em 100%, fmt/check/clippy estrito, build, diff-check e limite de 300 linhas.
 
 O veredito de código é `REJECTED_CODE`. O protocolo de readiness ainda precisa vincular cada ACK à geração do documento/WebView e impor um teto rígido de três tentativas. Sem essa correlação, um invoke que excedeu o timeout pode marcar como pronta uma janela recriada com o mesmo label.
+
+## Revisão do protocolo geracional
+
+A remediação vincula cada documento de overlay a uma geração UUID emitida pelo Rust e valida geração, label e identidade da WebView chamadora antes de aceitar readiness. Reload invalida a geração e esconde a janela; rotas de overlay sem geração mantêm a superfície transparente com root vazio.
+
+O frontend removeu `Promise.race`: tentativas são sequenciais, limitadas rigidamente a três, executadas somente após ACK falso ou erro, interrompidas no primeiro sucesso e reportadas após exaustão.
+
+Gates independentes desta revisão:
+
+- Rust: 87/87.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.

@@ -15,7 +15,8 @@
 - Posicionamento macOS em múltiplos monitores é testado como geometria pura em pontos Cocoa: conversão AX round-trip, escolha por centro/interseção, clamp nas quatro bordas, fallback vertical e coordenadas globais negativas. Um contrato estático separado impede reintroduzir `LogicalPosition`, `PhysicalPosition` ou `scale_factor` no caminho macOS.
 - A referência AX → Cocoa deve vir da zero screen, `NSScreen.screens.firstObject`, nunca de `mainScreen`, que acompanha a key window. O teste discriminatório usa uma key-window screen secundária com origem e altura diferentes.
 - A primeira pintura do overlay usa handshake de readiness: testes separam `ready` de `requested`, comprovam render antes do sinal frontend e garantem que `HideAll` antes de `SurfaceReady` não ressuscita a janela.
-- O handshake só deve nascer em `useLayoutEffect` depois do commit dos filhos, e o ACK nativo só pode resolver após a closure da main thread aplicar readiness/visibilidade. Testes de retry precisam cobrir rejeição, ACK falso, timeout não cooperativo, backoff limitado, parada no primeiro sucesso e relatório após exaustão.
+- O handshake só deve nascer em `useLayoutEffect` depois do commit dos filhos, e o ACK nativo só pode resolver após a closure da main thread aplicar readiness/visibilidade. Retries precisam ser estritamente sequenciais, limitados a três após ACK falso/erro, parar no primeiro sucesso e reportar exaustão sem deixar invokes órfãos por `Promise.race`.
+- Readiness é uma capacidade por documento: Rust emite geração UUID na URL, o estado nativo compara geração atual/pronta e o comando valida label mais identidade da WebView chamadora. ACK antigo, reload e rota sem geração devem falhar fechados.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -35,7 +36,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 37 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 5 testes Playwright E2E também passam.
-- A suíte Rust possui 86 testes, incluindo 14 casos determinísticos da geometria do overlay e a máquina de readiness. O frontend possui 44 testes Vitest e 5 E2E Playwright.
+- A suíte Rust possui 87 testes, incluindo 14 casos determinísticos da geometria do overlay e a máquina geracional de readiness. O frontend possui 47 testes Vitest e 6 E2E Playwright.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
