@@ -147,3 +147,7 @@ mod identity_tests;
 #[cfg(test)]
 #[path = "coordinator_transform_regression_tests.rs"]
 mod transform_regression_tests;
+
+#[cfg(test)]
+#[path = "coordinator_supersede_tests.rs"]
+mod supersede_tests;
