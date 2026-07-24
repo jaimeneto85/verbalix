@@ -227,4 +227,15 @@ Fora do escopo:
 - [x] Cobrir `G1 → G2 pronta → invalidate G1=false`, preservando ACK e `should_show` de G2.
 - [x] Cobrir rollback stale da transação A sem apagar ou bloquear o documento B.
 - [x] Reexecutar gates: Rust 93/93, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt/check, clippy estrito, diff-check e limite de linhas.
-- [ ] Submeter nova revisão dual antes de Computer Use, merge ou release.
+- [x] Submeter nova revisão dual antes de Computer Use, merge ou release.
+
+### Veredito da sétima revisão
+
+`APPROVED`
+
+- `invalidate_if_current` compara e remove o documento sob o mesmo mutex, retornando `false` sem mutação quando a geração esperada já não é a atual.
+- Callbacks de reload e rollbacks de build/configuração carregam a geração capturada pela própria criação; uma operação atrasada de G1 não remove `current/ready` de G2.
+- O rollback continua operando somente sobre o handle local criado pela transação que falhou, enquanto uma geração B concorrente permanece pronta e exibível.
+- UUID v4, URL geracional, identidade da `NSView` chamadora, ACK na main thread, retries sequenciais limitados a três, reload fail-closed, zero screen, transparência e posicionamento nativo foram preservados.
+- Gates independentes: Rust 93/93, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt, check, clippy estrito, diff-check, limite de 300 linhas e Trivy sem HIGH/CRITICAL passaram.
+- O lifecycle nativo real e a validação visual continuam no gate CA6 de Computer Use antes de merge/release.

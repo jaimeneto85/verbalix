@@ -119,3 +119,20 @@ Os gates foram reexecutados independentemente:
 - Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
 
 O veredito é `REJECTED_CODE`. Se a configuração AppKit falhar após a WebView ser construída, a janela e a geração continuam registradas e podem ser reutilizadas sem composição nativa válida. A criação deve fazer rollback transacional, com invalidação, destruição e fallback de ocultação diagnosticados. O lifecycle real de reload permanece como gate de Computer Use do CA6 antes do release.
+
+## Sétima revisão dual
+
+As análises pessimista e otimista convergiram em `APPROVED`. A comparação da geração e a remoção de `current/ready` são atômicas sob o mesmo mutex. Callbacks de reload e rollbacks usam a geração capturada pela própria transação; operações stale retornam `false`, são diagnosticadas e não alteram o documento atual.
+
+O cenário G1 → G2 pronta → invalidate G1 preserva `has_document`, `should_show` e o ACK de G2. No cenário transacional, a falha de A não apaga nem bloqueia B, e o rollback continua recebendo somente o handle local de A.
+
+Gates independentes desta revisão:
+
+- Rust: 93/93.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+- Trivy: zero vulnerabilidades HIGH/CRITICAL nos lockfiles e zero misconfigurações detectadas.
+
+O lifecycle nativo e a validação visual de transparência/posição permanecem no gate CA6 de Computer Use antes de merge/release.
