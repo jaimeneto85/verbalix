@@ -13,6 +13,8 @@
 - `NSScreen.mainScreen` é a tela da key window, não a zero screen. Conversões entre coordenadas AX globais e Cocoa devem obter a referência vertical de `NSScreen.screens.first`.
 - Um teste Retina que repete entradas idênticas prova apenas determinismo, não o boundary 1x/2x nem a escolha correta da referência global.
 - Aplicar transparência antes do React não garante primeira pintura transparente se a janela puder ser mostrada antes do bootstrap da WebView.
+- Timeout por `Promise.race` não cancela invokes nativos; ACKs de readiness precisam ser correlacionados à geração do documento, não apenas ao label da superfície.
+- Limite de retries deve ser uma invariável da implementação, com teto explícito, e não somente o valor default.
 
 ## Critérios de Rejeição
 - Possibilidade de replace/restore em elemento diferente, mesmo dentro do PID esperado.
@@ -23,6 +25,7 @@
 - Trivy com vulnerabilidade HIGH/CRITICAL ou scan obrigatório não concluído.
 - Conversão AX → Cocoa baseada na tela da key window em vez da zero screen.
 - Overlay mostrado antes de existir garantia de que a superfície WebView transparente está pronta.
+- ACK de documento antigo capaz de marcar como pronta uma WebView recriada com o mesmo label.
 
 ## Stack & Ferramentas
 - Desktop Tauri 2, Rust, React/Vite e Vitest.
@@ -36,3 +39,4 @@
 - SonarQube não estava configurado.
 - Na revisão de `a085121`, o SDK local confirmou `screens.first` como zero screen e `mainScreen` como tela da key window; a primeira revisão do overlay foi `REJECTED_CODE` apesar dos gates automatizados verdes.
 - Na segunda revisão do overlay, zero screen, posicionamento AppKit em pontos, transparência e readiness foram considerados corretos, mas `src-tauri/src/lib.rs` foi modificado e ficou com 309 linhas; o veredito permaneceu `REJECTED_CODE` pelo gate objetivo de 300 linhas.
+- Na terceira revisão do overlay, os gates passaram com Rust 86/86, Vitest 44/44, Playwright 5/5 e cobertura frontend configurada em 100%. O veredito permaneceu `REJECTED_CODE`: retries não tinham teto rígido e ACKs atrasados não carregavam geração do documento.

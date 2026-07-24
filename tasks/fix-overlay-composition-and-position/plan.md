@@ -148,4 +148,23 @@ Fora do escopo:
 - [x] Implementar handshake idempotente com no máximo três tentativas, timeout por tentativa, backoff limitado, interrupção no primeiro ACK e erro observável após exaustão.
 - [x] Cobrir commit anterior ao handshake, ordem de layout effects, retry transitório, parada após sucesso, timeout limitado e preservação do hide-before-ready.
 - [x] Reexecutar Rust, Vitest, cobertura, Playwright, clippy estrito, build, diff-check e limite de linhas: 86 testes Rust, 44 Vitest e 5 E2E passaram; cobertura configurada permaneceu em 100%.
-- [ ] Submeter nova revisão QA antes de Computer Use, merge ou release.
+- [x] Submeter nova revisão QA antes de Computer Use, merge ou release.
+
+### Veredito da terceira revisão
+
+`REJECTED_CODE`
+
+- As correções de composição, geometria, extração de `AppRuntime`, commit React e ACK após aplicação na main thread foram aprovadas.
+- O limite de três tentativas não é uma invariável: a API aceita `attempts > 3` e o backoff cresce junto com esse valor.
+- Tentativas que perdem o timeout continuam pendentes porque `Promise.race` não cancela o invoke nativo.
+- O ACK identifica somente a superfície, não a geração do documento. Um ACK antigo pode encontrar uma WebView recriada com o mesmo label, marcar a nova geração como pronta e exibi-la antes do commit correspondente.
+- O teste de `HideAll` cobre `cancel → ready`, mas não cobre `cancel → nova request → ACK da geração anterior`.
+- Gates independentes da revisão: Rust 86/86, Vitest 44/44, cobertura configurada 100%, Playwright 5/5, fmt/check/clippy estrito, build, diff-check e limite de 300 linhas passaram.
+
+### Remediação da terceira revisão
+
+- [ ] Limitar tentativas e backoff a no máximo três, inclusive quando opções de teste/configuração solicitarem valor maior.
+- [ ] Correlacionar readiness a uma geração/nonce do documento e rejeitar ACKs de gerações anteriores no boundary nativo.
+- [ ] Cobrir ACK antigo após cancelamento, recriação e nova solicitação sem exibir a geração atual.
+- [ ] Cobrir configuração acima de três tentativas e confirmar exatamente três envios.
+- [ ] Reexecutar gates e nova revisão dual antes de Computer Use, merge ou release.

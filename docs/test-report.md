@@ -45,3 +45,9 @@ O analisador de tamanho não encontrou arquivos acima do limite de 300 linhas ef
 - Validar restauração integral do clipboard em processos macOS reais.
 - Confirmar o comportamento do AXObserver híbrido, o clamp pelo `NSScreen.visibleFrame` e o `NSPanel` não ativante com múltiplos monitores.
 - Chrome, Safari, VS Code, Slack, Notes e TextEdit exigem permissão de Acessibilidade e execução manual; T5.4 e T5.5 permanecem abertos.
+
+## Revisão do overlay transparente
+
+Os gates independentes da terceira revisão passaram: Rust 86/86, Vitest 44/44, Playwright 5/5, cobertura frontend configurada em 100%, fmt/check/clippy estrito, build, diff-check e limite de 300 linhas.
+
+O veredito de código é `REJECTED_CODE`. O protocolo de readiness ainda precisa vincular cada ACK à geração do documento/WebView e impor um teto rígido de três tentativas. Sem essa correlação, um invoke que excedeu o timeout pode marcar como pronta uma janela recriada com o mesmo label.
