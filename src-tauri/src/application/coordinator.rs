@@ -47,6 +47,7 @@ impl SelectionCoordinator {
         let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
         match event {
             SelectionEvent::Candidate(snapshot) => {
+                let snapshot = *snapshot;
                 diagnostics::coordinator("candidate_stored", Some(&snapshot));
                 *state = SelectionState::Candidate(snapshot);
             }
@@ -110,7 +111,7 @@ impl SelectionCoordinator {
             return Ok(Some(active));
         }
         diagnostics::coordinator("new_target", Some(&snapshot));
-        self.dispatch(SelectionEvent::Candidate(snapshot.clone()))?;
+        self.dispatch(SelectionEvent::Candidate(Box::new(snapshot.clone())))?;
         Ok(Some(snapshot))
     }
 

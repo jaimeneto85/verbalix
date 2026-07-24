@@ -109,7 +109,7 @@ fn trigger_active_shortcut(runtime: &AppRuntime) {
                 let id = snapshot.id;
                 let _ = runtime
                     .coordinator
-                    .dispatch(SelectionEvent::Candidate(snapshot));
+                    .dispatch(SelectionEvent::Candidate(Box::new(snapshot)));
                 let _ = runtime
                     .coordinator
                     .dispatch(SelectionEvent::DebounceElapsed(id));

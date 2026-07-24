@@ -179,7 +179,7 @@ fn ready(
     let coordinator =
         SelectionCoordinator::new(selection.clone(), overlay.clone(), Arc::new(FakeProvider));
     coordinator
-        .dispatch(SelectionEvent::Candidate(captured.clone()))
+        .dispatch(SelectionEvent::Candidate(Box::new(captured.clone())))
         .unwrap();
     coordinator
         .dispatch(SelectionEvent::DebounceElapsed(captured.id))
@@ -277,7 +277,7 @@ async fn latest_request_wins_out_of_order_responses() {
         provider.clone(),
     ));
     coordinator
-        .dispatch(SelectionEvent::Candidate(captured.clone()))
+        .dispatch(SelectionEvent::Candidate(Box::new(captured.clone())))
         .unwrap();
     coordinator
         .dispatch(SelectionEvent::DebounceElapsed(captured.id))

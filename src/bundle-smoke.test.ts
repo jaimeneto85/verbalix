@@ -40,8 +40,8 @@ describe("macOS bundle smoke contract", () => {
       "src-tauri/src/platform/macos_geometry.rs",
       "utf8"
     );
-    const accessibility = readFileSync(
-      "src-tauri/src/platform/macos_accessibility.rs",
+    const selection = readFileSync(
+      "src-tauri/src/platform/macos_selection.rs",
       "utf8"
     );
 
@@ -52,15 +52,21 @@ describe("macOS bundle smoke contract", () => {
     expect(geometry).toContain("CGEventGetLocation");
     expect(geometry).not.toContain("objc2_app_kit");
     expect(geometry).not.toContain("NSEvent");
-    expect(accessibility).toContain("macos_geometry::resolve");
-    expect(accessibility).toContain("with_geometry_source");
+    expect(selection).toContain("macos_geometry::resolve");
+    expect(selection).toContain("with_geometry_source");
   });
 
   it("keeps text-marker capture read-only on public AX APIs with owned values", () => {
-    const accessibility = readFileSync(
-      "src-tauri/src/platform/macos_accessibility.rs",
-      "utf8"
-    );
+    const accessibility = [
+      "macos_accessibility",
+      "macos_ax",
+      "macos_selection",
+      "macos_text_marker"
+    ]
+      .map((module) =>
+        readFileSync(`src-tauri/src/platform/${module}.rs`, "utf8")
+      )
+      .join("\n");
     const restore = readFileSync(
       "src-tauri/src/platform/macos_restore.rs",
       "utf8"
@@ -82,7 +88,8 @@ describe("macOS bundle smoke contract", () => {
     expect(accessibility).toContain("impl Drop for OwnedCfValue");
     expect(accessibility).not.toContain("AXFocusedApplication");
     expect(accessibility).not.toContain("copy_selection_preserving_clipboard");
-    expect(restore).toContain("if !expected.writable");
+    expect(restore).toContain(".writable");
+    expect(restore).toContain("expected.element_identity.as_ref()");
     expect(restore).toContain('role == "AXSecureTextField"');
   });
 

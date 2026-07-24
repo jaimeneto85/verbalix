@@ -131,7 +131,7 @@ pub enum SelectionState {
 
 #[derive(Clone, Debug)]
 pub enum SelectionEvent {
-    Candidate(SelectionSnapshot),
+    Candidate(Box<SelectionSnapshot>),
     DebounceElapsed(Uuid),
     ActionStarted(Uuid),
     ResultReady(Uuid),
