@@ -66,6 +66,20 @@ Gates independentes desta revisão:
 - Cobertura frontend configurada: 100%.
 - Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
 
+## Revisão compare-and-invalidate
+
+Callbacks de reload e rollbacks de criação agora carregam a geração esperada e usam `invalidate_if_current`. Uma invalidação stale retorna `false`, gera diagnóstico próprio e preserva integralmente o documento atual.
+
+Os testes reproduzem G1 antiga após G2 pronta e uma transação A cujo configure cria B antes do rollback de A; em ambos os casos, G2/B permanece pronta e exibível.
+
+Gates independentes desta revisão:
+
+- Rust: 93/93.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
 ## Revisão da criação transacional do overlay
 
 A criação agora segue `begin_document → build → configure`. Falha de build invalida a geração sem executar configuração ou rollback sobre recurso inexistente. Falha de configuração invalida primeiro e executa `destroy`, usando `hide` como fallback; todas as etapas possuem diagnósticos. Uma nova criação usa geração fresca e configurada.

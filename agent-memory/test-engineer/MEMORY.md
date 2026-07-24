@@ -19,6 +19,7 @@
 - Readiness é uma capacidade por documento: Rust emite geração UUID na URL, o estado nativo compara geração atual/pronta e o comando valida label mais identidade da WebView chamadora. ACK antigo, reload e rota sem geração devem falhar fechados.
 - Reload não pode apenas girar a geração mantendo a URL antiga: no segundo `PageLoadEvent::Started`, a geração é invalidada e a WebView destruída; a próxima solicitação deve recriar janela, UUID e URL. Testes combinam lifecycle puro e contrato estático de destroy/diagnósticos/fallback.
 - Criação de overlay deve ser transacional: `begin_document → build → configure`. Falha de build invalida sem executar rollback de recurso inexistente; falha de configure invalida antes de tentar `destroy → hide`, e uma criação posterior recebe geração nova.
+- Invalidação deve ser compare-and-invalidate: callbacks e rollbacks carregam a geração esperada e só removem `current/ready` quando ela ainda coincide. Um rollback stale de G1 nunca pode apagar G2 já pronta.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -38,7 +39,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 37 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 5 testes Playwright E2E também passam.
-- A suíte Rust possui 91 testes, incluindo build/configure rollback e lifecycle de reload/recriação. O frontend possui 47 testes Vitest e 6 E2E Playwright.
+- A suíte Rust possui 93 testes, incluindo invalidação stale e rollback concorrente. O frontend possui 47 testes Vitest e 6 E2E Playwright.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
