@@ -103,5 +103,5 @@ Implementar somente `SelectedRange → Cursor contido no FocusedElement → Focu
 - [x] T5 [LOW] Implementar a política pura de prioridade e contenção.
 - [x] T6 [LOW] Criar testes puros da matriz de decisão.
 - [x] T7 [LOW] Executar gates Rust/frontend/build/diff e scan aplicável.
-- [ ] T8 [LOW] Executar QA dual e obter verdict.
-- [ ] T9 [LOW] Atualizar memória e documento de entrega.
+- [x] T8 [LOW] Executar QA dual e obter verdict `APPROVED` para código e testes automatizados; R9 permanece gate real pré-merge/release.
+- [x] T9 [LOW] Atualizar memória e documento de entrega.

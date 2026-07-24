@@ -26,6 +26,8 @@
 - `AXBoundsForRange` pode falhar em apps como Slack. Nunca materializar a falha como retângulo sentinela: validar o range, tentar frame/posição+tamanho AX e por último o cursor global via Core Graphics.
 - Superfícies Tauri transparentes também precisam neutralizar o fundo e as dimensões mínimas de `html/body/#root`; `transparent(true)` sozinho não remove o canvas CSS opaco.
 - Coordenadas AX globais não devem passar por `LogicalPosition` no macOS. Converter uma vez para Cocoa usando `NSScreen.screens.firstObject()` como zero screen e aplicar `setFrameOrigin:` em pontos evita dupla escala Retina e a tela da key window.
+- Quando `AXBoundsForRange` não existe, a geometria segue `SelectedRange → Cursor contido no frame focado → FocusedElement → None`; cursor global sem frame válido nunca é aceito e não recebe margem implícita.
+- Contenção cursor-frame é uma heurística espacial, não temporal. Em editores grandes, validar por Computer Use seleção por mouse, teclado e cursor movido antes de merge/release; staleness exige um sinal causal separado.
 - Readiness de overlay precisa de UUID por documento, caller `NSView`, ACK após a main thread e compare-and-invalidate. Reload e rollback devem destruir/inutilizar apenas a própria geração, nunca o documento atual.
 - A criação de overlay é transacional: falha depois do build invalida a geração e destrói a janela, com hide diagnosticado como fallback.
 

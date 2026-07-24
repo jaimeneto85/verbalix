@@ -27,6 +27,7 @@
 - Overlay mostrado antes de existir garantia de que a superfície WebView transparente está pronta.
 - ACK de documento antigo capaz de marcar como pronta uma WebView recriada com o mesmo label.
 - Falha de configuração nativa após `WebviewWindowBuilder::build()` capaz de deixar janela e geração registradas para reuso sem rollback.
+- Cursor global usado como geometria sem frame focado válido e associação espacial comprovada.
 
 ## Stack & Ferramentas
 - Desktop Tauri 2, Rust, React/Vite e Vitest.
@@ -43,3 +44,4 @@
 - Na terceira revisão do overlay, os gates passaram com Rust 86/86, Vitest 44/44, Playwright 5/5 e cobertura frontend configurada em 100%. O veredito permaneceu `REJECTED_CODE`: retries não tinham teto rígido e ACKs atrasados não carregavam geração do documento.
 - Na quinta revisão do overlay, Rust 88/88, Vitest 47/47, Playwright 6/6, cobertura configurada 100%, fmt/check/clippy/build/diff-check e limite de linhas passaram. Reload, UUID v4, identidade `label + NSView + generation`, retries e fail-closed foram aprovados. O veredito permaneceu `REJECTED_CODE` porque falha de `macos_overlay_panel::configure` após o build não faz rollback da janela nem da geração.
 - Na sétima revisão do overlay, o compare-and-invalidate geracional foi aprovado. `invalidate_if_current` é atômico sob o mutex; reload e rollbacks carregam a geração esperada e preservam G2/B quando G1/A fica stale. Rust 93/93, Vitest 47/47, Playwright 6/6, cobertura configurada 100%, fmt/check/clippy/build/diff, limite de linhas e Trivy sem HIGH/CRITICAL passaram. Veredito `APPROVED`, mantendo CA6 via Computer Use antes de merge/release.
+- Na revisão do fallback geométrico, a política pura `SelectedRange → Cursor contido → FocusedElement → None`, com margem zero e overflow rejeitado, foi aprovada. Rust 101/101, Vitest 47/47, Playwright 6/6, cobertura frontend configurada 100%, fmt/check/clippy/build/diff, limite de linhas e Trivy sem HIGH/CRITICAL passaram. O risco residual de cursor stale dentro de editor grande permanece gate real no Slack antes de merge/release.
