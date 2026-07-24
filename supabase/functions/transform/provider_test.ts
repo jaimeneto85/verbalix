@@ -119,24 +119,39 @@ Deno.test("provider requests low-latency reasoning and a bounded output", async 
   }
 });
 
-Deno.test("output budget is Unicode-aware, proportional and capped", () => {
-  assertEquals(outputTokenBudget("a"), 500);
-  assertEquals(outputTokenBudget("👩🏽‍💻".repeat(100)), 500);
+Deno.test("output budget holds exact floor and proportional boundaries", () => {
+  assertEquals(outputTokenBudget(""), 500);
+  assertEquals(outputTokenBudget("a".repeat(558)), 500);
+  assertEquals(outputTokenBudget("a".repeat(559)), 501);
   assertEquals(outputTokenBudget("a".repeat(1_000)), 795);
+});
+
+Deno.test("output budget counts Unicode scalars and holds exact cap boundaries", () => {
+  assertEquals(outputTokenBudget("😀".repeat(1_000)), 795);
+  assertEquals(outputTokenBudget("a".repeat(11_806)), 7_999);
+  assertEquals(outputTokenBudget("a".repeat(11_807)), 8_000);
+  assertEquals(outputTokenBudget("a".repeat(11_809)), 8_000);
   assertEquals(outputTokenBudget("a".repeat(12_000)), 8_000);
 });
 
 Deno.test("provider rejects incomplete and unknown response envelopes", async () => {
+  const validOutput = structuredOutput();
   for (
     const envelope of [
       {
         status: "incomplete",
         incomplete_details: { reason: "max_output_tokens" },
-        output: [],
+        output: validOutput,
       },
-      { status: "incomplete", output: [] },
-      { status: "unknown", output: [] },
-      completedPayload("{}", { reason: "max_output_tokens" }),
+      {
+        status: "incomplete",
+        incomplete_details: { reason: "content_filter" },
+        output: validOutput,
+      },
+      { status: "incomplete", output: validOutput },
+      { status: "unknown", output: validOutput },
+      { output: validOutput },
+      completedPayload(validOutputText(), { reason: "max_output_tokens" }),
     ]
   ) {
     await assertRejects(
@@ -149,6 +164,33 @@ Deno.test("provider rejects incomplete and unknown response envelopes", async ()
     );
   }
 });
+
+Deno.test("provider accepts completed envelopes with null or absent details", async () => {
+  for (
+    const envelope of [
+      completedPayload(validOutputText()),
+      { status: "completed", output: structuredOutput() },
+    ]
+  ) {
+    const result = await providerReturning(Response.json(envelope)).transform(
+      request,
+      new AbortController().signal,
+    );
+    assertEquals(result.result, "Resultado");
+  }
+});
+
+function validOutputText() {
+  return JSON.stringify({
+    sourceLanguage: "English",
+    targetLanguage: "Portuguese",
+    result: "Resultado",
+  });
+}
+
+function structuredOutput() {
+  return [{ content: [{ type: "output_text", text: validOutputText() }] }];
+}
 
 function completedPayload(
   text: string,
