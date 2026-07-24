@@ -114,13 +114,17 @@ fn marker_fallback_is_closed_to_structural_failures() {
 
     for category in categories {
         assert_eq!(
-            marker_fallback(category),
+            marker_fallback(AxFailure::new(AxStage::SelectedText, category)),
             matches!(
                 category,
                 AxCategory::NoValue | AxCategory::AttributeUnsupported
             )
         );
     }
+    assert!(!marker_fallback(AxFailure::new(
+        AxStage::SelectedRange,
+        AxCategory::NoValue,
+    )));
 }
 
 #[test]

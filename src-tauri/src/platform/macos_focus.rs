@@ -169,13 +169,6 @@ pub(crate) enum RangeRepresentation {
     Unsupported,
 }
 
-pub(crate) fn marker_fallback(category: AxCategory) -> bool {
-    matches!(
-        category,
-        AxCategory::NoValue | AxCategory::AttributeUnsupported
-    )
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct AxFailure {
     pub(crate) stage: AxStage,
@@ -186,4 +179,12 @@ impl AxFailure {
     pub(crate) fn new(stage: AxStage, category: AxCategory) -> Self {
         Self { stage, category }
     }
+}
+
+pub(crate) fn marker_fallback(failure: AxFailure) -> bool {
+    failure.stage == AxStage::SelectedText
+        && matches!(
+            failure.category,
+            AxCategory::NoValue | AxCategory::AttributeUnsupported
+        )
 }

@@ -1,5 +1,5 @@
 use super::{
-    macos_ax::{self, AXUIElementRef, OwnedAxElement},
+    macos_ax::{self, OwnedAxElement},
     macos_focus::{AxCategory, AxStage, ExtractionOrigin},
     macos_selection,
 };
@@ -8,8 +8,6 @@ use crate::{
     domain::{SelectionSnapshot, VerbalixError},
 };
 use std::sync::Arc;
-
-pub(super) const AX_SUCCESS: i32 = macos_ax::AX_SUCCESS;
 
 pub struct MacAccessibility;
 
@@ -24,23 +22,6 @@ impl MacAccessibility {
 
     pub(super) fn focused_element() -> Result<OwnedAxElement, VerbalixError> {
         macos_ax::focused_element().map_err(|_| VerbalixError::SelectionUnavailable)
-    }
-
-    pub(super) fn string_attribute(
-        element: AXUIElementRef,
-        name: &str,
-    ) -> Result<String, VerbalixError> {
-        macos_ax::string_attribute(
-            element,
-            name,
-            AxStage::SelectedText,
-            ExtractionOrigin::SelectedText,
-        )
-        .map_err(|_| VerbalixError::SelectionUnavailable)
-    }
-
-    pub(super) fn writable(element: AXUIElementRef) -> bool {
-        macos_ax::writable(element)
     }
 }
 
@@ -68,7 +49,7 @@ impl SelectionPort for MacAccessibility {
     }
 
     fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
-        if !expected.writable || expected.element_identity.is_none() {
+        if !replacement_eligible(expected) {
             return Err(VerbalixError::StaleSelection);
         }
         let element = Self::focused_element()?;
@@ -87,5 +68,56 @@ impl SelectionPort for MacAccessibility {
         transformed_text: &str,
     ) -> Result<(), VerbalixError> {
         super::macos_restore::restore(expected, transformed_text)
+    }
+}
+
+fn replacement_eligible(expected: &SelectionSnapshot) -> bool {
+    expected.writable && expected.element_identity.is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Rect, SelectionElementIdentity, TextRange};
+
+    fn snapshot(writable: bool, identity: bool) -> SelectionSnapshot {
+        let snapshot = SelectionSnapshot::new(
+            42,
+            "pid:42".to_owned(),
+            "selected".to_owned(),
+            TextRange {
+                location: 1,
+                length: 8,
+            },
+            Rect {
+                x: 1.0,
+                y: 2.0,
+                width: 3.0,
+                height: 4.0,
+            },
+            writable,
+        );
+        if identity {
+            snapshot.with_element_identity(SelectionElementIdentity {
+                role: "AXTextArea".to_owned(),
+                subrole: None,
+                identifier: Some("editor".to_owned()),
+                frame: Rect {
+                    x: 1.0,
+                    y: 2.0,
+                    width: 3.0,
+                    height: 4.0,
+                },
+            })
+        } else {
+            snapshot
+        }
+    }
+
+    #[test]
+    fn replacement_fails_before_ax_for_read_only_or_unidentified_snapshots() {
+        assert!(!replacement_eligible(&snapshot(false, true)));
+        assert!(!replacement_eligible(&snapshot(true, false)));
+        assert!(replacement_eligible(&snapshot(true, true)));
     }
 }

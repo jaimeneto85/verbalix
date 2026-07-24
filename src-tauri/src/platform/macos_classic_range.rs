@@ -1,12 +1,11 @@
 use super::{
-    macos_ax::{self, AXUIElementRef, OwnedCfValue, AX_SUCCESS},
+    macos_ax::{self, AXUIElementRef, OwnedCfValue},
     macos_focus::{AxCategory, AxFailure, AxStage, ExtractionOrigin, RangeRepresentation},
 };
-use core_foundation::base::{CFGetTypeID, TCFType};
+use core_foundation::base::CFGetTypeID;
 use std::ffi::c_void;
 
 type AXValueRef = *const c_void;
-type AXError = i32;
 
 const AX_VALUE_CF_RANGE: i32 = 4;
 
@@ -122,22 +121,39 @@ pub(super) fn marker_eligible_after_range(failure: AxFailure) -> bool {
     }
 }
 
-pub(super) fn set_selected_range(element: AXUIElementRef, range: CFRange) -> Result<(), AxFailure> {
-    let value = range_value(range)?;
-    let attribute = core_foundation::string::CFString::new("AXSelectedTextRange");
-    let status = unsafe {
-        AXUIElementSetAttributeValue(element, attribute.as_concrete_TypeRef(), value.as_ref())
-    };
-    (status == AX_SUCCESS)
-        .then_some(())
-        .ok_or_else(|| AxFailure::new(AxStage::SelectedRange, AxCategory::from_status(status)))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
-    fn AXUIElementSetAttributeValue(
-        element: AXUIElementRef,
-        attribute: core_foundation::string::CFStringRef,
-        value: core_foundation::base::CFTypeRef,
-    ) -> AXError;
+    #[test]
+    fn marker_fallback_only_accepts_explicit_cf_range_capability_failures() {
+        for failure in [
+            AxFailure::new(AxStage::SelectedRange, AxCategory::NoValue),
+            AxFailure::new(AxStage::SelectedRange, AxCategory::AttributeUnsupported),
+            AxFailure::new(AxStage::SelectedRange, AxCategory::EmptyRange),
+            AxFailure::new(AxStage::SelectedRange, AxCategory::TextMarkerRange),
+            AxFailure::new(AxStage::StringForRange, AxCategory::NoValue),
+            AxFailure::new(AxStage::StringForRange, AxCategory::AttributeUnsupported),
+            AxFailure::new(
+                AxStage::StringForRange,
+                AxCategory::ParameterizedAttributeUnsupported,
+            ),
+        ] {
+            assert!(marker_eligible_after_range(failure));
+        }
+    }
+
+    #[test]
+    fn marker_fallback_rejects_structural_and_cross_stage_failures() {
+        for failure in [
+            AxFailure::new(AxStage::SelectedRange, AxCategory::CannotComplete),
+            AxFailure::new(AxStage::SelectedRange, AxCategory::ApiDisabled),
+            AxFailure::new(AxStage::SelectedRange, AxCategory::UnexpectedType),
+            AxFailure::new(AxStage::StringForRange, AxCategory::CannotComplete),
+            AxFailure::new(AxStage::Geometry, AxCategory::NoValue),
+            AxFailure::new(AxStage::Pid, AxCategory::NoValue),
+        ] {
+            assert!(!marker_eligible_after_range(failure));
+        }
+    }
 }

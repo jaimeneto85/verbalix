@@ -230,21 +230,33 @@ pub(super) fn pid(element: AXUIElementRef) -> Result<i32, AxFailure> {
     if status == AX_SUCCESS && pid > 0 {
         Ok(pid)
     } else {
-        Err(AxFailure::new(
-            AxStage::Pid,
-            AxCategory::from_status(status),
-        ))
+        let category = if status == AX_SUCCESS {
+            AxCategory::InvalidPid
+        } else {
+            AxCategory::from_status(status)
+        };
+        Err(AxFailure::new(AxStage::Pid, category))
     }
 }
 
 pub(super) fn writable(element: AXUIElementRef) -> bool {
     let attribute = CFString::new("AXSelectedText");
     let mut settable: Boolean = 0;
-    unsafe {
+    let writable = unsafe {
         AXUIElementIsAttributeSettable(element, attribute.as_concrete_TypeRef(), &mut settable)
             == AX_SUCCESS
             && settable != 0
-    }
+    };
+    crate::diagnostics::ax_resolution(
+        AxStage::SelectedTextSettable,
+        ExtractionOrigin::SelectedText,
+        if writable {
+            AxCategory::Settable
+        } else {
+            AxCategory::NotSettable
+        },
+    );
+    writable
 }
 
 pub(super) fn set_selected_text(element: AXUIElementRef, text: &str) -> bool {

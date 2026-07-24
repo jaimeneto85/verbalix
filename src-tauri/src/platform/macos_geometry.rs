@@ -202,9 +202,16 @@ fn read_size(value: CFTypeRef) -> Option<CGSize> {
 }
 
 fn has_ax_value_type(value: CFTypeRef, expected_type: i32) -> bool {
-    !value.is_null()
-        && unsafe { CFGetTypeID(value) == AXValueGetTypeID() }
-        && unsafe { AXValueGetType(value) == expected_type }
+    if value.is_null() {
+        return false;
+    }
+    let is_ax_value = unsafe { CFGetTypeID(value) == AXValueGetTypeID() };
+    is_ax_value
+        && ax_value_type_matches(is_ax_value, unsafe { AXValueGetType(value) }, expected_type)
+}
+
+fn ax_value_type_matches(is_ax_value: bool, actual_type: i32, expected_type: i32) -> bool {
+    is_ax_value && actual_type == expected_type
 }
 
 fn release(value: CFTypeRef) {
@@ -257,6 +264,30 @@ fn valid_frame(bounds: &Rect) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn geometry_decoding_requires_the_expected_ax_value_type() {
+        assert!(ax_value_type_matches(
+            true,
+            AX_VALUE_CG_RECT,
+            AX_VALUE_CG_RECT
+        ));
+        assert!(!ax_value_type_matches(
+            false,
+            AX_VALUE_CG_RECT,
+            AX_VALUE_CG_RECT
+        ));
+        assert!(!ax_value_type_matches(
+            true,
+            AX_VALUE_CG_POINT,
+            AX_VALUE_CG_RECT
+        ));
+        assert!(!ax_value_type_matches(
+            true,
+            AX_VALUE_CG_SIZE,
+            AX_VALUE_CG_RECT
+        ));
+    }
 
     fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
         Rect {

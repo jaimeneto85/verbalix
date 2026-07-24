@@ -109,7 +109,7 @@ fn extract(element: AXUIElementRef) -> Result<ExtractedSelection, VerbalixError>
     );
     match direct {
         Ok(text) => direct_selection(element, text),
-        Err(failure) if marker_fallback(failure.category) => match cf_range_selection(element) {
+        Err(failure) if marker_fallback(failure) => match cf_range_selection(element) {
             Ok(selection) => Ok(selection),
             Err(range_failure)
                 if macos_classic_range::marker_eligible_after_range(range_failure) =>
