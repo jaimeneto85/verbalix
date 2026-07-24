@@ -267,3 +267,6 @@ mod races;
 
 #[path = "coordinator_transform_lease_tests.rs"]
 mod lease_races;
+
+#[path = "coordinator_undo_race_tests.rs"]
+mod undo_races;

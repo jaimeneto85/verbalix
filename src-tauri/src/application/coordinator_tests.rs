@@ -273,3 +273,6 @@ async fn read_only_marker_result_uses_note_without_attempting_mutation() {
 
 #[path = "coordinator_request_tests.rs"]
 mod request_tests;
+
+#[path = "coordinator_toolbar_race_tests.rs"]
+mod toolbar_races;

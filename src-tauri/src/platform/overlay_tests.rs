@@ -136,3 +136,30 @@ fn queued_result_cancelled_before_execution_has_no_effect_or_current_payload() {
     assert_eq!(executions.get(), 0);
     assert_eq!(overlay.current_note_result().unwrap(), None);
 }
+
+#[test]
+fn queued_toolbar_cancelled_before_execution_has_no_effect() {
+    let dispatcher = Arc::new(RecordingDispatcher::default());
+    let overlay = TauriOverlay::with_dispatcher(dispatcher.clone());
+    let guard = Arc::new(TransformLease::new(uuid::Uuid::new_v4(), uuid::Uuid::nil()));
+    overlay
+        .show_toolbar_guarded(bounds(), guard.clone())
+        .unwrap();
+    guard.cancel();
+    let queued_guard = {
+        let commands = dispatcher.commands.lock().unwrap();
+        match &commands[0] {
+            OverlayCommand::ShowToolbar(_, guard) => guard.clone(),
+            _ => panic!("expected a queued toolbar"),
+        }
+    };
+    let executions = std::cell::Cell::new(0);
+    let executed = execute_if_publishable(queued_guard.as_ref(), || {
+        executions.set(executions.get() + 1);
+        Ok(())
+    })
+    .unwrap();
+
+    assert!(!executed);
+    assert_eq!(executions.get(), 0);
+}
