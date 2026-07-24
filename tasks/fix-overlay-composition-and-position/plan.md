@@ -32,7 +32,7 @@ Fora do escopo:
 ### Critérios de aceitação
 
 - CA1: screenshot real mostra apenas o cartão arredondado, sem retângulo branco/cinza nos cantos.
-- CA2: em Slack ou alvo equivalente, a toolbar fica centralizada sobre a seleção com tolerância visual de 12 pontos antes do clamp.
+- CA2: em Slack ou alvo equivalente, a toolbar fica centralizada sobre a seleção com erro máximo de um ponto antes do clamp.
 - CA3: testes cobrem transparência do documento de overlay e posicionamento em tela Retina/múltiplos monitores.
 - CA4: testes cobrem clamp nas quatro bordas e seleção com coordenadas globais negativas.
 - CA5: Rust, Vitest, Playwright relevante, clippy estrito, build e limite de 300 linhas passam.
@@ -48,23 +48,46 @@ Fora do escopo:
 
 ### Direção proposta
 
-- Marcar o documento como overlay antes da primeira pintura e aplicar transparência explícita a `html`, `body` e `#root` somente nessa rota.
-- Reforçar no boundary AppKit que `NSWindow` e a view de conteúdo/WebView não são opacas e usam `clearColor`, preservando o painel não ativante.
-- No macOS, posicionar o painel no boundary AppKit em coordenadas Cocoa por pontos, com conversão única entre o sistema AX top-left e o sistema Cocoa bottom-left baseada no frame da tela selecionada.
-- Manter cálculo puro de ancoragem/clamp separado da aplicação nativa para permitir testes determinísticos.
+- Marcar `document.documentElement` como overlay sincronicamente, antes de `createRoot`, e aplicar transparência explícita a `html`, `body` e `#root` somente nessa rota. A rota também neutraliza o `min-width: 320px`, dimensões mínimas, margin e overflow globais que conflitam com a toolbar de 236 pontos.
+- Reforçar no boundary AppKit que `NSWindow` não é opaca e usa `NSColor.clearColor`, preservando o painel não ativante. APIs privadas adicionais ou KVC não fazem parte da correção sem evidência.
+- Extrair `overlay_geometry.rs`, com modelos explícitos de `full_frame` e `visible_frame`. A tela é escolhida pelo centro da seleção; se não houver contenção, vence a maior interseção com `full_frame`, seguida da tela mais próxima como fallback determinístico.
+- Converter uma única vez o retângulo AX top-left para Cocoa bottom-left com a transformação global `cocoa_y = main_screen.frame.maxY - ax_y - ax_height`. O round-trip precisa ser testado em telas à esquerda, acima e abaixo da principal.
+- Calcular em pontos Cocoa: `x = selection.midX - width / 2`; preferir `selection.maxY + gap` para posicionar acima; usar `selection.minY - gap - height` abaixo quando acima não couber; se nenhum lado couber, aplicar clamp determinístico no `visible_frame`.
+- No macOS, aplicar o ponto final diretamente ao `NSPanel` por `setFrameOrigin:` dentro do dispatcher da main thread. Não usar `LogicalPosition`, `PhysicalPosition` nem `scale_factor` no caminho macOS.
+- Manter o cálculo puro de ancoragem/clamp separado da aplicação nativa para permitir testes determinísticos e preservar o caminho Tauri fora do macOS.
+- Extrair `macos_overlay_panel.rs` para configuração/composição/posição nativas e manter cada arquivo de produção com no máximo 300 linhas.
 - Fora do macOS, preservar o caminho Tauri existente.
 
 ### Riscos
 
 - Tornar toda a aplicação transparente por CSS pode afetar a janela principal; a regra deve ser restrita à rota de overlay.
 - Trocar somente `LogicalPosition` por `PhysicalPosition` sem controlar a tela pode duplicar ou remover escala.
-- Usar altura apenas da tela principal falha em monitores acima/abaixo; a conversão deve usar o frame global AppKit da tela escolhida.
+- Confundir altura da tela com o `maxY` global da principal falha em monitores acima/abaixo; a transformação deve operar na base global AppKit.
 - Manipulação AppKit fora da main thread causa crash; toda configuração e posição permanecem no dispatcher atual.
 - Alterar classe/ivars após o swizzle para `NSPanel` pode causar panic; usar apenas mensagens AppKit no boundary já estabelecido.
+- `visibleFrame` não serve para escolher a tela porque exclui menu bar/Dock; escolha usa `full_frame` e clamp usa `visible_frame`.
+- Sombras nativas ou da WebView podem simular uma moldura; a validação visual precisa conferir pixels nos quatro cantos sem remover o shadow interno existente às cegas.
+
+### Síntese da análise dual
+
+#### Riscos incorporados
+
+- H1 foi confirmada: `:root` pinta `#eef1f5` e `body` impõe 320 pontos a uma janela de 236 pontos.
+- O boundary atual mistura AX/AppKit em pontos com `LogicalPosition`, que pode reaplicar escala usando a tela associada à janela escondida/reutilizada.
+- O algoritmo antigo escolhe tela pelo canto superior esquerdo e não implementa fallback real abaixo.
+- `overlay_dispatcher.rs` já ultrapassa 300 linhas e deve ser separado antes de crescer.
+- Transparência precisa existir antes da primeira pintura e não pode atingir a janela principal.
+
+#### Oportunidades incorporadas
+
+- O dispatcher atual já oferece o boundary correto de main thread e será preservado.
+- A fórmula horizontal existente pode ser reutilizada após unificar o sistema de coordenadas.
+- A separação em geometria pura e adapter AppKit permite reproduzir Retina/múltiplos monitores sem GUI.
+- A correção não exige alterações em captura AX, domínio, autenticação, IA ou conteúdo visual.
 
 ## 3. TASKS
 
-- [ ] T1: executar análise dual de riscos e oportunidades e sintetizar o design final.
+- [x] T1: executar análise dual de riscos e oportunidades e sintetizar o design final.
 - [ ] T2: adicionar testes que reproduzam documento opaco e erro de posição em Retina/múltiplos monitores.
 - [ ] T3: implementar transparência restrita às rotas de overlay no frontend.
 - [ ] T4: implementar composição nativa transparente de `NSWindow`/WebView no macOS.
@@ -72,3 +95,12 @@ Fora do escopo:
 - [ ] T6: executar gates automatizados e análise de segurança/regressão.
 - [ ] T7: QA dual emitir `APPROVED`, `REJECTED_CODE` ou `REJECTED_TESTS`.
 - [ ] T8: registrar evidências e atualizar memórias; deixar Computer Use, merge e release para o agente raiz.
+
+### Casos de teste obrigatórios
+
+- Frontend: classe/atributo antes do render; backgrounds computados transparentes em `html/body/#root`; `min-width` neutralizado; rota principal preserva o fundo.
+- Geometria: centro sem clamp; quatro bordas; acima quando cabe; abaixo quando não cabe acima; nenhuma direção cabe.
+- Telas: origem X negativa; telas acima/abaixo; escalas 1x/2x sem multiplicação; seleção cruzando telas; seleção fora do `visible_frame` mas dentro do `full_frame`.
+- Conversão: AX → Cocoa → AX preserva retângulo; janela toolbar e note usam alturas distintas.
+- Lifecycle: janela reutilizada muda entre telas sem herdar a escala/posição anterior.
+- Contrato: caminho macOS não usa APIs Tauri de posição/escala; painel continua não ativante e transparente.
