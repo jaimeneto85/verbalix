@@ -66,6 +66,18 @@ Gates independentes desta revisão:
 - Cobertura frontend configurada: 100%.
 - Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
 
+## Revisão da criação transacional do overlay
+
+A criação agora segue `begin_document → build → configure`. Falha de build invalida a geração sem executar configuração ou rollback sobre recurso inexistente. Falha de configuração invalida primeiro e executa `destroy`, usando `hide` como fallback; todas as etapas possuem diagnósticos. Uma nova criação usa geração fresca e configurada.
+
+Gates independentes desta revisão:
+
+- Rust: 91/91, incluindo o teste adicional de falha de build.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
 ## Revisão da recuperação após reload
 
 O segundo início de carregamento agora invalida a geração e destrói a WebView. Uma solicitação posterior detecta qualquer janela sem documento atual, remove essa instância e cria UUID/URL novos; ACK da geração anterior permanece rejeitado. Falhas de invalidação, destruição e fallback de ocultação possuem diagnósticos próprios.

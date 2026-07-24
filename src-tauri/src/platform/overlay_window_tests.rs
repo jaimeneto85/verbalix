@@ -73,6 +73,39 @@ fn configure_failure_rolls_back_before_a_fresh_creation() {
 }
 
 #[test]
+fn build_failure_invalidates_without_running_configuration_or_rollback() {
+    let readiness = OverlayReadiness::default();
+    let configure_called = Cell::new(false);
+    let destroy_called = Cell::new(false);
+    let hide_called = Cell::new(false);
+
+    let result = create_configured_document(
+        &readiness,
+        OverlaySurface::Toolbar,
+        3,
+        |_| Err::<&str, _>(VerbalixError::LocalFailure),
+        |_| {
+            configure_called.set(true);
+            Ok(())
+        },
+        |_| {
+            destroy_called.set(true);
+            Ok(())
+        },
+        |_| {
+            hide_called.set(true);
+            Ok(())
+        },
+    );
+
+    assert!(result.is_err());
+    assert!(!configure_called.get());
+    assert!(!destroy_called.get());
+    assert!(!hide_called.get());
+    assert!(!readiness.has_document(OverlaySurface::Toolbar).unwrap());
+}
+
+#[test]
 fn failed_destroy_and_hide_still_leave_creation_invalidated() {
     let readiness = OverlayReadiness::default();
     let destroy_attempted = Cell::new(false);
