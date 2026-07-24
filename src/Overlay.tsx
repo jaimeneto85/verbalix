@@ -18,9 +18,14 @@ export function Overlay({
     useState<"error" | "result" | "preview" | "undo">("result");
   const [requestId, setRequestId] = useState("");
   const [busy, setBusy] = useState<"translate" | "improve" | null>(null);
+  const [settingsReady, setSettingsReady] = useState(false);
 
   useEffect(() => {
-    native.loadSettings().then(setSettings).catch(() => undefined);
+    native
+      .loadSettings()
+      .then(setSettings)
+      .catch(() => undefined)
+      .finally(() => setSettingsReady(true));
     if (kind !== "note") return;
     let active = true;
     const showResult = (payload: NoteResult) => {
@@ -57,11 +62,9 @@ export function Overlay({
   const transform = async (operation: "translate" | "improve") => {
     setBusy(operation);
     try {
-      const readiness = await native.aiReadiness();
-      if (readiness.status !== "ready") return;
       await native.transformSelection(operation, settings);
     } catch {
-      await native.openMainWindow().catch(() => undefined);
+      return;
     } finally {
       setBusy(null);
     }
@@ -117,12 +120,18 @@ export function Overlay({
   return (
     <OverlayReadyGate kind={kind} generation={generation}>
       <main className="toolbar">
-        <button disabled={busy !== null} onClick={() => transform("translate")}>
+        <button
+          disabled={!settingsReady || busy !== null}
+          onClick={() => transform("translate")}
+        >
           <span>文</span>
           {busy === "translate" ? "Traduzindo…" : "Traduzir"}
         </button>
         <i />
-        <button disabled={busy !== null} onClick={() => transform("improve")}>
+        <button
+          disabled={!settingsReady || busy !== null}
+          onClick={() => transform("improve")}
+        >
           <span>✦</span>
           {busy === "improve" ? "Aprimorando…" : "Aprimorar"}
         </button>

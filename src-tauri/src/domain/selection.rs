@@ -141,8 +141,8 @@ pub enum SelectionState {
 pub enum SelectionEvent {
     Candidate(Box<SelectionSnapshot>),
     DebounceElapsed(Uuid),
-    ActionStarted(Uuid),
     ResultReady(Uuid),
+    TransientInvalidated,
     Invalidated,
 }
 

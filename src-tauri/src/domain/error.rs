@@ -11,6 +11,8 @@ pub enum VerbalixError {
     ProtectedField,
     #[error("The selection changed before the operation completed")]
     StaleSelection,
+    #[error("Another transformation is already in progress")]
+    OperationInProgress,
     #[error("Selected text exceeds the 12,000 character limit")]
     TextTooLong,
     #[error("Remote authentication is required")]

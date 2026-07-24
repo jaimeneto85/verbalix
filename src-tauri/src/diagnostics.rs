@@ -131,7 +131,6 @@ fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
         snapshot.writable
     )
 }
-
 fn lifecycle_metadata(origin: &'static str) -> String {
     format!("origin={origin}")
 }
@@ -142,6 +141,7 @@ fn error_code(error: &VerbalixError) -> &'static str {
         VerbalixError::SelectionUnavailable => "selection_unavailable",
         VerbalixError::ProtectedField => "protected_field",
         VerbalixError::StaleSelection => "stale_selection",
+        VerbalixError::OperationInProgress => "operation_in_progress",
         VerbalixError::TextTooLong => "text_too_long",
         VerbalixError::Unauthenticated => "unauthenticated",
         VerbalixError::ProviderNotConfigured => "provider_not_configured",

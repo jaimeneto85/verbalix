@@ -3,16 +3,13 @@ use crate::{
         classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
         HistoryItem, PublicBackendConfig, RefreshFailureRoute, SessionRepository, StoredSession,
     },
-    domain::{
-        AppSettings, SelectionEvent, SettingsRepository, TransformOperation, TransformPreferences,
-        TransformRequest, TransformResult, VerbalixError,
-    },
+    domain::{AppSettings, SelectionEvent, SettingsRepository, VerbalixError},
     normalized_shortcut, AppRuntime,
 };
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
-fn current_ai_readiness(runtime: &AppRuntime) -> Result<AiReadiness, VerbalixError> {
+pub(crate) fn current_ai_readiness(runtime: &AppRuntime) -> Result<AiReadiness, VerbalixError> {
     if !runtime.backend_config.configured {
         return Ok(evaluate_ai_readiness(false, false));
     }
@@ -20,7 +17,7 @@ fn current_ai_readiness(runtime: &AppRuntime) -> Result<AiReadiness, VerbalixErr
     Ok(evaluate_ai_readiness(true, has_session))
 }
 
-fn show_readiness(runtime: &AppRuntime, readiness: &AiReadiness) {
+pub(crate) fn show_readiness(runtime: &AppRuntime, readiness: &AiReadiness) {
     crate::diagnostics::ai_readiness(readiness.status.as_str());
     if readiness.status == AiReadinessStatus::Ready {
         return;
@@ -32,7 +29,7 @@ fn show_readiness(runtime: &AppRuntime, readiness: &AiReadiness) {
     }
 }
 
-fn show_provider_unavailable(runtime: &AppRuntime) {
+pub(crate) fn show_provider_unavailable(runtime: &AppRuntime) {
     crate::diagnostics::ai_readiness("provider_unavailable");
     if let Some(snapshot) = runtime.coordinator.current_snapshot() {
         let _ = runtime.overlay.show_error(
@@ -165,79 +162,6 @@ pub(crate) fn refresh_selection(
             .dispatch(SelectionEvent::DebounceElapsed(snapshot.id))?;
     }
     Ok(snapshot)
-}
-
-#[tauri::command]
-pub(crate) async fn transform_selection(
-    app: AppHandle,
-    runtime: State<'_, Arc<AppRuntime>>,
-    operation: TransformOperation,
-    preferences: Option<TransformPreferences>,
-) -> Result<TransformResult, VerbalixError> {
-    let readiness = current_ai_readiness(&runtime).inspect_err(|_| {
-        show_provider_unavailable(&runtime);
-    })?;
-    if readiness.status != AiReadinessStatus::Ready {
-        show_readiness(&runtime, &readiness);
-        if readiness.status == AiReadinessStatus::LoginRequired {
-            crate::show_main_window(&app, "login_required");
-            return Err(VerbalixError::Unauthenticated);
-        }
-        return Err(VerbalixError::ProviderNotConfigured);
-    }
-    let snapshot = runtime
-        .coordinator
-        .current_snapshot()
-        .ok_or(VerbalixError::SelectionUnavailable)?;
-    let stored = runtime
-        .session
-        .load()?
-        .ok_or(VerbalixError::Unauthenticated)?;
-    let session = match runtime.auth.refresh(&stored).await {
-        Ok(session) => session,
-        Err(error) => {
-            route_refresh_failure(
-                &error,
-                || {
-                    let readiness = AiReadiness::login_required();
-                    show_readiness(&runtime, &readiness);
-                    crate::show_main_window(&app, "login_required");
-                },
-                || {
-                    show_provider_unavailable(&runtime);
-                },
-            );
-            return Err(error);
-        }
-    };
-    runtime.session.save(&session).inspect_err(|_| {
-        show_provider_unavailable(&runtime);
-    })?;
-    let request = TransformRequest {
-        request_id: uuid::Uuid::new_v4(),
-        operation,
-        text: snapshot.text,
-        preferences,
-    };
-    let preview = runtime.settings.load()?.confirm_before_replace;
-    let response = match runtime
-        .coordinator
-        .transform(request.clone(), &session.access_token, preview)
-        .await
-    {
-        Ok(response) => response,
-        Err(error) => {
-            show_provider_unavailable(&runtime);
-            return Err(error);
-        }
-    };
-    if runtime.settings.load()?.history_enabled {
-        let _ = runtime
-            .history
-            .insert(&request, &response, &session.access_token)
-            .await;
-    }
-    Ok(response)
 }
 
 #[tauri::command]

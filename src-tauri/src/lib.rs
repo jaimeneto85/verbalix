@@ -2,6 +2,7 @@ mod application;
 mod commands;
 #[cfg(test)]
 mod commands_tests;
+mod commands_transform;
 mod diagnostics;
 mod domain;
 mod lifecycle;
@@ -14,6 +15,7 @@ use application::{
     RemoteHistoryRepository, RemoteTransformer, RuntimePause, SelectionCoordinator,
 };
 use commands::*;
+use commands_transform::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use overlay_commands::*;
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
@@ -47,7 +49,9 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
                     | Err(error @ VerbalixError::PermissionDenied) => {
                         diagnostics::capture_failure("polling", &error);
                         candidate_id = None;
-                        let _ = runtime.coordinator.dispatch(SelectionEvent::Invalidated);
+                        let _ = runtime
+                            .coordinator
+                            .dispatch(SelectionEvent::TransientInvalidated);
                     }
                     _ => {}
                 }
@@ -223,7 +227,7 @@ pub fn run() {
                 diagnostics::detection("mouse_dismiss");
                 let _ = dismiss_runtime
                     .coordinator
-                    .dispatch(SelectionEvent::Invalidated);
+                    .dispatch(SelectionEvent::TransientInvalidated);
             }));
             let observer_runtime = runtime.clone();
             runtime.selection.start_observer(Arc::new(move || {
@@ -242,7 +246,7 @@ pub fn run() {
                             diagnostics::capture_failure("ax_observer", &error);
                             let _ = observer_runtime
                                 .coordinator
-                                .dispatch(SelectionEvent::Invalidated);
+                                .dispatch(SelectionEvent::TransientInvalidated);
                         }
                         _ => {}
                     }

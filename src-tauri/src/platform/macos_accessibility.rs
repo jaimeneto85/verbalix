@@ -49,17 +49,7 @@ impl SelectionPort for MacAccessibility {
     }
 
     fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
-        if !replacement_eligible(expected) {
-            return Err(VerbalixError::StaleSelection);
-        }
-        let element = Self::focused_element()?;
-        let current = macos_selection::capture(&element)?;
-        if !current.same_target(expected) || !current.writable {
-            return Err(VerbalixError::StaleSelection);
-        }
-        macos_ax::set_selected_text(element.as_ref(), text)
-            .then_some(())
-            .ok_or(VerbalixError::LocalFailure)
+        super::macos_replace::replace(expected, text)
     }
 
     fn restore(
@@ -71,6 +61,7 @@ impl SelectionPort for MacAccessibility {
     }
 }
 
+#[cfg(test)]
 fn replacement_eligible(expected: &SelectionSnapshot) -> bool {
     expected.writable
         && expected

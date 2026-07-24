@@ -25,6 +25,8 @@ mod macos_observer;
 #[cfg(target_os = "macos")]
 mod macos_overlay_panel;
 #[cfg(target_os = "macos")]
+mod macos_replace;
+#[cfg(target_os = "macos")]
 mod macos_restore;
 #[cfg(target_os = "macos")]
 mod macos_selection;
