@@ -190,4 +190,20 @@ Fora do escopo:
 - [x] Cobrir lifecycle `reload → destroy → recreate → old ACK false → new ACK true/visible`.
 - [x] Aceitar somente UUID v4 no bootstrap e cobrir UUID ausente/inválido como root vazio.
 - [x] Reexecutar gates: Rust 88/88, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt/check, clippy estrito, diff-check e limite de linhas.
-- [ ] Submeter nova revisão dual antes de Computer Use, merge ou release.
+- [x] Submeter nova revisão dual antes de Computer Use, merge ou release.
+
+### Veredito da quinta revisão
+
+`REJECTED_CODE`
+
+- Reload agora invalida a geração antes de destruir a WebView, diagnostica cada fallback e força UUID/URL novos na solicitação posterior.
+- UUID v4, identidade por label e `NSView`, ACK geracional, retries sequenciais limitados, hide-before-ready, zero screen, transparência, posição e limite de linhas foram aprovados.
+- A criação ainda não é transacional: se `macos_overlay_panel::configure` falhar após `build()`, a janela e a geração permanecem registradas. A solicitação seguinte pode reutilizar uma janela não configurada e reintroduzir composição opaca ou ativante.
+- O lifecycle nativo de reload continua como gate obrigatório de Computer Use antes do release; a combinação de máquina de estados, contrato estático e CA6 torna esse gap manual não bloqueante para o código automatizado.
+
+### Remediação da quinta revisão
+
+- [ ] Em falha de configuração nativa, invalidar o documento, destruir a janela e usar `hide` como fallback se a destruição falhar.
+- [ ] Diagnosticar falha de configuração e os resultados do rollback sem dados sensíveis.
+- [ ] Cobrir o rollback transacional para impedir reuso de janela sem composição nativa válida.
+- [ ] Reexecutar todos os gates e nova revisão dual antes de Computer Use, merge ou release.

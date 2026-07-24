@@ -79,3 +79,17 @@ Gates independentes desta revisão:
 - Playwright: 6/6.
 - Cobertura frontend configurada: 100%.
 - Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
+## Quinta revisão dual
+
+A recuperação após reload foi aprovada: o segundo início de carregamento invalida a geração antes da destruição, registra falhas de invalidação/destruição/ocultação, e uma solicitação posterior cria UUID/URL novos. ACK antigo, UUID ausente ou inválido e janela sem documento falham fechados.
+
+Os gates foram reexecutados independentemente:
+
+- Rust: 88/88.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
+O veredito é `REJECTED_CODE`. Se a configuração AppKit falhar após a WebView ser construída, a janela e a geração continuam registradas e podem ser reutilizadas sem composição nativa válida. A criação deve fazer rollback transacional, com invalidação, destruição e fallback de ocultação diagnosticados. O lifecycle real de reload permanece como gate de Computer Use do CA6 antes do release.
