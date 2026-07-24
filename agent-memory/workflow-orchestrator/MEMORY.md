@@ -41,6 +41,8 @@
 - `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` são o par canônico compartilhado. O nativo aceita `VERBALIX_*` apenas como par legado completo; nunca misturar URL de uma fonte com key de outra.
 - Para embutir configuração pública sem expô-la no output do build script, gerar fonte Rust em `OUT_DIR` e incluí-la no binário; não transportar valores por `cargo:rustc-env`.
 - Worktrees não recebem arquivos ignorados como `.env`; o smoke pré-merge precisa provisionar o arquivo localmente sem logar valores, enquanto o checkout principal resolve `../.env` normalmente.
+- Deploy de Edge Function com provider externo é bloqueado antes da publicação quando qualquer secret obrigatório está ausente; nunca publicar deliberadamente um endpoint que só responderá 500.
+- Chave pública Supabase no formato JWT legado não prova sessão de usuário. Além de `verify_jwt`, confirmar o bearer no Auth endpoint e rejeitar papel/token anônimo antes de chamar o provider.
 - A matriz de MVP é Chrome, Safari, VS Code, Slack, Notes e TextEdit.
 
 ## Observações

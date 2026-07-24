@@ -113,9 +113,20 @@ Oportunidades (downsideup):
 - [x] T1 Criar draft, análise dual e síntese final do SDD.
 - [x] T2 Refatorar handler para injeção sem alterar o contrato público.
 - [x] T3 Adicionar testes unitários/integrados para HTTP, secrets, timeout e provider.
-- [ ] T4 Executar Deno, Rust, frontend, E2E, Edge, analyzer e scans.
-- [ ] T5 Descobrir acesso/projeto e verificar secrets por presença.
-- [ ] T6 Implantar `transform` no projeto autorizado.
-- [ ] T7 Executar smoke não autenticado e autenticado sem expor dados.
-- [ ] T8 QA independente emitir verdict de código e deploy.
-- [ ] T9 Documentar versão, evidência, bloqueios e rollback.
+- [ ] T4 Executar Deno, Rust, frontend, E2E, Edge, analyzer e scans. Deno fmt/lint/check e 34/34 aprovados; matriz completa fica no gate de retomada.
+- [x] T5 Descobrir acesso/projeto e verificar secrets por presença.
+- [ ] T6 Implantar `transform` no projeto autorizado — `BLOCKED`: ambos os secrets obrigatórios estão ausentes.
+- [ ] T7 Executar smoke não autenticado e autenticado sem expor dados — bloqueado por T6 e por sessão de usuário ainda não fornecida.
+- [ ] T8 QA independente emitir verdict de código e deploy. Código pré-deploy `APPROVED`; verdict de deploy aguarda T6/T7.
+- [x] T9 Documentar versão, evidência, bloqueios e rollback.
+
+## 4. STATUS
+
+`BLOCKED_EXTERNAL` antes do deploy, conforme R7 e o gate T5:
+
+- acesso CLI e projeto: confirmados;
+- `OPENAI_API_KEY`: ausente no projeto e no ambiente local;
+- `OPENAI_MODEL`: ausente no projeto e no ambiente local;
+- busca restrita ao repositório não encontrou fonte local para nenhum dos dois.
+
+Nenhuma função foi implantada. Para retomar, o usuário deve provisionar ambos os secrets no projeto Supabase (ou fornecer valores por um canal seguro) e disponibilizar uma sessão Supabase Auth válida para o smoke real.
