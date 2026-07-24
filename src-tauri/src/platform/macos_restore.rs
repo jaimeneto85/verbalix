@@ -1,86 +1,102 @@
-use super::macos_accessibility::{AXUIElementRef, MacAccessibility, AX_SUCCESS};
-use crate::domain::{SelectionSnapshot, VerbalixError};
-use core_foundation::{
-    base::{CFRelease, CFTypeRef, TCFType},
-    string::{CFString, CFStringRef},
-};
-use std::ffi::c_void;
-
-type AXError = i32;
-type AXValueRef = *const c_void;
-const AX_VALUE_CF_RANGE: i32 = 4;
-
-#[repr(C)]
-struct CFRange {
-    location: isize,
-    length: isize,
-}
-
-#[link(name = "ApplicationServices", kind = "framework")]
-extern "C" {
-    fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
-    fn AXValueCreate(value_type: i32, value: *const c_void) -> AXValueRef;
-    fn AXUIElementSetAttributeValue(
-        element: AXUIElementRef,
-        attribute: CFStringRef,
-        value: CFTypeRef,
-    ) -> AXError;
-}
+use super::{macos_ax, macos_selection};
+use crate::domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError};
 
 pub fn restore(expected: &SelectionSnapshot, transformed_text: &str) -> Result<(), VerbalixError> {
-    let element = MacAccessibility::focused_element()?;
-    let mut pid = 0;
-    if unsafe { AXUIElementGetPid(element.as_ref(), &mut pid) } != AX_SUCCESS || pid != expected.pid
+    let expected_identity = expected_strong_identity(expected)?;
+    let element = macos_ax::focused_element().map_err(|_| VerbalixError::StaleSelection)?;
+    let pid = macos_ax::pid(element.as_ref()).map_err(|_| VerbalixError::StaleSelection)?;
+    let own_pid = i32::try_from(std::process::id()).map_err(|_| VerbalixError::StaleSelection)?;
+    let role = macos_selection::role(element.as_ref())?;
+    if role == "AXSecureTextField" {
+        return Err(VerbalixError::ProtectedField);
+    }
+    let current_identity = macos_selection::element_identity(element.as_ref(), role.clone())?;
+    validate_restore_target(
+        expected,
+        expected_identity,
+        pid,
+        own_pid,
+        &role,
+        macos_ax::writable(element.as_ref()),
+        &current_identity,
+    )?;
+    let current = macos_selection::classic_selection(element.as_ref())?;
+    validate_restore_selection(expected, transformed_text, &current)?;
+    macos_ax::set_selected_text(element.as_ref(), &expected.text)
+        .then_some(())
+        .ok_or(VerbalixError::LocalFailure)
+}
+
+fn validate_restore_target(
+    expected: &SelectionSnapshot,
+    expected_identity: &SelectionElementIdentity,
+    pid: i32,
+    own_pid: i32,
+    role: &str,
+    writable: bool,
+    current_identity: &SelectionElementIdentity,
+) -> Result<(), VerbalixError> {
+    if role == "AXSecureTextField" {
+        return Err(VerbalixError::ProtectedField);
+    }
+    if !expected.writable
+        || pid <= 0
+        || pid == own_pid
+        || pid != expected.pid
+        || role.is_empty()
+        || !writable
+        || !same_strong_identity(expected_identity, current_identity)
     {
         return Err(VerbalixError::StaleSelection);
     }
-    let value = MacAccessibility::string_attribute(element.as_ref(), "AXValue")?;
-    let utf16: Vec<u16> = value.encode_utf16().collect();
-    let start =
-        usize::try_from(expected.range.location).map_err(|_| VerbalixError::StaleSelection)?;
-    let length = transformed_text.encode_utf16().count();
-    let end = start
-        .checked_add(length)
-        .filter(|end| *end <= utf16.len())
-        .ok_or(VerbalixError::StaleSelection)?;
-    let current =
-        String::from_utf16(&utf16[start..end]).map_err(|_| VerbalixError::StaleSelection)?;
-    if current != transformed_text {
-        return Err(VerbalixError::StaleSelection);
-    }
-    select_range(element.as_ref(), start, length)?;
-    let attribute = CFString::new("AXSelectedText");
-    let original = CFString::new(&expected.text);
-    let status = unsafe {
-        AXUIElementSetAttributeValue(
-            element.as_ref(),
-            attribute.as_concrete_TypeRef(),
-            original.as_CFTypeRef(),
-        )
-    };
-    (status == AX_SUCCESS)
-        .then_some(())
-        .ok_or(VerbalixError::LocalFailure)
+    Ok(())
 }
 
-fn select_range(
-    element: AXUIElementRef,
-    location: usize,
-    length: usize,
-) -> Result<(), VerbalixError> {
-    let range = CFRange {
-        location: location as isize,
-        length: length as isize,
-    };
-    let value = unsafe { AXValueCreate(AX_VALUE_CF_RANGE, (&range as *const CFRange).cast()) };
-    if value.is_null() {
-        return Err(VerbalixError::LocalFailure);
-    }
-    let attribute = CFString::new("AXSelectedTextRange");
-    let status =
-        unsafe { AXUIElementSetAttributeValue(element, attribute.as_concrete_TypeRef(), value) };
-    unsafe { CFRelease(value) };
-    (status == AX_SUCCESS)
-        .then_some(())
-        .ok_or(VerbalixError::LocalFailure)
+fn expected_strong_identity(
+    expected: &SelectionSnapshot,
+) -> Result<&SelectionElementIdentity, VerbalixError> {
+    let identity = expected
+        .writable
+        .then_some(expected.element_identity.as_ref())
+        .flatten()
+        .ok_or(VerbalixError::StaleSelection)?;
+    identity
+        .strong_identifier()
+        .is_some()
+        .then_some(identity)
+        .ok_or(VerbalixError::StaleSelection)
 }
+
+fn same_strong_identity(
+    expected: &SelectionElementIdentity,
+    current: &SelectionElementIdentity,
+) -> bool {
+    match (expected.strong_identifier(), current.strong_identifier()) {
+        (Some(expected_identifier), Some(current_identifier)) => {
+            expected_identifier == current_identifier && expected == current
+        }
+        _ => false,
+    }
+}
+
+fn validate_restore_selection(
+    expected: &SelectionSnapshot,
+    transformed_text: &str,
+    current: &macos_selection::ClassicSelection,
+) -> Result<(), VerbalixError> {
+    let expected_location =
+        isize::try_from(expected.range.location).map_err(|_| VerbalixError::StaleSelection)?;
+    let transformed_length = isize::try_from(transformed_text.encode_utf16().count())
+        .map_err(|_| VerbalixError::StaleSelection)?;
+    if current.text != transformed_text
+        || current.range.location != expected_location
+        || current.range.length != transformed_length
+    {
+        return Err(VerbalixError::StaleSelection);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "macos_restore_tests.rs"]
+mod tests;

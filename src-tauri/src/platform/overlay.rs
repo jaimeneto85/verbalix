@@ -4,6 +4,7 @@ use crate::{
     platform::{
         note_result::{NoteMode, NoteResultPayload, NoteResultState},
         overlay_dispatcher::{MainThreadOverlayDispatcher, OverlayCommand, OverlayDispatcher},
+        overlay_readiness::OverlaySurface,
     },
 };
 use std::sync::Arc;
@@ -45,6 +46,16 @@ impl TauriOverlay {
 
     pub fn current_note_result(&self) -> Result<Option<NoteResultPayload>, VerbalixError> {
         self.note_result.current()
+    }
+
+    pub async fn surface_ready(
+        &self,
+        label: &str,
+        generation: uuid::Uuid,
+    ) -> Result<bool, VerbalixError> {
+        self.dispatcher
+            .surface_ready(OverlaySurface::from_label(label)?, generation)
+            .await
     }
 
     pub fn show_error(&self, bounds: Rect, message: &str) -> Result<(), VerbalixError> {
@@ -117,15 +128,16 @@ impl OverlayPort for TauriOverlay {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::overlay_dispatcher::anchored_origin;
     use std::sync::Mutex;
 
     #[derive(Default)]
     struct RecordingDispatcher {
         commands: Mutex<Vec<OverlayCommand>>,
+        ready: Mutex<Vec<(OverlaySurface, uuid::Uuid)>>,
         fail: bool,
     }
 
+    #[async_trait::async_trait]
     impl OverlayDispatcher for RecordingDispatcher {
         fn dispatch(&self, command: OverlayCommand) -> Result<(), VerbalixError> {
             if self.fail {
@@ -133,6 +145,18 @@ mod tests {
             }
             self.commands.lock().unwrap().push(command);
             Ok(())
+        }
+
+        async fn surface_ready(
+            &self,
+            surface: OverlaySurface,
+            generation: uuid::Uuid,
+        ) -> Result<bool, VerbalixError> {
+            if self.fail {
+                return Err(VerbalixError::LocalFailure);
+            }
+            self.ready.lock().unwrap().push((surface, generation));
+            Ok(true)
         }
     }
 
@@ -177,6 +201,7 @@ mod tests {
     fn dispatch_failure_is_returned_without_panicking() {
         let overlay = TauriOverlay::with_dispatcher(Arc::new(RecordingDispatcher {
             commands: Mutex::new(Vec::new()),
+            ready: Mutex::new(Vec::new()),
             fail: true,
         }));
 
@@ -190,20 +215,20 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn centers_toolbar_above_selection() {
-        assert_eq!(anchored_origin(bounds(), 236.0, 52.0, None), (132.0, 238.0));
-    }
+    #[tokio::test]
+    async fn readiness_returns_an_ack_and_rejects_unknown_surfaces() {
+        let dispatcher = Arc::new(RecordingDispatcher::default());
+        let overlay = TauriOverlay::with_dispatcher(dispatcher.clone());
+        let generation = uuid::Uuid::new_v4();
 
-    #[test]
-    fn clamps_overlay_to_top_and_left_safe_margin() {
-        let selection = Rect {
-            x: 0.0,
-            y: 4.0,
-            width: 1.0,
-            height: 1.0,
-        };
-
-        assert_eq!(anchored_origin(selection, 420.0, 220.0, None), (8.0, 8.0));
+        assert!(overlay.surface_ready("toolbar", generation).await.unwrap());
+        assert_eq!(
+            dispatcher.ready.lock().unwrap().as_slice(),
+            &[(OverlaySurface::Toolbar, generation)]
+        );
+        assert!(matches!(
+            overlay.surface_ready("main", generation).await,
+            Err(VerbalixError::LocalFailure)
+        ));
     }
 }

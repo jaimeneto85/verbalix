@@ -1,7 +1,7 @@
-use super::macos_accessibility::AXUIElementRef;
+use super::macos_ax::AXUIElementRef;
 use crate::domain::{GeometrySource, Rect};
 use core_foundation::{
-    base::{CFRelease, CFTypeRef, TCFType},
+    base::{CFGetTypeID, CFRelease, CFTypeRef, TCFType},
     string::{CFString, CFStringRef},
 };
 use std::{ffi::c_void, ptr};
@@ -58,6 +58,8 @@ extern "C" {
         value: *mut CFTypeRef,
     ) -> AXError;
     fn AXValueCreate(value_type: i32, value: *const c_void) -> AXValueRef;
+    fn AXValueGetType(value: AXValueRef) -> i32;
+    fn AXValueGetTypeID() -> usize;
     fn AXValueGetValue(value: AXValueRef, value_type: i32, output: *mut c_void) -> u8;
     fn CGEventCreate(source: *const c_void) -> CGEventRef;
     fn CGEventGetLocation(event: CGEventRef) -> CGPoint;
@@ -115,6 +117,10 @@ fn focused_element_frame(element: AXUIElementRef) -> Option<Rect> {
     })
 }
 
+pub(super) fn element_frame(element: AXUIElementRef) -> Option<Rect> {
+    focused_element_frame(element)
+}
+
 fn cursor_position() -> Option<CGPoint> {
     let event = unsafe { CGEventCreate(ptr::null()) };
     if event.is_null() {
@@ -144,19 +150,33 @@ fn copy_attribute(element: AXUIElementRef, name: &str) -> Option<CFTypeRef> {
 }
 
 fn read_rect(value: CFTypeRef) -> Option<Rect> {
+    let rect = rect_from_value(value);
+    release(value);
+    rect
+}
+
+pub(super) fn rect_from_value(value: CFTypeRef) -> Option<Rect> {
+    if !has_ax_value_type(value, AX_VALUE_CG_RECT) {
+        return None;
+    }
     let mut rect = CGRect::default();
     let success =
         unsafe { AXValueGetValue(value, AX_VALUE_CG_RECT, (&mut rect as *mut CGRect).cast()) };
-    release(value);
-    (success != 0).then_some(Rect {
-        x: rect.origin.x,
-        y: rect.origin.y,
-        width: rect.size.width,
-        height: rect.size.height,
-    })
+    (success != 0)
+        .then_some(Rect {
+            x: rect.origin.x,
+            y: rect.origin.y,
+            width: rect.size.width,
+            height: rect.size.height,
+        })
+        .filter(valid_frame)
 }
 
 fn read_point(value: CFTypeRef) -> Option<CGPoint> {
+    if !has_ax_value_type(value, AX_VALUE_CG_POINT) {
+        release(value);
+        return None;
+    }
     let mut point = CGPoint::default();
     let success = unsafe {
         AXValueGetValue(
@@ -170,11 +190,28 @@ fn read_point(value: CFTypeRef) -> Option<CGPoint> {
 }
 
 fn read_size(value: CFTypeRef) -> Option<CGSize> {
+    if !has_ax_value_type(value, AX_VALUE_CG_SIZE) {
+        release(value);
+        return None;
+    }
     let mut size = CGSize::default();
     let success =
         unsafe { AXValueGetValue(value, AX_VALUE_CG_SIZE, (&mut size as *mut CGSize).cast()) };
     release(value);
     (success != 0).then_some(size)
+}
+
+fn has_ax_value_type(value: CFTypeRef, expected_type: i32) -> bool {
+    if value.is_null() {
+        return false;
+    }
+    let is_ax_value = unsafe { CFGetTypeID(value) == AXValueGetTypeID() };
+    is_ax_value
+        && ax_value_type_matches(is_ax_value, unsafe { AXValueGetType(value) }, expected_type)
+}
+
+fn ax_value_type_matches(is_ax_value: bool, actual_type: i32, expected_type: i32) -> bool {
+    is_ax_value && actual_type == expected_type
 }
 
 fn release(value: CFTypeRef) {
@@ -191,22 +228,32 @@ fn select_geometry(
     if let Some(bounds) = selected_range.filter(valid_selected_range) {
         return Some((bounds, GeometrySource::SelectedRange));
     }
-    if let Some(bounds) = focused_element.filter(valid_frame) {
-        return Some((bounds, GeometrySource::FocusedElement));
+    let frame = focused_element.filter(valid_frame)?;
+    if let Some(point) = cursor.filter(|point| cursor_within_frame(point, &frame)) {
+        return Some((
+            Rect {
+                x: point.x,
+                y: point.y,
+                width: 1.0,
+                height: 1.0,
+            },
+            GeometrySource::Cursor,
+        ));
     }
-    cursor
-        .filter(|point| point.x.is_finite() && point.y.is_finite())
-        .map(|point| {
-            (
-                Rect {
-                    x: point.x,
-                    y: point.y,
-                    width: 1.0,
-                    height: 1.0,
-                },
-                GeometrySource::Cursor,
-            )
-        })
+    Some((frame, GeometrySource::FocusedElement))
+}
+
+fn cursor_within_frame(point: &CGPoint, frame: &Rect) -> bool {
+    let max_x = frame.x + frame.width;
+    let max_y = frame.y + frame.height;
+    point.x.is_finite()
+        && point.y.is_finite()
+        && max_x.is_finite()
+        && max_y.is_finite()
+        && point.x >= frame.x
+        && point.x <= max_x
+        && point.y >= frame.y
+        && point.y <= max_y
 }
 
 fn finite(bounds: &Rect) -> bool {
@@ -225,90 +272,5 @@ fn valid_frame(bounds: &Rect) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
-        Rect {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
-    #[test]
-    fn selected_range_has_priority_when_valid() {
-        let selected = rect(10.0, 20.0, 30.0, 12.0);
-        let resolved = select_geometry(
-            Some(selected),
-            Some(rect(1.0, 2.0, 300.0, 200.0)),
-            Some(CGPoint { x: 8.0, y: 9.0 }),
-        );
-
-        assert_eq!(resolved, Some((selected, GeometrySource::SelectedRange)));
-    }
-
-    #[test]
-    fn sentinel_and_non_finite_range_fall_back_to_element_frame() {
-        let frame = rect(40.0, 50.0, 600.0, 400.0);
-        for invalid in [
-            rect(0.0, 1117.0, 1.0, 1.0),
-            rect(50.0, 60.0, 0.5, 18.0),
-            rect(f64::NAN, 2.0, 3.0, 4.0),
-            rect(1.0, 2.0, 0.0, 4.0),
-        ] {
-            assert_eq!(
-                select_geometry(Some(invalid), Some(frame), None),
-                Some((frame, GeometrySource::FocusedElement))
-            );
-        }
-    }
-
-    #[test]
-    fn cursor_is_used_when_ax_geometry_is_invalid() {
-        let resolved = select_geometry(
-            Some(rect(0.0, 0.0, 1.0, 1.0)),
-            Some(rect(0.0, 0.0, -1.0, 10.0)),
-            Some(CGPoint { x: 420.0, y: 240.0 }),
-        );
-
-        assert_eq!(
-            resolved,
-            Some((rect(420.0, 240.0, 1.0, 1.0), GeometrySource::Cursor))
-        );
-    }
-
-    #[test]
-    fn negative_global_coordinates_remain_valid_for_secondary_displays() {
-        let selected = rect(-1440.0, -120.0, 80.0, 18.0);
-        let cursor = CGPoint {
-            x: -800.0,
-            y: 420.0,
-        };
-
-        assert_eq!(
-            select_geometry(Some(selected), None, Some(cursor)),
-            Some((selected, GeometrySource::SelectedRange))
-        );
-        assert_eq!(
-            select_geometry(None, None, Some(cursor)),
-            Some((rect(-800.0, 420.0, 1.0, 1.0), GeometrySource::Cursor))
-        );
-    }
-
-    #[test]
-    fn invalid_cursor_does_not_create_a_sentinel_rectangle() {
-        assert_eq!(
-            select_geometry(
-                Some(rect(0.0, 0.0, 1.0, 1.0)),
-                Some(rect(10.0, 10.0, f64::INFINITY, 20.0)),
-                Some(CGPoint {
-                    x: f64::NAN,
-                    y: 240.0,
-                }),
-            ),
-            None
-        );
-    }
-}
+#[path = "macos_geometry_tests.rs"]
+mod tests;

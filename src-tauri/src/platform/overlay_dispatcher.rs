@@ -1,15 +1,23 @@
+#[cfg(target_os = "macos")]
+use crate::platform::macos_overlay_panel;
 use crate::{
     diagnostics,
     domain::{Rect, VerbalixError},
-    platform::note_result::NoteResultPayload,
+    platform::{
+        note_result::NoteResultPayload,
+        overlay_readiness::{OverlayReadiness, OverlaySurface},
+        overlay_window::{get_or_create, show_if_ready},
+    },
 };
+use async_trait::async_trait;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc,
 };
-use tauri::{
-    AppHandle, Emitter, LogicalPosition, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-};
+#[cfg(not(target_os = "macos"))]
+use tauri::LogicalPosition;
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OverlayCommand {
@@ -18,13 +26,20 @@ pub enum OverlayCommand {
     HideAll,
 }
 
+#[async_trait]
 pub trait OverlayDispatcher: Send + Sync {
     fn dispatch(&self, command: OverlayCommand) -> Result<(), VerbalixError>;
+    async fn surface_ready(
+        &self,
+        surface: OverlaySurface,
+        generation: Uuid,
+    ) -> Result<bool, VerbalixError>;
 }
 
 pub struct MainThreadOverlayDispatcher {
     app: AppHandle,
     execution_failure: Arc<ExecutionFailure>,
+    readiness: Arc<OverlayReadiness>,
     next_sequence: AtomicU64,
 }
 
@@ -51,11 +66,13 @@ impl MainThreadOverlayDispatcher {
         Self {
             app,
             execution_failure: Arc::new(ExecutionFailure::default()),
+            readiness: Arc::new(OverlayReadiness::default()),
             next_sequence: AtomicU64::new(1),
         }
     }
 }
 
+#[async_trait]
 impl OverlayDispatcher for MainThreadOverlayDispatcher {
     fn dispatch(&self, command: OverlayCommand) -> Result<(), VerbalixError> {
         self.execution_failure.take()?;
@@ -64,15 +81,41 @@ impl OverlayDispatcher for MainThreadOverlayDispatcher {
         diagnostics::overlay("scheduled", label, sequence);
         let app = self.app.clone();
         let execution_failure = self.execution_failure.clone();
+        let readiness = self.readiness.clone();
         self.app
             .run_on_main_thread(move || {
                 diagnostics::overlay("executing", label, sequence);
-                if execute_command(&app, command, sequence).is_err() {
+                if execute_command(&app, command, sequence, &readiness).is_err() {
                     diagnostics::overlay("failed", label, sequence);
                     execution_failure.record();
                 }
             })
             .map_err(|_| VerbalixError::LocalFailure)
+    }
+
+    async fn surface_ready(
+        &self,
+        surface: OverlaySurface,
+        generation: Uuid,
+    ) -> Result<bool, VerbalixError> {
+        self.execution_failure.take()?;
+        let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
+        let label = surface.label();
+        diagnostics::overlay("scheduled", label, sequence);
+        let app = self.app.clone();
+        let readiness = self.readiness.clone();
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.app
+            .run_on_main_thread(move || {
+                diagnostics::overlay("executing", label, sequence);
+                let result = execute_surface_ready(&app, surface, generation, sequence, &readiness);
+                if result.is_err() {
+                    diagnostics::overlay("failed", label, sequence);
+                }
+                let _ = sender.send(result);
+            })
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        receiver.await.map_err(|_| VerbalixError::LocalFailure)?
     }
 }
 
@@ -90,23 +133,41 @@ fn execute_command(
     app: &AppHandle,
     command: OverlayCommand,
     sequence: u64,
+    readiness: &Arc<OverlayReadiness>,
 ) -> Result<(), VerbalixError> {
     match command {
         OverlayCommand::ShowToolbar(bounds) => {
-            let window = window(app, "toolbar", 236.0, 52.0, sequence)?;
-            place(app, &window, bounds, 236.0, 52.0, "toolbar", sequence)?;
-            show_and_confirm(&window, "toolbar", sequence)
+            let surface = OverlaySurface::Toolbar;
+            readiness.request(surface)?;
+            let result = (|| {
+                let window = get_or_create(app, surface, 236.0, 52.0, sequence, readiness)?;
+                place(app, &window, bounds, 236.0, 52.0, "toolbar", sequence)?;
+                show_if_ready(&window, surface, sequence, readiness)
+            })();
+            if result.is_err() {
+                readiness.cancel(surface)?;
+            }
+            result
         }
         OverlayCommand::ShowResult(bounds, payload) => {
-            let window = window(app, "note", 420.0, 220.0, sequence)?;
-            place(app, &window, bounds, 420.0, 220.0, "note", sequence)?;
-            window
-                .emit("note-result", payload)
-                .map_err(|_| VerbalixError::LocalFailure)?;
-            diagnostics::overlay("emitted", "note", sequence);
-            show_and_confirm(&window, "note", sequence)
+            let surface = OverlaySurface::Note;
+            readiness.request(surface)?;
+            let result = (|| {
+                let window = get_or_create(app, surface, 420.0, 220.0, sequence, readiness)?;
+                place(app, &window, bounds, 420.0, 220.0, "note", sequence)?;
+                window
+                    .emit("note-result", payload)
+                    .map_err(|_| VerbalixError::LocalFailure)?;
+                diagnostics::overlay("emitted", "note", sequence);
+                show_if_ready(&window, surface, sequence, readiness)
+            })();
+            if result.is_err() {
+                readiness.cancel(surface)?;
+            }
+            result
         }
         OverlayCommand::HideAll => {
+            readiness.cancel_all()?;
             for label in ["toolbar", "note"] {
                 if let Some(window) = app.get_webview_window(label) {
                     window.hide().map_err(|_| VerbalixError::LocalFailure)?;
@@ -124,39 +185,40 @@ fn execute_command(
     }
 }
 
-fn window(
+fn execute_surface_ready(
     app: &AppHandle,
-    label: &str,
-    width: f64,
-    height: f64,
+    surface: OverlaySurface,
+    generation: Uuid,
     sequence: u64,
-) -> Result<WebviewWindow, VerbalixError> {
-    if let Some(window) = app.get_webview_window(label) {
-        diagnostics::overlay("window_reused", label, sequence);
-        return Ok(window);
+    readiness: &OverlayReadiness,
+) -> Result<bool, VerbalixError> {
+    let window = app
+        .get_webview_window(surface.label())
+        .ok_or(VerbalixError::LocalFailure)?;
+    if !readiness.mark_ready(surface, generation)? {
+        diagnostics::overlay("stale_surface", surface.label(), sequence);
+        return Ok(false);
     }
-    let window = WebviewWindowBuilder::new(
-        app,
-        label,
-        WebviewUrl::App(format!("index.html?overlay={label}").into()),
-    )
-    .title("Verbalix")
-    .inner_size(width, height)
-    .decorations(false)
-    .transparent(true)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .resizable(false)
-    .focused(false)
-    .visible(false)
-    .build()
-    .map_err(|_| VerbalixError::LocalFailure)?;
-    #[cfg(target_os = "macos")]
-    configure_nonactivating_panel(&window)?;
-    diagnostics::overlay("window_created", label, sequence);
-    Ok(window)
+    show_if_ready(&window, surface, sequence, readiness)?;
+    Ok(true)
 }
 
+#[cfg(target_os = "macos")]
+fn place(
+    _app: &AppHandle,
+    window: &WebviewWindow,
+    bounds: Rect,
+    width: f64,
+    height: f64,
+    label: &str,
+    sequence: u64,
+) -> Result<(), VerbalixError> {
+    let origin = macos_overlay_panel::place(window, bounds, width, height)?;
+    diagnostics::overlay_position(label, sequence, origin.x, origin.y);
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
 fn place(
     app: &AppHandle,
     window: &WebviewWindow,
@@ -166,33 +228,21 @@ fn place(
     label: &str,
     sequence: u64,
 ) -> Result<(), VerbalixError> {
-    let frame = visible_frames().into_iter().find(|frame| {
-        bounds.x >= frame.x
-            && bounds.x <= frame.x + frame.width
-            && bounds.y >= frame.y
-            && bounds.y <= frame.y + frame.height
-    });
-    let frame = frame.or_else(|| {
-        app.available_monitors().ok().and_then(|monitors| {
-            monitors.into_iter().find_map(|monitor| {
-                let scale = monitor.scale_factor();
-                let position = monitor.position();
-                let size = monitor.size();
-                let frame = Rect {
-                    x: f64::from(position.x) / scale,
-                    y: f64::from(position.y) / scale,
-                    width: f64::from(size.width) / scale,
-                    height: f64::from(size.height) / scale,
-                };
-                let contained = bounds.x >= frame.x
-                    && bounds.x <= frame.x + frame.width
-                    && bounds.y >= frame.y
-                    && bounds.y <= frame.y + frame.height;
-                contained.then_some(frame)
-            })
+    let frame = app.available_monitors().ok().and_then(|monitors| {
+        monitors.into_iter().find_map(|monitor| {
+            let scale = monitor.scale_factor();
+            let position = monitor.position();
+            let size = monitor.size();
+            let frame = Rect {
+                x: f64::from(position.x) / scale,
+                y: f64::from(position.y) / scale,
+                width: f64::from(size.width) / scale,
+                height: f64::from(size.height) / scale,
+            };
+            contains(frame, bounds).then_some(frame)
         })
     });
-    let (x, y) = anchored_origin(bounds, width, height, frame);
+    let (x, y) = legacy_anchored_origin(bounds, width, height, frame);
     window
         .set_position(LogicalPosition::new(x, y))
         .map_err(|_| VerbalixError::LocalFailure)?;
@@ -200,53 +250,16 @@ fn place(
     Ok(())
 }
 
-fn show_and_confirm(
-    window: &WebviewWindow,
-    label: &str,
-    sequence: u64,
-) -> Result<(), VerbalixError> {
-    window.show().map_err(|_| VerbalixError::LocalFailure)?;
-    let visible = window
-        .is_visible()
-        .map_err(|_| VerbalixError::LocalFailure)?;
-    diagnostics::overlay_visibility(label, sequence, visible);
-    if visible {
-        Ok(())
-    } else {
-        Err(VerbalixError::LocalFailure)
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn visible_frames() -> Vec<Rect> {
-    use objc2::MainThreadMarker;
-    use objc2_app_kit::NSScreen;
-    let Some(mtm) = MainThreadMarker::new() else {
-        return Vec::new();
-    };
-    let primary_height = NSScreen::mainScreen(mtm)
-        .map(|screen| screen.frame().size.height)
-        .unwrap_or_default();
-    NSScreen::screens(mtm)
-        .iter()
-        .map(|screen| {
-            let visible = screen.visibleFrame();
-            Rect {
-                x: visible.origin.x,
-                y: primary_height - visible.origin.y - visible.size.height,
-                width: visible.size.width,
-                height: visible.size.height,
-            }
-        })
-        .collect()
+#[cfg(not(target_os = "macos"))]
+fn contains(frame: Rect, bounds: Rect) -> bool {
+    bounds.x >= frame.x
+        && bounds.x <= frame.x + frame.width
+        && bounds.y >= frame.y
+        && bounds.y <= frame.y + frame.height
 }
 
 #[cfg(not(target_os = "macos"))]
-fn visible_frames() -> Vec<Rect> {
-    Vec::new()
-}
-
-pub fn anchored_origin(
+fn legacy_anchored_origin(
     bounds: Rect,
     width: f64,
     height: f64,
@@ -261,30 +274,6 @@ pub fn anchored_origin(
         );
     }
     (x.max(8.0), y.max(8.0))
-}
-
-#[cfg(target_os = "macos")]
-fn configure_nonactivating_panel(window: &WebviewWindow) -> Result<(), VerbalixError> {
-    use objc2::{
-        msg_send,
-        runtime::{AnyClass, AnyObject},
-    };
-    let pointer = window
-        .ns_window()
-        .map_err(|_| VerbalixError::LocalFailure)?
-        .cast::<AnyObject>();
-    let object = unsafe { pointer.as_ref() }.ok_or(VerbalixError::LocalFailure)?;
-    let panel_class = AnyClass::get(c"NSPanel").ok_or(VerbalixError::LocalFailure)?;
-    unsafe {
-        AnyObject::set_class(object, panel_class);
-        let style: usize = msg_send![object, styleMask];
-        let _: () = msg_send![object, setStyleMask: style | (1 << 7)];
-        let _: () = msg_send![object, setHidesOnDeactivate: false];
-        let _: () = msg_send![object, setBecomesKeyOnlyIfNeeded: true];
-        let _: () = msg_send![object, setLevel: 101isize];
-        let _: () = msg_send![object, setCollectionBehavior: (1usize << 0) | (1usize << 8)];
-    }
-    Ok(())
 }
 
 #[cfg(test)]

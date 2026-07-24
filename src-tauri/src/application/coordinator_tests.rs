@@ -179,7 +179,7 @@ fn ready(
     let coordinator =
         SelectionCoordinator::new(selection.clone(), overlay.clone(), Arc::new(FakeProvider));
     coordinator
-        .dispatch(SelectionEvent::Candidate(captured.clone()))
+        .dispatch(SelectionEvent::Candidate(Box::new(captured.clone())))
         .unwrap();
     coordinator
         .dispatch(SelectionEvent::DebounceElapsed(captured.id))
@@ -245,6 +245,20 @@ async fn overlay_failure_recovers_to_toolbar_state() {
 }
 
 #[tokio::test]
+async fn read_only_marker_result_uses_note_without_attempting_mutation() {
+    let (coordinator, selection, overlay) = ready(false, false, false);
+    let input = request("Olá 👩🏽‍💻");
+
+    coordinator.transform(input, "token", false).await.unwrap();
+
+    assert!(selection.replacements.lock().unwrap().is_empty());
+    assert_eq!(
+        overlay.events.lock().unwrap().as_slice(),
+        ["toolbar", "note:result"]
+    );
+}
+
+#[tokio::test]
 async fn latest_request_wins_out_of_order_responses() {
     let captured = snapshot(true);
     let selection = Arc::new(FakeSelection {
@@ -263,7 +277,7 @@ async fn latest_request_wins_out_of_order_responses() {
         provider.clone(),
     ));
     coordinator
-        .dispatch(SelectionEvent::Candidate(captured.clone()))
+        .dispatch(SelectionEvent::Candidate(Box::new(captured.clone())))
         .unwrap();
     coordinator
         .dispatch(SelectionEvent::DebounceElapsed(captured.id))

@@ -64,6 +64,18 @@ describe("native command contract", () => {
     });
   });
 
+  it("returns the native readiness acknowledgment", async () => {
+    invoke.mockResolvedValue(true);
+
+    await expect(
+      native.overlaySurfaceReady("note", "note-generation")
+    ).resolves.toBe(true);
+    expect(invoke).toHaveBeenCalledWith("overlay_surface_ready", {
+      overlay: "note",
+      generation: "note-generation"
+    });
+  });
+
   it("maps settings, session, selection and dismissal commands exactly", async () => {
     invoke.mockResolvedValue(undefined);
 
@@ -77,6 +89,7 @@ describe("native command contract", () => {
     await native.aiReadiness();
     await native.openMainWindow();
     await native.refreshSelection();
+    await native.overlaySurfaceReady("toolbar", "toolbar-generation");
     await native.dismissOverlays();
     await native.applyPreview("request-id");
     await native.listHistory();
@@ -94,6 +107,10 @@ describe("native command contract", () => {
       ["ai_readiness"],
       ["open_main_window"],
       ["refresh_selection"],
+      [
+        "overlay_surface_ready",
+        { overlay: "toolbar", generation: "toolbar-generation" }
+      ],
       ["dismiss_overlays"],
       ["apply_preview", { requestId: "request-id" }],
       ["list_history"],

@@ -55,7 +55,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("blocks transformation while login is required", async ({ page }) => {
-  await page.goto("/?overlay=toolbar");
+  await page.goto(
+    "/?overlay=toolbar&generation=123e4567-e89b-42d3-a456-426614174000"
+  );
 
   await page.getByRole("button", { name: /Traduzir/ }).click();
 
@@ -72,7 +74,9 @@ test("blocks transformation while login is required", async ({ page }) => {
 test("shows the complete actionable login error inside the note", async ({
   page
 }) => {
-  await page.goto("/?overlay=note");
+  await page.goto(
+    "/?overlay=note&generation=123e4567-e89b-42d3-a456-426614174000"
+  );
 
   const message = page.getByText(
     "Entre no Verbalix para usar tradução e aprimoramento."

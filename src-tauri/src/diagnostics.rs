@@ -1,13 +1,50 @@
 use crate::domain::{SelectionSnapshot, VerbalixError};
+#[cfg(target_os = "macos")]
+use crate::platform::macos_focus::{AxCategory, AxStage, ExtractionOrigin};
 use std::sync::OnceLock;
+#[cfg(target_os = "macos")]
+use std::{collections::HashMap, sync::Mutex};
 
-fn enabled() -> bool {
+pub(crate) fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
         std::env::var("VERBALIX_DIAGNOSTICS")
             .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
             .unwrap_or(false)
     })
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn ax_resolution(stage: AxStage, origin: ExtractionOrigin, category: AxCategory) {
+    static LAST: OnceLock<Mutex<HashMap<(AxStage, ExtractionOrigin), AxCategory>>> =
+        OnceLock::new();
+    let key = (stage, origin);
+    let should_emit = LAST
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .map(|mut last| should_emit_ax_transition(&mut last, key, category))
+        .unwrap_or(false);
+    if should_emit {
+        emit(
+            "ax_resolution",
+            "status",
+            &format!(
+                "stage={} origin={} category={}",
+                stage.as_str(),
+                origin.as_str(),
+                category.as_str()
+            ),
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn should_emit_ax_transition(
+    last: &mut HashMap<(AxStage, ExtractionOrigin), AxCategory>,
+    key: (AxStage, ExtractionOrigin),
+    category: AxCategory,
+) -> bool {
+    last.insert(key, category) != Some(category)
 }
 
 fn emit(stage: &str, event: &str, metadata: &str) {
@@ -85,15 +122,8 @@ pub fn overlay_position(label: &str, sequence: u64, x: f64, y: f64) {
 
 fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
     format!(
-        "snapshot_id={} pid={} range_location={} range_length={} bounds={:.1},{:.1},{:.1},{:.1} geometry_source={} writable={}",
+        "snapshot_id={} geometry_source={} writable={}",
         snapshot.id,
-        snapshot.pid,
-        snapshot.range.location,
-        snapshot.range.length,
-        snapshot.bounds.x,
-        snapshot.bounds.y,
-        snapshot.bounds.width,
-        snapshot.bounds.height,
         snapshot
             .geometry_source
             .map(|source| source.as_str())
@@ -128,6 +158,8 @@ fn error_code(error: &VerbalixError) -> &'static str {
 mod tests {
     use super::*;
     use crate::domain::{Rect, TextRange};
+    #[cfg(target_os = "macos")]
+    use crate::platform::macos_focus::{AxCategory, AxStage, ExtractionOrigin};
 
     #[test]
     fn snapshot_diagnostics_never_include_selected_text() {
@@ -151,8 +183,10 @@ mod tests {
         let metadata = snapshot_metadata(&snapshot);
 
         assert!(!metadata.contains("secret selected text"));
-        assert!(metadata.contains("pid=42"));
-        assert!(metadata.contains("range_location=3"));
+        assert!(!metadata.contains("pid=42"));
+        assert!(!metadata.contains("range_location"));
+        assert!(!metadata.contains("range_length"));
+        assert!(!metadata.contains("bounds="));
         assert!(metadata.contains("geometry_source=unknown"));
     }
 
@@ -183,6 +217,34 @@ mod tests {
     }
 
     #[test]
+    fn marker_geometry_and_read_only_state_are_reported_without_content() {
+        let snapshot = SelectionSnapshot::new(
+            42,
+            "pid:42".to_owned(),
+            "private marker content".to_owned(),
+            TextRange {
+                location: 3,
+                length: 8,
+            },
+            Rect {
+                x: -1200.0,
+                y: 20.0,
+                width: 80.0,
+                height: 18.0,
+            },
+            false,
+        )
+        .with_geometry_source(crate::domain::GeometrySource::TextMarkerRange);
+
+        let metadata = snapshot_metadata(&snapshot);
+
+        assert!(metadata.contains("geometry_source=text_marker_range"));
+        assert!(metadata.contains("writable=false"));
+        assert!(!metadata.contains("private marker content"));
+        assert!(!metadata.contains("pid:42"));
+    }
+
+    #[test]
     fn permission_failure_uses_a_sanitized_stable_code() {
         assert_eq!(
             error_code(&VerbalixError::PermissionDenied),
@@ -196,5 +258,43 @@ mod tests {
 
         assert_eq!(metadata, "origin=dock_reopen");
         assert!(!metadata.contains("secret selected text"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn ax_diagnostics_emit_only_when_a_stage_category_transitions() {
+        let mut last = HashMap::new();
+        let key = (AxStage::SelectedText, ExtractionOrigin::SelectedText);
+
+        assert!(should_emit_ax_transition(
+            &mut last,
+            key,
+            AxCategory::NoValue
+        ));
+        assert!(!should_emit_ax_transition(
+            &mut last,
+            key,
+            AxCategory::NoValue
+        ));
+        assert!(should_emit_ax_transition(
+            &mut last,
+            key,
+            AxCategory::Success
+        ));
+        assert!(should_emit_ax_transition(
+            &mut last,
+            key,
+            AxCategory::NoValue
+        ));
+        assert!(should_emit_ax_transition(
+            &mut last,
+            (AxStage::SelectedText, ExtractionOrigin::TextMarker),
+            AxCategory::NoValue
+        ));
+        assert!(!should_emit_ax_transition(
+            &mut last,
+            (AxStage::SelectedText, ExtractionOrigin::TextMarker),
+            AxCategory::NoValue
+        ));
     }
 }

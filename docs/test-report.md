@@ -45,3 +45,94 @@ O analisador de tamanho não encontrou arquivos acima do limite de 300 linhas ef
 - Validar restauração integral do clipboard em processos macOS reais.
 - Confirmar o comportamento do AXObserver híbrido, o clamp pelo `NSScreen.visibleFrame` e o `NSPanel` não ativante com múltiplos monitores.
 - Chrome, Safari, VS Code, Slack, Notes e TextEdit exigem permissão de Acessibilidade e execução manual; T5.4 e T5.5 permanecem abertos.
+
+## Revisão do overlay transparente
+
+Os gates independentes da terceira revisão passaram: Rust 86/86, Vitest 44/44, Playwright 5/5, cobertura frontend configurada em 100%, fmt/check/clippy estrito, build, diff-check e limite de 300 linhas.
+
+O veredito de código é `REJECTED_CODE`. O protocolo de readiness ainda precisa vincular cada ACK à geração do documento/WebView e impor um teto rígido de três tentativas. Sem essa correlação, um invoke que excedeu o timeout pode marcar como pronta uma janela recriada com o mesmo label.
+
+## Revisão do protocolo geracional
+
+A remediação vincula cada documento de overlay a uma geração UUID emitida pelo Rust e valida geração, label e identidade da WebView chamadora antes de aceitar readiness. Reload invalida a geração e esconde a janela; rotas de overlay sem geração mantêm a superfície transparente com root vazio.
+
+O frontend removeu `Promise.race`: tentativas são sequenciais, limitadas rigidamente a três, executadas somente após ACK falso ou erro, interrompidas no primeiro sucesso e reportadas após exaustão.
+
+Gates independentes desta revisão:
+
+- Rust: 87/87.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
+## Revisão compare-and-invalidate
+
+Callbacks de reload e rollbacks de criação agora carregam a geração esperada e usam `invalidate_if_current`. Uma invalidação stale retorna `false`, gera diagnóstico próprio e preserva integralmente o documento atual.
+
+Os testes reproduzem G1 antiga após G2 pronta e uma transação A cujo configure cria B antes do rollback de A; em ambos os casos, G2/B permanece pronta e exibível.
+
+Gates independentes desta revisão:
+
+- Rust: 93/93.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
+## Revisão da criação transacional do overlay
+
+A criação agora segue `begin_document → build → configure`. Falha de build invalida a geração sem executar configuração ou rollback sobre recurso inexistente. Falha de configuração invalida primeiro e executa `destroy`, usando `hide` como fallback; todas as etapas possuem diagnósticos. Uma nova criação usa geração fresca e configurada.
+
+Gates independentes desta revisão:
+
+- Rust: 91/91, incluindo o teste adicional de falha de build.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
+## Revisão da recuperação após reload
+
+O segundo início de carregamento agora invalida a geração e destrói a WebView. Uma solicitação posterior detecta qualquer janela sem documento atual, remove essa instância e cria UUID/URL novos; ACK da geração anterior permanece rejeitado. Falhas de invalidação, destruição e fallback de ocultação possuem diagnósticos próprios.
+
+O bootstrap aceita somente UUID v4. Geração ausente ou inválida mantém a rota transparente, sem renderizar toolbar, nota ou aplicação principal.
+
+Gates independentes desta revisão:
+
+- Rust: 88/88.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
+## Quinta revisão dual
+
+A recuperação após reload foi aprovada: o segundo início de carregamento invalida a geração antes da destruição, registra falhas de invalidação/destruição/ocultação, e uma solicitação posterior cria UUID/URL novos. ACK antigo, UUID ausente ou inválido e janela sem documento falham fechados.
+
+Os gates foram reexecutados independentemente:
+
+- Rust: 88/88.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+
+O veredito é `REJECTED_CODE`. Se a configuração AppKit falhar após a WebView ser construída, a janela e a geração continuam registradas e podem ser reutilizadas sem composição nativa válida. A criação deve fazer rollback transacional, com invalidação, destruição e fallback de ocultação diagnosticados. O lifecycle real de reload permanece como gate de Computer Use do CA6 antes do release.
+
+## Sétima revisão dual
+
+As análises pessimista e otimista convergiram em `APPROVED`. A comparação da geração e a remoção de `current/ready` são atômicas sob o mesmo mutex. Callbacks de reload e rollbacks usam a geração capturada pela própria transação; operações stale retornam `false`, são diagnosticadas e não alteram o documento atual.
+
+O cenário G1 → G2 pronta → invalidate G1 preserva `has_document`, `should_show` e o ACK de G2. No cenário transacional, a falha de A não apaga nem bloqueia B, e o rollback continua recebendo somente o handle local de A.
+
+Gates independentes desta revisão:
+
+- Rust: 93/93.
+- Vitest: 47/47.
+- Playwright: 6/6.
+- Cobertura frontend configurada: 100%.
+- Build, fmt, check, clippy estrito, diff-check e limite de 300 linhas: aprovados.
+- Trivy: zero vulnerabilidades HIGH/CRITICAL nos lockfiles e zero misconfigurações detectadas.
+
+O lifecycle nativo e a validação visual de transparência/posição permanecem no gate CA6 de Computer Use antes de merge/release.

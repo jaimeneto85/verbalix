@@ -5,7 +5,9 @@ mod commands_tests;
 mod diagnostics;
 mod domain;
 mod lifecycle;
+mod overlay_commands;
 mod platform;
+mod runtime;
 
 use application::{
     JsonSettingsRepository, KeychainSessionRepository, PublicBackendConfig, RemoteAuthRepository,
@@ -13,26 +15,15 @@ use application::{
 };
 use commands::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
+use overlay_commands::*;
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
+pub(crate) use runtime::AppRuntime;
 use std::{sync::Arc, thread, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     AppHandle, Manager, RunEvent, WindowEvent,
 };
-
-pub(crate) struct AppRuntime {
-    pub coordinator: Arc<SelectionCoordinator>,
-    pub overlay: Arc<TauriOverlay>,
-    pub selection: Arc<MacAccessibility>,
-    pub settings: Arc<JsonSettingsRepository>,
-    pub session: Arc<KeychainSessionRepository>,
-    pub clipboard: Arc<SystemClipboard>,
-    pub history: Arc<RemoteHistoryRepository>,
-    pub auth: Arc<RemoteAuthRepository>,
-    pub backend_config: PublicBackendConfig,
-    pub pause: RuntimePause,
-}
 
 fn start_selection_observer(runtime: Arc<AppRuntime>) {
     thread::spawn(move || {
@@ -109,7 +100,7 @@ fn trigger_active_shortcut(runtime: &AppRuntime) {
                 let id = snapshot.id;
                 let _ = runtime
                     .coordinator
-                    .dispatch(SelectionEvent::Candidate(snapshot));
+                    .dispatch(SelectionEvent::Candidate(Box::new(snapshot)));
                 let _ = runtime
                     .coordinator
                     .dispatch(SelectionEvent::DebounceElapsed(id));
@@ -290,6 +281,7 @@ pub fn run() {
             transform_selection,
             apply_preview,
             undo_replacement,
+            overlay_surface_ready,
             dismiss_overlays,
             list_history,
             delete_history

@@ -1,10 +1,17 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { native } from "./native";
+import { OverlayReadyGate } from "./overlayReady";
 import type { AppSettings, NoteResult } from "./types";
 import { defaultSettings } from "./types";
 
-export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
+export function Overlay({
+  kind,
+  generation
+}: {
+  kind: "toolbar" | "note";
+  generation: string;
+}) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [result, setResult] = useState("");
   const [noteMode, setNoteMode] =
@@ -70,52 +77,56 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
       await native.dismissOverlays();
     };
     return (
-      <main className="note">
-        <div className="note-heading">
-          <span>{noteMode === "error" ? "Ação necessária" : "Resultado"}</span>
-          <button onClick={() => native.dismissOverlays()}>×</button>
-        </div>
-        <p>{result || "Processando…"}</p>
-        <div className="note-actions">
-          {noteMode === "error" ? (
-            <button className="note-copy" onClick={() => native.openMainWindow()}>
-              Abrir Verbalix
-            </button>
-          ) : (
-            <button
-              className="note-copy"
-              disabled={!result}
-              onClick={() => navigator.clipboard.writeText(result)}
-            >
-              Copiar
-            </button>
-          )}
-          {noteMode === "preview" && (
-            <button className="note-copy" disabled={!requestId} onClick={apply}>
-              Aplicar
-            </button>
-          )}
-          {noteMode === "undo" && (
-            <button className="note-copy" onClick={undo}>
-              Desfazer
-            </button>
-          )}
-        </div>
-      </main>
+      <OverlayReadyGate kind={kind} generation={generation}>
+        <main className="note">
+          <div className="note-heading">
+            <span>{noteMode === "error" ? "Ação necessária" : "Resultado"}</span>
+            <button onClick={() => native.dismissOverlays()}>×</button>
+          </div>
+          <p>{result || "Processando…"}</p>
+          <div className="note-actions">
+            {noteMode === "error" ? (
+              <button className="note-copy" onClick={() => native.openMainWindow()}>
+                Abrir Verbalix
+              </button>
+            ) : (
+              <button
+                className="note-copy"
+                disabled={!result}
+                onClick={() => navigator.clipboard.writeText(result)}
+              >
+                Copiar
+              </button>
+            )}
+            {noteMode === "preview" && (
+              <button className="note-copy" disabled={!requestId} onClick={apply}>
+                Aplicar
+              </button>
+            )}
+            {noteMode === "undo" && (
+              <button className="note-copy" onClick={undo}>
+                Desfazer
+              </button>
+            )}
+          </div>
+        </main>
+      </OverlayReadyGate>
     );
   }
 
   return (
-    <main className="toolbar">
-      <button disabled={busy !== null} onClick={() => transform("translate")}>
-        <span>文</span>
-        {busy === "translate" ? "Traduzindo…" : "Traduzir"}
-      </button>
-      <i />
-      <button disabled={busy !== null} onClick={() => transform("improve")}>
-        <span>✦</span>
-        {busy === "improve" ? "Aprimorando…" : "Aprimorar"}
-      </button>
-    </main>
+    <OverlayReadyGate kind={kind} generation={generation}>
+      <main className="toolbar">
+        <button disabled={busy !== null} onClick={() => transform("translate")}>
+          <span>文</span>
+          {busy === "translate" ? "Traduzindo…" : "Traduzir"}
+        </button>
+        <i />
+        <button disabled={busy !== null} onClick={() => transform("improve")}>
+          <span>✦</span>
+          {busy === "improve" ? "Aprimorando…" : "Aprimorar"}
+        </button>
+      </main>
+    </OverlayReadyGate>
   );
 }

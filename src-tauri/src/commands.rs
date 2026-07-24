@@ -257,11 +257,6 @@ pub(crate) fn undo_replacement(
 }
 
 #[tauri::command]
-pub(crate) fn dismiss_overlays(runtime: State<'_, Arc<AppRuntime>>) -> Result<(), VerbalixError> {
-    runtime.coordinator.dispatch(SelectionEvent::Invalidated)
-}
-
-#[tauri::command]
 pub(crate) async fn list_history(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<Vec<HistoryItem>, VerbalixError> {

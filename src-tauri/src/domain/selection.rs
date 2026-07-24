@@ -15,6 +15,7 @@ pub struct Rect {
 #[serde(rename_all = "snake_case")]
 pub enum GeometrySource {
     SelectedRange,
+    TextMarkerRange,
     FocusedElement,
     Cursor,
 }
@@ -23,6 +24,7 @@ impl GeometrySource {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SelectedRange => "selected_range",
+            Self::TextMarkerRange => "text_marker_range",
             Self::FocusedElement => "focused_element",
             Self::Cursor => "cursor",
         }
@@ -38,6 +40,23 @@ pub struct TextRange {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SelectionElementIdentity {
+    pub role: String,
+    pub subrole: Option<String>,
+    pub identifier: Option<String>,
+    pub frame: Rect,
+}
+
+impl SelectionElementIdentity {
+    pub fn strong_identifier(&self) -> Option<&str> {
+        self.identifier
+            .as_deref()
+            .filter(|identifier| !identifier.trim().is_empty())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SelectionSnapshot {
     pub id: Uuid,
     pub pid: i32,
@@ -46,6 +65,8 @@ pub struct SelectionSnapshot {
     pub range: TextRange,
     pub bounds: Rect,
     pub geometry_source: Option<GeometrySource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub element_identity: Option<SelectionElementIdentity>,
     pub writable: bool,
     pub captured_at_ms: u128,
 }
@@ -67,6 +88,7 @@ impl SelectionSnapshot {
             range,
             bounds,
             geometry_source: None,
+            element_identity: None,
             writable,
             captured_at_ms: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -80,11 +102,17 @@ impl SelectionSnapshot {
         self
     }
 
+    pub fn with_element_identity(mut self, identity: SelectionElementIdentity) -> Self {
+        self.element_identity = Some(identity);
+        self
+    }
+
     pub fn same_target(&self, other: &Self) -> bool {
         self.pid == other.pid
             && self.bundle_id == other.bundle_id
             && self.text == other.text
             && self.range == other.range
+            && self.element_identity == other.element_identity
     }
 }
 
@@ -111,7 +139,7 @@ pub enum SelectionState {
 
 #[derive(Clone, Debug)]
 pub enum SelectionEvent {
-    Candidate(SelectionSnapshot),
+    Candidate(Box<SelectionSnapshot>),
     DebounceElapsed(Uuid),
     ActionStarted(Uuid),
     ResultReady(Uuid),
@@ -170,5 +198,42 @@ mod tests {
         moved.range = first.range;
         moved.pid = 99;
         assert!(!first.same_target(&moved));
+    }
+
+    #[test]
+    fn target_identity_includes_bundle_and_text_but_not_visual_metadata() {
+        let first = snapshot(
+            "same text",
+            TextRange {
+                location: 4,
+                length: 9,
+            },
+        );
+        let mut changed = first.clone();
+        changed.bundle_id = "com.other.editor".to_owned();
+        assert!(!first.same_target(&changed));
+        changed.bundle_id = first.bundle_id.clone();
+        changed.text = "different".to_owned();
+        assert!(!first.same_target(&changed));
+
+        changed.text = first.text.clone();
+        changed.id = Uuid::new_v4();
+        changed.bounds.x = -1440.0;
+        changed.geometry_source = Some(GeometrySource::TextMarkerRange);
+        changed.writable = false;
+        assert!(first.same_target(&changed));
+
+        changed.element_identity = Some(SelectionElementIdentity {
+            role: "AXTextArea".to_owned(),
+            subrole: None,
+            identifier: None,
+            frame: Rect {
+                x: 2.0,
+                y: 3.0,
+                width: 100.0,
+                height: 40.0,
+            },
+        });
+        assert!(!first.same_target(&changed));
     }
 }

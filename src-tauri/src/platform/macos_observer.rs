@@ -1,4 +1,7 @@
-use super::macos_accessibility::{AXUIElementRef, MacAccessibility, AX_SUCCESS};
+use super::{
+    macos_accessibility::MacAccessibility,
+    macos_ax::{AXUIElementRef, AX_SUCCESS},
+};
 use core_foundation::{
     base::{CFRelease, TCFType},
     string::{CFString, CFStringRef},

@@ -40,8 +40,8 @@ describe("macOS bundle smoke contract", () => {
       "src-tauri/src/platform/macos_geometry.rs",
       "utf8"
     );
-    const accessibility = readFileSync(
-      "src-tauri/src/platform/macos_accessibility.rs",
+    const selection = readFileSync(
+      "src-tauri/src/platform/macos_selection.rs",
       "utf8"
     );
 
@@ -52,8 +52,102 @@ describe("macOS bundle smoke contract", () => {
     expect(geometry).toContain("CGEventGetLocation");
     expect(geometry).not.toContain("objc2_app_kit");
     expect(geometry).not.toContain("NSEvent");
-    expect(accessibility).toContain("macos_geometry::resolve");
-    expect(accessibility).toContain("with_geometry_source");
+    expect(selection).toContain("macos_geometry::resolve");
+    expect(selection).toContain("with_geometry_source");
+  });
+
+  it("keeps text-marker capture read-only on public AX APIs with owned values", () => {
+    const accessibility = [
+      "macos_accessibility",
+      "macos_ax",
+      "macos_selection",
+      "macos_text_marker"
+    ]
+      .map((module) =>
+        readFileSync(`src-tauri/src/platform/${module}.rs`, "utf8")
+      )
+      .join("\n");
+    const restore = readFileSync(
+      "src-tauri/src/platform/macos_restore.rs",
+      "utf8"
+    );
+
+    expect(accessibility).toContain("AXUIElementCreateSystemWide");
+    expect(accessibility).toContain('"AXFocusedUIElement"');
+    expect(accessibility).toContain("AXTextMarkerRangeGetTypeID");
+    expect(accessibility).toContain('"AXStringForTextMarkerRange"');
+    expect(accessibility).toContain('"AXBoundsForTextMarkerRange"');
+    expect(accessibility).toContain("AXTextMarkerRangeCopyStartMarker");
+    expect(accessibility).toContain("AXTextMarkerRangeCopyEndMarker");
+    expect(accessibility).toContain('"AXIndexForTextMarker"');
+    expect(accessibility).toContain('"AXLengthForTextMarkerRange"');
+    expect(accessibility).toMatch(
+      /geometry_source:\s*GeometrySource::TextMarkerRange,\s*writable:\s*false/
+    );
+    expect(accessibility).toContain("impl Drop for OwnedAxElement");
+    expect(accessibility).toContain("impl Drop for OwnedCfValue");
+    expect(accessibility).not.toContain("AXFocusedApplication");
+    expect(accessibility).not.toContain("copy_selection_preserving_clipboard");
+    expect(restore).toContain(".writable");
+    expect(restore).toContain("expected.element_identity.as_ref()");
+    expect(restore).toContain('role == "AXSecureTextField"');
+  });
+
+  it("keeps fallback, mutation, bounds, and diagnostics fail-closed", () => {
+    const accessibility = readFileSync(
+      "src-tauri/src/platform/macos_accessibility.rs",
+      "utf8"
+    );
+    const selection = readFileSync(
+      "src-tauri/src/platform/macos_selection.rs",
+      "utf8"
+    );
+    const classicRange = readFileSync(
+      "src-tauri/src/platform/macos_classic_range.rs",
+      "utf8"
+    );
+    const geometry = readFileSync(
+      "src-tauri/src/platform/macos_geometry.rs",
+      "utf8"
+    );
+    const diagnostics = readFileSync(
+      "src-tauri/src/diagnostics.rs",
+      "utf8"
+    );
+
+    expect(selection).toMatch(
+      /Err\(range_failure\)[\s\S]*marker_eligible_after_range\(range_failure\)[\s\S]*marker_selection\(element\)/
+    );
+    expect(selection).not.toContain("cf_range_selection(element).or_else");
+    expect(classicRange).toContain(
+      "marker_fallback_rejects_structural_and_cross_stage_failures"
+    );
+
+    const eligibilityCheck = accessibility.indexOf(
+      "if !replacement_eligible(expected)"
+    );
+    const focusedElementLookup = accessibility.indexOf(
+      "let element = Self::focused_element()?",
+      eligibilityCheck
+    );
+    expect(eligibilityCheck).toBeGreaterThan(-1);
+    expect(focusedElementLookup).toBeGreaterThan(eligibilityCheck);
+
+    const rectDecoder = geometry.slice(
+      geometry.indexOf("pub(super) fn rect_from_value"),
+      geometry.indexOf("fn read_point")
+    );
+    expect(rectDecoder.indexOf("has_ax_value_type")).toBeLessThan(
+      rectDecoder.indexOf("AXValueGetValue")
+    );
+
+    const snapshotMetadata = diagnostics.slice(
+      diagnostics.indexOf("fn snapshot_metadata"),
+      diagnostics.indexOf("fn lifecycle_metadata")
+    );
+    expect(snapshotMetadata).not.toMatch(
+      /snapshot\.pid|snapshot\.range|snapshot\.bounds/
+    );
   });
 
   it("preserves the visible Regular lifecycle and close-reopen paths", () => {
@@ -65,6 +159,14 @@ describe("macOS bundle smoke contract", () => {
     expect(runtime).toContain("window.hide()");
     expect(runtime).toContain("RunEvent::Reopen");
     expect(runtime).toContain('show_main_window(app, "dock_reopen")');
+  });
+
+  it("keeps the runtime composition root within the file-size gate", () => {
+    const runtime = readFileSync("src-tauri/src/lib.rs", "utf8");
+    const state = readFileSync("src-tauri/src/runtime.rs", "utf8");
+
+    expect(runtime.split("\n").length).toBeLessThanOrEqual(301);
+    expect(state).toContain("pub(crate) struct AppRuntime");
   });
 
   it("uses a full note for actionable errors and a single public config policy", () => {
@@ -90,7 +192,9 @@ describe("macOS bundle smoke contract", () => {
       readFileSync("src/supabase.ts", "utf8")
     ].join("\n");
 
-    expect(dispatcher).toContain('window(app, "note", 420.0, 220.0');
+    expect(dispatcher).toContain(
+      "get_or_create(app, surface, 420.0, 220.0, sequence, readiness)"
+    );
     expect(overlay).toContain('"Ação necessária"');
     expect(overlay).toContain("Abrir Verbalix");
     expect(commands).toContain('show_main_window(&app, "login_required")');
