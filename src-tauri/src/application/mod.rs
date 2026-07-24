@@ -23,4 +23,4 @@ pub use supabase::{
     HistoryItem, KeychainSessionRepository, RemoteHistoryRepository, RemoteTransformer,
     SessionRepository, StoredSession,
 };
-pub(crate) use transform_lease::{PublicationGuard, TransformLease};
+pub(crate) use transform_lease::{PublicationGuard, PublicationPermit, TransformLease};

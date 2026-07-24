@@ -1,12 +1,12 @@
-use crate::{application::PublicationGuard, domain::VerbalixError};
+use crate::{application::PublicationPermit, domain::VerbalixError};
 
 pub(super) fn execute_if_publishable(
-    guard: Option<&PublicationGuard>,
+    permit: Option<&PublicationPermit>,
     prepare: impl FnOnce() -> Result<(), VerbalixError>,
     publish: impl FnOnce() -> Result<(), VerbalixError>,
     cleanup: impl FnOnce() -> Result<(), VerbalixError>,
 ) -> Result<bool, VerbalixError> {
-    if guard.is_some_and(|guard| !guard.may_publish()) {
+    if permit.is_some_and(|permit| !permit.may_publish()) {
         return Ok(false);
     }
     let mut cleanup = Some(cleanup);
@@ -14,7 +14,7 @@ pub(super) fn execute_if_publishable(
         cleanup.take().expect("cleanup is available")()?;
         return Err(error);
     }
-    if guard.is_some_and(|guard| !guard.try_claim_publication()) {
+    if permit.is_some_and(|permit| !permit.try_claim()) {
         cleanup.take().expect("cleanup is available")()?;
         return Ok(false);
     }

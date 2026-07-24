@@ -1,5 +1,5 @@
 use crate::{
-    application::{OverlayPort, PublicationGuard},
+    application::{OverlayPort, PublicationGuard, PublicationPermit},
     domain::{Rect, VerbalixError},
     platform::{
         note_result::{NoteMode, NoteResultPayload, NoteResultState},
@@ -100,8 +100,9 @@ impl TauriOverlay {
             return Ok(());
         }
         self.note_result.publish(payload.clone(), guard.clone())?;
+        let permit = guard.map(PublicationPermit::new);
         self.dispatcher
-            .dispatch(OverlayCommand::ShowResult(bounds, payload, guard))
+            .dispatch(OverlayCommand::ShowResult(bounds, payload, permit))
     }
 }
 
@@ -116,8 +117,10 @@ impl OverlayPort for TauriOverlay {
         bounds: Rect,
         guard: PublicationGuard,
     ) -> Result<(), VerbalixError> {
-        self.dispatcher
-            .dispatch(OverlayCommand::ShowToolbar(bounds, Some(guard)))
+        self.dispatcher.dispatch(OverlayCommand::ShowToolbar(
+            bounds,
+            Some(PublicationPermit::new(guard)),
+        ))
     }
 
     fn show_note(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError> {
@@ -218,3 +221,7 @@ impl OverlayPort for TauriOverlay {
 #[cfg(test)]
 #[path = "overlay_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "overlay_sequence_tests.rs"]
+mod sequence_tests;

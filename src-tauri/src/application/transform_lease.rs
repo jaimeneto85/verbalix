@@ -1,6 +1,6 @@
 use std::sync::{
     atomic::{AtomicBool, AtomicU8, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 use uuid::Uuid;
 
@@ -10,11 +10,25 @@ const CANCELLED: u8 = 2;
 
 pub(crate) type PublicationGuard = Arc<TransformLease>;
 
+#[derive(Clone, Debug)]
+pub(crate) struct PublicationPermit {
+    guard: PublicationGuard,
+    phase: Arc<AtomicU8>,
+}
+
+impl PartialEq for PublicationPermit {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.guard, &other.guard) && Arc::ptr_eq(&self.phase, &other.phase)
+    }
+}
+
+impl Eq for PublicationPermit {}
+
 pub(crate) struct TransformLease {
     snapshot_id: Uuid,
     request_id: Uuid,
     write_phase: AtomicU8,
-    visual_phase: AtomicU8,
+    visual_boundary: Mutex<()>,
     visual_cancelled: AtomicBool,
 }
 
@@ -42,7 +56,7 @@ impl TransformLease {
             snapshot_id,
             request_id,
             write_phase: AtomicU8::new(ACTIVE),
-            visual_phase: AtomicU8::new(ACTIVE),
+            visual_boundary: Mutex::new(()),
             visual_cancelled: AtomicBool::new(false),
         }
     }
@@ -58,12 +72,10 @@ impl TransformLease {
             Ordering::AcqRel,
             Ordering::Acquire,
         );
-        let _ = self.visual_phase.compare_exchange(
-            ACTIVE,
-            CANCELLED,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
+        let _boundary = self
+            .visual_boundary
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         self.visual_cancelled.store(true, Ordering::Release);
     }
 
@@ -73,14 +85,34 @@ impl TransformLease {
             .is_ok()
     }
 
-    pub(crate) fn try_claim_publication(&self) -> bool {
-        self.visual_phase
-            .compare_exchange(ACTIVE, CLAIMED, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
+    pub(crate) fn may_publish(&self) -> bool {
+        !self.visual_cancelled.load(Ordering::Acquire)
+    }
+}
+
+impl PublicationPermit {
+    pub(crate) fn new(guard: PublicationGuard) -> Self {
+        Self {
+            guard,
+            phase: Arc::new(AtomicU8::new(ACTIVE)),
+        }
     }
 
     pub(crate) fn may_publish(&self) -> bool {
-        !self.visual_cancelled.load(Ordering::Acquire)
+        self.guard.may_publish()
+    }
+
+    pub(crate) fn try_claim(&self) -> bool {
+        let _boundary = self
+            .guard
+            .visual_boundary
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.guard.may_publish()
+            && self
+                .phase
+                .compare_exchange(ACTIVE, CLAIMED, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
     }
 }
 
@@ -94,7 +126,6 @@ mod tests {
         lease.cancel();
 
         assert!(!lease.try_claim_write());
-        assert!(!lease.try_claim_publication());
         assert!(!lease.may_publish());
     }
 
@@ -109,13 +140,28 @@ mod tests {
     }
 
     #[test]
-    fn claimed_publication_is_single_use_and_later_cancellation_revokes_visibility() {
-        let lease = TransformLease::new(Uuid::new_v4(), Uuid::new_v4());
+    fn permits_are_single_use_and_independent_within_one_lifetime() {
+        let lease = Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
+        let first = PublicationPermit::new(lease.clone());
+        let first_clone = first.clone();
+        let second = PublicationPermit::new(lease.clone());
 
-        assert!(lease.try_claim_publication());
-        assert!(!lease.try_claim_publication());
+        assert!(first.try_claim());
+        assert!(!first_clone.try_claim());
+        assert!(second.try_claim());
         lease.cancel();
 
         assert!(!lease.may_publish());
+    }
+
+    #[test]
+    fn cancellation_revokes_every_unclaimed_and_future_permit() {
+        let lease = Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
+        let pending = PublicationPermit::new(lease.clone());
+        lease.cancel();
+        let future = PublicationPermit::new(lease);
+
+        assert!(!pending.try_claim());
+        assert!(!future.try_claim());
     }
 }

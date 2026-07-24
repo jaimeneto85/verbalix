@@ -1,7 +1,7 @@
 #[cfg(target_os = "macos")]
 use crate::platform::macos_overlay_panel;
 use crate::{
-    application::PublicationGuard,
+    application::PublicationPermit,
     diagnostics,
     domain::{Rect, VerbalixError},
     platform::{
@@ -23,8 +23,8 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OverlayCommand {
-    ShowToolbar(Rect, Option<PublicationGuard>),
-    ShowResult(Rect, NoteResultPayload, Option<PublicationGuard>),
+    ShowToolbar(Rect, Option<PublicationPermit>),
+    ShowResult(Rect, NoteResultPayload, Option<PublicationPermit>),
     HideAll,
 }
 
