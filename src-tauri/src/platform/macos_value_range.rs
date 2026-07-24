@@ -29,7 +29,6 @@ pub(super) fn extract(element: AXUIElementRef) -> Result<ValueRangeSelection, Ax
         AxStage::Value,
         ExtractionOrigin::ValueRange,
     )?;
-    let value_length = validate_value(&value, first)?;
     let second =
         macos_classic_range::selected_range_with_origin(element, ExtractionOrigin::ValueRange)?;
     if first != second {
@@ -46,6 +45,7 @@ pub(super) fn extract(element: AXUIElementRef) -> Result<ValueRangeSelection, Ax
         ExtractionOrigin::ValueRange,
         AxCategory::Success,
     );
+    let value_length = validate_value(&value, first)?;
     let text = copy_selected_range(&value, first, value_length)?;
     Ok(ValueRangeSelection { text, range: first })
 }

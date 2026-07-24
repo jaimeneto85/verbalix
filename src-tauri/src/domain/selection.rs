@@ -30,6 +30,17 @@ pub enum SelectionExtractionStrategy {
     TextMarker,
 }
 
+impl SelectionExtractionStrategy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SelectedText => "selected_text",
+            Self::StringForRange => "string_for_range",
+            Self::ValueRange => "value_range",
+            Self::TextMarker => "text_marker",
+        }
+    }
+}
+
 impl GeometrySource {
     pub fn as_str(self) -> &'static str {
         match self {

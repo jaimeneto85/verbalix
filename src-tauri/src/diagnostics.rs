@@ -122,12 +122,13 @@ pub fn overlay_position(label: &str, sequence: u64, x: f64, y: f64) {
 
 fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
     format!(
-        "snapshot_id={} geometry_source={} writable={}",
+        "snapshot_id={} geometry_source={} extraction_strategy={} writable={}",
         snapshot.id,
         snapshot
             .geometry_source
             .map(|source| source.as_str())
             .unwrap_or("unknown"),
+        snapshot.extraction_strategy.as_str(),
         snapshot.writable
     )
 }
@@ -188,6 +189,7 @@ mod tests {
         assert!(!metadata.contains("range_length"));
         assert!(!metadata.contains("bounds="));
         assert!(metadata.contains("geometry_source=unknown"));
+        assert!(metadata.contains("extraction_strategy=selected_text"));
     }
 
     #[test]
