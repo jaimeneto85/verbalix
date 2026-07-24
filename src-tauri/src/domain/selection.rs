@@ -20,6 +20,16 @@ pub enum GeometrySource {
     Cursor,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionExtractionStrategy {
+    #[default]
+    SelectedText,
+    StringForRange,
+    ValueRange,
+    TextMarker,
+}
+
 impl GeometrySource {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -65,6 +75,8 @@ pub struct SelectionSnapshot {
     pub range: TextRange,
     pub bounds: Rect,
     pub geometry_source: Option<GeometrySource>,
+    #[serde(default)]
+    pub extraction_strategy: SelectionExtractionStrategy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub element_identity: Option<SelectionElementIdentity>,
     pub writable: bool,
@@ -88,6 +100,7 @@ impl SelectionSnapshot {
             range,
             bounds,
             geometry_source: None,
+            extraction_strategy: SelectionExtractionStrategy::SelectedText,
             element_identity: None,
             writable,
             captured_at_ms: SystemTime::now()
@@ -102,6 +115,11 @@ impl SelectionSnapshot {
         self
     }
 
+    pub fn with_extraction_strategy(mut self, strategy: SelectionExtractionStrategy) -> Self {
+        self.extraction_strategy = strategy;
+        self
+    }
+
     pub fn with_element_identity(mut self, identity: SelectionElementIdentity) -> Self {
         self.element_identity = Some(identity);
         self
@@ -113,6 +131,7 @@ impl SelectionSnapshot {
             && self.text == other.text
             && self.range == other.range
             && self.element_identity == other.element_identity
+            && self.extraction_strategy == other.extraction_strategy
     }
 }
 
@@ -221,6 +240,10 @@ mod tests {
         changed.geometry_source = Some(GeometrySource::TextMarkerRange);
         changed.writable = false;
         assert!(first.same_target(&changed));
+
+        changed.extraction_strategy = SelectionExtractionStrategy::ValueRange;
+        assert!(!first.same_target(&changed));
+        changed.extraction_strategy = first.extraction_strategy;
 
         changed.element_identity = Some(SelectionElementIdentity {
             role: "AXTextArea".to_owned(),

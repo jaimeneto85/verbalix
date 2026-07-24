@@ -18,7 +18,12 @@ export type SelectionSnapshot = {
   text: string;
   range: { location: number; length: number };
   bounds: { x: number; y: number; width: number; height: number };
-  geometrySource?: "selected_range" | "focused_element" | "cursor";
+  geometrySource?: "selected_range" | "text_marker_range" | "focused_element" | "cursor";
+  extractionStrategy?:
+    | "selected_text"
+    | "string_for_range"
+    | "value_range"
+    | "text_marker";
   writable: boolean;
   capturedAtMs: number;
 };

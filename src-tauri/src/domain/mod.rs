@@ -5,8 +5,8 @@ mod transform;
 
 pub use error::VerbalixError;
 pub use selection::{
-    GeometrySource, Rect, SelectionElementIdentity, SelectionEvent, SelectionSnapshot,
-    SelectionState, TextRange,
+    GeometrySource, Rect, SelectionElementIdentity, SelectionEvent, SelectionExtractionStrategy,
+    SelectionSnapshot, SelectionState, TextRange,
 };
 pub use settings::{AppSettings, LengthPreference, SettingsRepository, TonePreference};
 pub use transform::{
