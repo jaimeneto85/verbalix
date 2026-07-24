@@ -43,18 +43,18 @@
 
 ### Requisitos não funcionais
 
-- [ ] RNF01: Nenhum segredo, token ou conteúdo selecionado em logs/commits.
-- [ ] RNF02: Testes Deno isolados não dependem de rede/secrets.
+- [x] RNF01: Nenhum segredo, token ou conteúdo selecionado em logs/commits.
+- [x] RNF02: Testes Deno isolados não dependem de rede/secrets.
 - [ ] RNF03: Deploy só ocorre após QA automatizado verde.
 
 ### Critérios de aceitação
 
-- [ ] CA01: Teste do provider valida model, reasoning none e orçamento de 500 tokens para entrada curta.
-- [ ] CA02: Teste de timeout continua vencendo provider não cooperativo.
+- [x] CA01: Teste do provider valida model, reasoning none e orçamento de 500 tokens para entrada curta.
+- [x] CA02: Teste de timeout continua vencendo provider não cooperativo.
 - [ ] CA03: Smoke autenticado real de Translate e Improve conclui abaixo do hard timeout.
 - [ ] CA04: Histórico lista os dois resultados para o usuário e não expõe registros de outro usuário.
 - [ ] CA05: Erro remoto continua mapeado por código tipado, sem “falha silenciosa”.
-- [ ] CA06: Entrada técnica longa próxima de 12.000 caracteres recebe orçamento conservador até 8.000 e output truncado falha fechado.
+- [x] CA06: Entrada técnica longa próxima de 12.000 caracteres recebe orçamento conservador até 8.000 e output truncado falha fechado.
 
 ### Edge cases
 
@@ -84,9 +84,9 @@
 ### Especificação e testes
 
 - [x] T1.1 `[LOW]` Definir política de saída: piso 500 comprovado para entrada curta, orçamento conservador proporcional e teto 8.000 para preservar o contrato de 12.000 caracteres. Chamada direta oficial com `gpt-5.4-nano`, reasoning none e 500 tokens retornou HTTP 200 estruturado em 1,550139 s; o payload anterior com `gpt-5-mini` excedeu 20 s.
-- [ ] T1.2 `[LOW]` Atualizar teste do payload para reasoning none e limite.
-- [ ] T1.3 `[MEDIUM]` Cobrir timeout, erro provider e outputs limítrofes.
-- [ ] T1.4 `[MEDIUM]` Cobrir entrada longa e resposta `incomplete_details/max_output_tokens`.
+- [x] T1.2 `[LOW]` Atualizar teste do payload para reasoning none e limite.
+- [x] T1.3 `[MEDIUM]` Cobrir timeout, erro provider e outputs limítrofes.
+- [x] T1.4 `[MEDIUM]` Cobrir entrada longa e resposta `incomplete_details/max_output_tokens`.
 
 ### Implementação
 
@@ -96,7 +96,7 @@
 
 ### QA e operação
 
-- [ ] T3.1 `[LOW]` Executar Deno lint/test e gates completos do projeto.
+- [x] T3.1 `[LOW]` Executar Deno lint/test e gates completos do projeto.
 - [ ] T3.2 `[MEDIUM]` Atualizar secret remoto para `gpt-5.4-nano` e implantar função após QA.
 - [ ] T3.3 `[MEDIUM]` Executar smoke autenticado Translate/Improve e histórico/RLS.
 - [ ] T3.4 `[LOW]` Registrar evidências sanitizadas e verdict.

@@ -11,6 +11,8 @@
 - Transformações do toolbar delegam readiness exclusivamente ao comando Rust; testes frontend e Playwright exigem uma única chamada `transform_selection`, não chamam `ai_readiness` e não abrem a janela principal para todo erro.
 - A transação de transformação é testada com `snapshot.id + request_id`: captura transitória durante `Processing` preserva o alvo pinado, invalidação real bloqueia provider/write, segunda ação é rejeitada e falha de undo após write mantém `Applied`.
 - Histórico remoto pode ser testado sem Supabase real com servidor HTTP loopback que cobre `/auth/v1/user`, inserts de `translate`/`improve` e listagem autenticada; o contrato causal do command exige insert somente após `coordinator.transform` bem-sucedido.
+- O budget da Responses API usa caracteres Unicode e precisa de boundaries discriminatórios: 558 caracteres ainda resultam no piso 500, 559 produzem 501, 11.806 produzem 7.999 e 11.807 alcançam 8.000; emoji não-BMP deve provar que UTF-16 não é usado.
+- Validação de envelope Responses deve ser testada com output parcial que seria semanticamente válido: status ausente, desconhecido ou incomplete e `incomplete_details` não nulo precisam falhar antes do parse; completed aceita details nulo ou ausente.
 - Restore precisa de testes separados e combinados para PID, identidade estável do elemento, texto selecionado e range UTF-16 atual; coincidência de texto/range em outro campo do mesmo PID deve continuar falhando fechada.
 - Replace e restore exigem identidade forte antes de qualquer lookup/write AX; testes devem cobrir `identifier=None`, string vazia e somente whitespace, todos com zero escrita.
 - Fluxos críticos de recuperação visual usam Playwright com `__TAURI_INTERNALS__` simulado e verificam tanto invocações IPC quanto clipping pelo bounding box.
@@ -50,4 +52,5 @@
 - Configuração pública do Supabase é testada como build-time embutido com override de runtime; OpenAI/service-role não podem aparecer nos arquivos do runtime público.
 - Limites HTTP da Edge são testados em bytes com JSON válido seguido de whitespace até exatamente 64 KiB; isso separa o boundary de transporte do limite de 12.000 caracteres do domínio.
 - Testes pré-deploy da Edge mantêm Auth, scheduler e OpenAI totalmente injetados: cobrem usuário real/anon, timeout que vence provider não cooperativo, respostas por operação e limites exatos sem rede ou secrets reais.
+- O 504 `PROVIDER_TIMEOUT` da Edge ainda não prova `ProviderTimeout` no Rust: `RemoteTransformer` converte non-2xx genérico em `ProviderRejected`, enquanto somente timeout de transporte reqwest vira `ProviderTimeout`. Não alegar tipagem ponta a ponta sem teste/correção específica.
 - O hard gate Trivy pode ser reutilizado quando executado contemporaneamente na mesma worktree: scan `vuln,misconfig` HIGH/CRITICAL com `--ignore-unfixed --exit-code 1` passou para `package-lock`, `Cargo.lock` e configurações.
