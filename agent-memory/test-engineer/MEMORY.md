@@ -18,6 +18,7 @@
 - Factories de `vi.mock` são hoisted; mocks compartilhados devem usar `vi.hoisted`.
 - Clipboard e Accessibility reais não devem ser acionados em testes automatizados, pois alteram estado global do macOS.
 - Coordenadas globais negativas são válidas em monitores secundários; validação geométrica deve rejeitar valores não finitos e dimensões inválidas sem rejeitar a origem negativa.
+- Doubles Deno que implementam interfaces assíncronas sem executar `await` devem retornar `Promise.resolve`/`Promise.reject` explicitamente para satisfazer `deno lint require-await`.
 
 ## Cobertura & Métricas
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.

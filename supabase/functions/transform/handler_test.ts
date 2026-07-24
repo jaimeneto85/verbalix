@@ -206,11 +206,13 @@ function createState(options: StateOptions = {}) {
     dependencies: {} as HandlerDependencies,
   };
   const authenticator: UserAuthenticator = {
-    async authenticate() {
+    authenticate() {
       state.authCalls += 1;
-      return options.authenticated === false
-        ? null
-        : { id: "user-id", role: "authenticated" };
+      return Promise.resolve(
+        options.authenticated === false
+          ? null
+          : { id: "user-id", role: "authenticated" },
+      );
     },
   };
   const result = options.result ?? {
@@ -230,10 +232,10 @@ function createState(options: StateOptions = {}) {
       state.providerCalls += 1;
       return {
         transform: options.transform ??
-          (async () => {
-            if (options.providerError) throw options.providerError;
-            return result;
-          }),
+          (() =>
+            options.providerError
+              ? Promise.reject(options.providerError)
+              : Promise.resolve(result)),
       };
     },
     timeout: options.timeout ?? {

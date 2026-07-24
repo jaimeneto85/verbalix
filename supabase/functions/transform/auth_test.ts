@@ -4,12 +4,14 @@ Deno.test("authenticator accepts a real Supabase user", async () => {
   const authenticator = new SupabaseUserAuthenticator(
     "https://project.supabase.co",
     "public-key",
-    async (_input, init) => {
+    (_input, init) => {
       assertEquals(
         new Headers(init?.headers).get("authorization"),
         "Bearer user-token",
       );
-      return Response.json({ id: "user-id", role: "authenticated" });
+      return Promise.resolve(
+        Response.json({ id: "user-id", role: "authenticated" }),
+      );
     },
   );
 
@@ -23,9 +25,11 @@ Deno.test("authenticator rejects the public anonymous key", async () => {
   const authenticator = new SupabaseUserAuthenticator(
     "https://project.supabase.co",
     "public-key",
-    async () => {
+    () => {
       calls += 1;
-      return Response.json({ id: "unexpected", role: "authenticated" });
+      return Promise.resolve(
+        Response.json({ id: "unexpected", role: "authenticated" }),
+      );
     },
   );
 
@@ -45,16 +49,18 @@ Deno.test("authenticator rejects anonymous roles and invalid sessions", async ()
     const authenticator = new SupabaseUserAuthenticator(
       "https://project.supabase.co",
       "public-key",
-      async () => response,
+      () => Promise.resolve(response),
     );
     assertEquals(await authenticator.authenticate("user-token"), null);
   }
 });
 
 Deno.test("authenticator fails closed when configuration is absent", async () => {
-  const authenticator = new SupabaseUserAuthenticator("", "", async () => {
-    throw new Error("unexpected fetch");
-  });
+  const authenticator = new SupabaseUserAuthenticator(
+    "",
+    "",
+    () => Promise.reject(new Error("unexpected fetch")),
+  );
   await assertRejects(
     () => authenticator.authenticate("user-token"),
     "INTERNAL_ERROR",

@@ -19,9 +19,7 @@ Deno.test("provider maps network and malformed payload failures", async () => {
   const networkProvider = new OpenAiProvider(
     "key",
     "model",
-    async () => {
-      throw new TypeError("network unavailable");
-    },
+    () => Promise.reject(new TypeError("network unavailable")),
   );
   await assertRejects(
     () => networkProvider.transform(request, new AbortController().signal),
@@ -64,9 +62,7 @@ Deno.test("provider preserves AbortError for timeout mapping", async () => {
   const provider = new OpenAiProvider(
     "key",
     "model",
-    async () => {
-      throw new DOMException("Aborted", "AbortError");
-    },
+    () => Promise.reject(new DOMException("Aborted", "AbortError")),
   );
   await assertRejects(
     () => provider.transform(request, new AbortController().signal),
@@ -105,24 +101,26 @@ Deno.test("provider requests a bounded model output", async () => {
   const provider = new OpenAiProvider(
     "key",
     "model",
-    async (_input, init) => {
+    (_input, init) => {
       body = String((init as { body?: BodyInit } | undefined)?.body);
-      return Response.json({
-        output: [
-          {
-            content: [
-              {
-                type: "output_text",
-                text: JSON.stringify({
-                  sourceLanguage: "English",
-                  targetLanguage: "Portuguese",
-                  result: "Resultado",
-                }),
-              },
-            ],
-          },
-        ],
-      });
+      return Promise.resolve(
+        Response.json({
+          output: [
+            {
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    sourceLanguage: "English",
+                    targetLanguage: "Portuguese",
+                    result: "Resultado",
+                  }),
+                },
+              ],
+            },
+          ],
+        }),
+      );
     },
   );
 
@@ -134,7 +132,7 @@ Deno.test("provider requests a bounded model output", async () => {
 });
 
 function providerReturning(response: Response) {
-  return new OpenAiProvider("key", "model", async () => response);
+  return new OpenAiProvider("key", "model", () => Promise.resolve(response));
 }
 
 async function assertRejects(
