@@ -159,18 +159,21 @@ fn publication_claim_is_the_boundary_before_final_effects() {
 fn cancellation_after_claim_allows_one_publication_before_serial_hide() {
     let guard = Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
     let gate = Arc::new(PreparationGate::default());
-    let published = Arc::new(AtomicUsize::new(0));
+    let effects = Arc::new(Mutex::new(Vec::new()));
+    let visible = Arc::new(Mutex::new(false));
     let worker = {
         let guard = guard.clone();
         let gate = gate.clone();
-        let published = published.clone();
+        let effects = effects.clone();
+        let visible = visible.clone();
         thread::spawn(move || {
             execute_if_publishable(
                 Some(&guard),
                 || Ok(()),
                 || {
                     gate.enter_and_wait();
-                    published.fetch_add(1, Ordering::SeqCst);
+                    *visible.lock().unwrap() = true;
+                    effects.lock().unwrap().push("publish");
                     Ok(())
                 },
                 || Ok(()),
@@ -182,6 +185,10 @@ fn cancellation_after_claim_allows_one_publication_before_serial_hide() {
     gate.release();
 
     assert!(worker.join().unwrap().unwrap());
-    assert_eq!(published.load(Ordering::SeqCst), 1);
+    *visible.lock().unwrap() = false;
+    effects.lock().unwrap().push("hide");
+
+    assert_eq!(effects.lock().unwrap().as_slice(), &["publish", "hide"]);
+    assert!(!*visible.lock().unwrap());
     assert!(!guard.may_publish());
 }
