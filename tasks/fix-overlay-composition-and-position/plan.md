@@ -163,8 +163,12 @@ Fora do escopo:
 
 ### Remediação da terceira revisão
 
-- [ ] Limitar tentativas e backoff a no máximo três, inclusive quando opções de teste/configuração solicitarem valor maior.
-- [ ] Correlacionar readiness a uma geração/nonce do documento e rejeitar ACKs de gerações anteriores no boundary nativo.
-- [ ] Cobrir ACK antigo após cancelamento, recriação e nova solicitação sem exibir a geração atual.
-- [ ] Cobrir configuração acima de três tentativas e confirmar exatamente três envios.
-- [ ] Reexecutar gates e nova revisão dual antes de Computer Use, merge ou release.
+- [x] Limitar tentativas e backoff a no máximo três, inclusive quando opções de teste/configuração solicitarem valor maior.
+- [x] Remover `Promise.race` e executar retries somente após `false` ou erro explícito, sem invokes concorrentes ou órfãos.
+- [x] Emitir uma geração UUID no Rust por WebView, incorporá-la na URL e exigir a mesma geração no ACK nativo.
+- [x] Validar o ACK contra o label e o ponteiro `NSView` da `WebviewWindow` chamadora atualmente registrada.
+- [x] Invalidar a geração e esconder a janela em reload; uma rota overlay sem geração falha fechada com root vazio.
+- [x] Cobrir ACK antigo após cancelamento, recriação/reload e nova solicitação sem marcar ou exibir a geração atual.
+- [x] Cobrir configuração acima de três tentativas, confirmar exatamente três envios e provar que cada invoke termina antes do próximo.
+- [x] Reexecutar gates: Rust 87/87, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt/check, clippy estrito, diff-check e limite de linhas.
+- [ ] Submeter nova revisão dual antes de Computer Use, merge ou release.
