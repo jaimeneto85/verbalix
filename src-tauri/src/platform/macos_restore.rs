@@ -1,4 +1,6 @@
-use super::{macos_ax, macos_selection};
+use super::{
+    macos_attribute, macos_ax, macos_selection, macos_selection_revalidation, macos_value_range,
+};
 use crate::{
     application::TransformLease,
     domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError},
@@ -36,10 +38,17 @@ fn restore_validated(
         pid,
         own_pid,
         &role,
-        macos_ax::writable(element.as_ref()),
+        macos_attribute::selected_text_writable(element.as_ref())
+            .map_err(|_| VerbalixError::StaleSelection)?,
         &current_identity,
     )?;
-    let current = macos_selection::classic_selection(element.as_ref())?;
+    if expected.extraction_strategy == crate::domain::SelectionExtractionStrategy::ValueRange
+        && !macos_value_range::role_eligible(&role)
+    {
+        return Err(VerbalixError::StaleSelection);
+    }
+    let current =
+        macos_selection_revalidation::read(element.as_ref(), expected.extraction_strategy)?;
     validate_restore_selection(expected, transformed_text, &current)?;
     if !claim() {
         return Err(VerbalixError::StaleSelection);
@@ -104,7 +113,7 @@ fn same_strong_identity(
 fn validate_restore_selection(
     expected: &SelectionSnapshot,
     transformed_text: &str,
-    current: &macos_selection::ClassicSelection,
+    current: &macos_selection_revalidation::CurrentSelection,
 ) -> Result<(), VerbalixError> {
     let expected_location =
         isize::try_from(expected.range.location).map_err(|_| VerbalixError::StaleSelection)?;
@@ -113,6 +122,7 @@ fn validate_restore_selection(
     if current.text != transformed_text
         || current.range.location != expected_location
         || current.range.length != transformed_length
+        || current.strategy != expected.extraction_strategy
     {
         return Err(VerbalixError::StaleSelection);
     }

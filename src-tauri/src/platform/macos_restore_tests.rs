@@ -97,34 +97,38 @@ fn restore_rejects_self_wrong_pid_secure_read_only_and_changed_element() {
 fn restore_accepts_only_the_current_transformed_selection_and_utf16_range() {
     let expected = snapshot(true);
     let transformed = "A👩🏽‍💻";
-    let current = macos_selection::ClassicSelection {
+    let current = macos_selection_revalidation::CurrentSelection {
         text: transformed.to_owned(),
         range: CFRange {
             location: 3,
             length: transformed.encode_utf16().count() as isize,
         },
+        strategy: expected.extraction_strategy,
     };
 
     assert!(validate_restore_selection(&expected, transformed, &current).is_ok());
 
     for stale in [
-        macos_selection::ClassicSelection {
+        macos_selection_revalidation::CurrentSelection {
             text: "another".to_owned(),
             range: current.range,
+            strategy: current.strategy,
         },
-        macos_selection::ClassicSelection {
+        macos_selection_revalidation::CurrentSelection {
             text: transformed.to_owned(),
             range: CFRange {
                 location: 4,
                 ..current.range
             },
+            strategy: current.strategy,
         },
-        macos_selection::ClassicSelection {
+        macos_selection_revalidation::CurrentSelection {
             text: transformed.to_owned(),
             range: CFRange {
                 length: current.range.length - 1,
                 ..current.range
             },
+            strategy: current.strategy,
         },
     ] {
         assert!(matches!(
@@ -138,12 +142,13 @@ fn restore_accepts_only_the_current_transformed_selection_and_utf16_range() {
 fn restore_rejects_another_field_in_the_same_pid_even_with_matching_selection() {
     let expected = snapshot(true);
     let transformed = "A👩🏽‍💻";
-    let matching_selection = macos_selection::ClassicSelection {
+    let matching_selection = macos_selection_revalidation::CurrentSelection {
         text: transformed.to_owned(),
         range: CFRange {
             location: expected.range.location as isize,
             length: transformed.encode_utf16().count() as isize,
         },
+        strategy: expected.extraction_strategy,
     };
 
     assert!(validate_restore_selection(&expected, transformed, &matching_selection).is_ok());
@@ -169,12 +174,13 @@ fn restore_without_identifier_rejects_before_the_write_boundary() {
         let mut expected = snapshot(true);
         expected.element_identity.as_mut().unwrap().identifier = identifier;
         let weak_identity = expected.element_identity.as_ref().unwrap();
-        let matching_selection = macos_selection::ClassicSelection {
+        let matching_selection = macos_selection_revalidation::CurrentSelection {
             text: transformed.to_owned(),
             range: CFRange {
                 location: expected.range.location as isize,
                 length: transformed.encode_utf16().count() as isize,
             },
+            strategy: expected.extraction_strategy,
         };
         let mut writes = 0;
 

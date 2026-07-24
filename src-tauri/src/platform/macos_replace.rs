@@ -24,7 +24,7 @@ fn replace_validated(
     validate_expected(expected)?;
     let element = macos_ax::focused_element_for_pid(expected.pid)
         .map_err(|_| VerbalixError::StaleSelection)?;
-    let current = macos_selection::capture(&element)?;
+    let current = macos_selection::capture_with_strategy(&element, expected.extraction_strategy)?;
     validate_current(expected, &current)?;
     if !claim() {
         return Err(VerbalixError::StaleSelection);
