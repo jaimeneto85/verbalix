@@ -18,6 +18,7 @@ export function Overlay({
     useState<"error" | "result" | "preview" | "undo">("result");
   const [requestId, setRequestId] = useState("");
   const [busy, setBusy] = useState<"translate" | "improve" | null>(null);
+  const [noteBusy, setNoteBusy] = useState<"apply" | "undo" | null>(null);
   const [settingsReady, setSettingsReady] = useState(false);
 
   useEffect(() => {
@@ -72,12 +73,25 @@ export function Overlay({
 
   if (kind === "note") {
     const apply = async () => {
-      await native.applyPreview(requestId);
-      setNoteMode("undo");
+      setNoteBusy("apply");
+      try {
+        await native.applyPreview(requestId);
+        setNoteMode("undo");
+      } catch {
+        return;
+      } finally {
+        setNoteBusy(null);
+      }
     };
     const undo = async () => {
-      await native.undoReplacement(result);
-      await native.dismissOverlays();
+      setNoteBusy("undo");
+      try {
+        await native.undoReplacement(result);
+      } catch {
+        return;
+      } finally {
+        setNoteBusy(null);
+      }
     };
     return (
       <OverlayReadyGate kind={kind} generation={generation}>
@@ -102,12 +116,20 @@ export function Overlay({
               </button>
             )}
             {noteMode === "preview" && (
-              <button className="note-copy" disabled={!requestId} onClick={apply}>
+              <button
+                className="note-copy"
+                disabled={!requestId || noteBusy !== null}
+                onClick={apply}
+              >
                 Aplicar
               </button>
             )}
             {noteMode === "undo" && (
-              <button className="note-copy" onClick={undo}>
+              <button
+                className="note-copy"
+                disabled={noteBusy !== null}
+                onClick={undo}
+              >
                 Desfazer
               </button>
             )}

@@ -1,7 +1,26 @@
 use super::{macos_ax, macos_selection};
-use crate::domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError};
+use crate::{
+    application::TransformLease,
+    domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError},
+};
 
 pub fn restore(expected: &SelectionSnapshot, transformed_text: &str) -> Result<(), VerbalixError> {
+    restore_validated(expected, transformed_text, || true)
+}
+
+pub fn restore_guarded(
+    expected: &SelectionSnapshot,
+    transformed_text: &str,
+    lease: &TransformLease,
+) -> Result<(), VerbalixError> {
+    restore_validated(expected, transformed_text, || lease.try_claim_write())
+}
+
+fn restore_validated(
+    expected: &SelectionSnapshot,
+    transformed_text: &str,
+    claim: impl FnOnce() -> bool,
+) -> Result<(), VerbalixError> {
     let expected_identity = expected_strong_identity(expected)?;
     let element = macos_ax::focused_element().map_err(|_| VerbalixError::StaleSelection)?;
     let pid = macos_ax::pid(element.as_ref()).map_err(|_| VerbalixError::StaleSelection)?;
@@ -22,6 +41,9 @@ pub fn restore(expected: &SelectionSnapshot, transformed_text: &str) -> Result<(
     )?;
     let current = macos_selection::classic_selection(element.as_ref())?;
     validate_restore_selection(expected, transformed_text, &current)?;
+    if !claim() {
+        return Err(VerbalixError::StaleSelection);
+    }
     macos_ax::set_selected_text(element.as_ref(), &expected.text)
         .then_some(())
         .ok_or(VerbalixError::LocalFailure)

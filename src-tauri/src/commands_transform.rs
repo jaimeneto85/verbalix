@@ -1,8 +1,6 @@
 use crate::{
     application::{AiReadinessStatus, PublicationGuard, SessionRepository},
-    commands::{
-        current_ai_readiness, route_refresh_failure, show_provider_unavailable, show_readiness,
-    },
+    commands::{current_ai_readiness, route_refresh_failure},
     domain::{
         SettingsRepository, TransformOperation, TransformPreferences, TransformRequest,
         TransformResult, VerbalixError,
@@ -12,7 +10,7 @@ use crate::{
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
-fn show_transform_failure(
+pub(crate) fn show_transform_failure(
     runtime: &AppRuntime,
     bounds: crate::domain::Rect,
     error: &VerbalixError,
@@ -47,30 +45,26 @@ pub(crate) async fn transform_selection(
     operation: TransformOperation,
     preferences: Option<TransformPreferences>,
 ) -> Result<TransformResult, VerbalixError> {
-    let readiness = current_ai_readiness(&runtime).inspect_err(|_| {
-        show_provider_unavailable(&runtime);
-    })?;
-    if readiness.status != AiReadinessStatus::Ready {
-        show_readiness(&runtime, &readiness);
-        if readiness.status == AiReadinessStatus::LoginRequired {
-            crate::show_main_window(&app, "login_required");
-            return Err(VerbalixError::Unauthenticated);
-        }
-        return Err(VerbalixError::ProviderNotConfigured);
-    }
     let snapshot = runtime
         .coordinator
         .current_snapshot()
         .ok_or(VerbalixError::SelectionUnavailable)?;
+    let request_id = uuid::Uuid::new_v4();
+    let snapshot = match runtime.coordinator.begin_transform(snapshot.id, request_id) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            if let Ok(Some(guard)) = runtime.coordinator.feedback_guard(snapshot.id) {
+                show_transform_failure(&runtime, snapshot.bounds, &error, guard);
+            }
+            return Err(error);
+        }
+    };
     let request = TransformRequest {
-        request_id: uuid::Uuid::new_v4(),
+        request_id,
         operation,
         text: snapshot.text.clone(),
         preferences,
     };
-    runtime
-        .coordinator
-        .begin_transform(snapshot.id, request.request_id)?;
     let result = transform_pinned(&app, &runtime, &snapshot, &request).await;
     if let Err(error) = &result {
         let _ = runtime.coordinator.abort_transform(request.request_id);
@@ -90,6 +84,20 @@ async fn transform_pinned(
     snapshot: &crate::domain::SelectionSnapshot,
     request: &TransformRequest,
 ) -> Result<TransformResult, VerbalixError> {
+    let readiness = current_ai_readiness(runtime)?;
+    if readiness.status != AiReadinessStatus::Ready {
+        if readiness.status == AiReadinessStatus::LoginRequired {
+            if runtime
+                .coordinator
+                .publication_guard(snapshot.id, request.request_id)?
+                .is_some_and(|guard| guard.may_publish())
+            {
+                crate::show_main_window(app, "login_required");
+            }
+            return Err(VerbalixError::Unauthenticated);
+        }
+        return Err(VerbalixError::ProviderNotConfigured);
+    }
     let stored = runtime
         .session
         .load()?
@@ -126,10 +134,33 @@ async fn transform_pinned(
         )
         .await?;
     if settings.history_enabled {
-        let _ = runtime
-            .history
-            .insert(request, &response, &session.access_token)
-            .await;
+        persist_history(runtime, request, &response, &session.access_token);
     }
     Ok(response)
+}
+
+fn persist_history(
+    runtime: &AppRuntime,
+    request: &TransformRequest,
+    response: &TransformResult,
+    access_token: &str,
+) {
+    let history = runtime.history.clone();
+    let request = request.clone();
+    let response = response.clone();
+    let access_token = access_token.to_owned();
+    tauri::async_runtime::spawn(async move {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(8),
+            history.insert(&request, &response, &access_token),
+        )
+        .await
+        {
+            Ok(Ok(())) => crate::diagnostics::history("inserted", None),
+            Ok(Err(error)) => crate::diagnostics::history("insert_failed", Some(&error)),
+            Err(_) => {
+                crate::diagnostics::history("insert_timeout", Some(&VerbalixError::ProviderTimeout))
+            }
+        }
+    });
 }

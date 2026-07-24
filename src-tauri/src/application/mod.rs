@@ -2,6 +2,7 @@ mod ai_readiness;
 mod auth_refresh;
 mod coordinator;
 mod coordinator_commit;
+mod coordinator_presentation;
 mod coordinator_transform;
 mod ports;
 mod runtime_pause;

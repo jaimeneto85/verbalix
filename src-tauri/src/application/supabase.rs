@@ -103,8 +103,12 @@ pub struct RemoteHistoryRepository {
 
 impl RemoteHistoryRepository {
     pub fn new(base_url: impl Into<String>, anonymous_key: impl Into<String>) -> Self {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(8))
+            .build()
+            .unwrap_or_default();
         Self {
-            client: Client::new(),
+            client,
             base_url: base_url.into(),
             anonymous_key: anonymous_key.into(),
         }

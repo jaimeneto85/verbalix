@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OverlayCommand {
-    ShowToolbar(Rect),
+    ShowToolbar(Rect, Option<PublicationGuard>),
     ShowResult(Rect, NoteResultPayload, Option<PublicationGuard>),
     HideAll,
 }
@@ -124,7 +124,7 @@ impl OverlayDispatcher for MainThreadOverlayDispatcher {
 impl OverlayCommand {
     fn label(&self) -> &'static str {
         match self {
-            Self::ShowToolbar(_) => "toolbar",
+            Self::ShowToolbar(_, _) => "toolbar",
             Self::ShowResult(_, _, _) => "note",
             Self::HideAll => "all",
         }
@@ -138,18 +138,24 @@ fn execute_command(
     readiness: &Arc<OverlayReadiness>,
 ) -> Result<(), VerbalixError> {
     match command {
-        OverlayCommand::ShowToolbar(bounds) => {
-            let surface = OverlaySurface::Toolbar;
-            readiness.request(surface)?;
-            let result = (|| {
-                let window = get_or_create(app, surface, 236.0, 52.0, sequence, readiness)?;
-                place(app, &window, bounds, 236.0, 52.0, "toolbar", sequence)?;
-                show_if_ready(&window, surface, sequence, readiness)
-            })();
-            if result.is_err() {
-                readiness.cancel(surface)?;
+        OverlayCommand::ShowToolbar(bounds, guard) => {
+            let executed = execute_if_publishable(guard.as_ref(), || {
+                let surface = OverlaySurface::Toolbar;
+                readiness.request(surface)?;
+                let result = (|| {
+                    let window = get_or_create(app, surface, 236.0, 52.0, sequence, readiness)?;
+                    place(app, &window, bounds, 236.0, 52.0, "toolbar", sequence)?;
+                    show_if_ready(&window, surface, sequence, readiness)
+                })();
+                if result.is_err() {
+                    readiness.cancel(surface)?;
+                }
+                result
+            })?;
+            if !executed {
+                diagnostics::overlay("cancelled", "toolbar", sequence);
             }
-            result
+            Ok(())
         }
         OverlayCommand::ShowResult(bounds, payload, guard) => {
             let executed = execute_if_publishable(guard.as_ref(), || {
@@ -285,16 +291,5 @@ fn legacy_anchored_origin(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn asynchronous_execution_failure_is_reported_once_without_waiting() {
-        let failure = ExecutionFailure::default();
-
-        failure.record();
-
-        assert!(matches!(failure.take(), Err(VerbalixError::LocalFailure)));
-        assert!(failure.take().is_ok());
-    }
-}
+#[path = "overlay_dispatcher_tests.rs"]
+mod tests;

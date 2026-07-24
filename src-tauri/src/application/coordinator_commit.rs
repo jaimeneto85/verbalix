@@ -65,14 +65,76 @@ impl SelectionCoordinator {
         request_id: Uuid,
         result: &str,
         lease: &PublicationGuard,
+    ) -> Result<Option<PublicationGuard>, VerbalixError> {
+        let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+        let state_matches = matches!(
+            &*state,
+            SelectionState::Processing {
+                snapshot: current,
+                request_id: active_request,
+            } | SelectionState::PreviewVisible {
+                snapshot: current,
+                request_id: active_request,
+                ..
+            } if *active_request == request_id && current.same_target(snapshot)
+        );
+        let mut active = self
+            .active_transform
+            .lock()
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        let active_matches = active.as_ref().is_some_and(|active| {
+            active.request_id == request_id
+                && active.snapshot.same_target(snapshot)
+                && std::sync::Arc::ptr_eq(&active.lease, lease)
+        });
+        if !state_matches || !active_matches || !lease.may_publish() {
+            return Ok(None);
+        }
+        lease.cancel();
+        let undo_lease = std::sync::Arc::new(crate::application::TransformLease::new(
+            snapshot.id,
+            request_id,
+        ));
+        *active = Some(super::coordinator::ActiveTransform {
+            snapshot: snapshot.clone(),
+            request_id,
+            lease: undo_lease.clone(),
+        });
+        *state = SelectionState::Applied {
+            snapshot: snapshot.clone(),
+            transformed_text: result.to_owned(),
+        };
+        Ok(Some(undo_lease))
+    }
+
+    pub(super) fn commit_undo(
+        &self,
+        snapshot: &SelectionSnapshot,
+        transformed_text: &str,
+        lease: &PublicationGuard,
     ) -> Result<bool, VerbalixError> {
-        let result = result.to_owned();
-        self.commit_if_current(snapshot, request_id, lease, move |snapshot| {
+        let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+        let state_matches = matches!(
+            &*state,
             SelectionState::Applied {
-                snapshot,
-                transformed_text: result,
-            }
-        })
+                snapshot: current,
+                transformed_text: active,
+            } if active == transformed_text && current.same_target(snapshot)
+        );
+        let mut active = self
+            .active_transform
+            .lock()
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        let active_matches = active.as_ref().is_some_and(|active| {
+            active.snapshot.same_target(snapshot) && std::sync::Arc::ptr_eq(&active.lease, lease)
+        });
+        if !state_matches || !active_matches {
+            return Ok(false);
+        }
+        lease.cancel();
+        *active = None;
+        *state = SelectionState::Idle;
+        Ok(true)
     }
 
     fn commit_if_current(

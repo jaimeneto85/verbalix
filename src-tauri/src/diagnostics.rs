@@ -77,6 +77,13 @@ pub fn ai_readiness(status: &str) {
     emit("ai", "readiness", &format!("status={status}"));
 }
 
+pub fn history(event: &str, error: Option<&VerbalixError>) {
+    let metadata = error
+        .map(|error| format!("error={}", error_code(error)))
+        .unwrap_or_else(|| "error=none".to_owned());
+    emit("history", event, &metadata);
+}
+
 pub fn capture_success(snapshot: &SelectionSnapshot) {
     emit("capture", "success", &snapshot_metadata(snapshot));
 }

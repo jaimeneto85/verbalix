@@ -10,7 +10,13 @@ pub struct SelectionCoordinator {
     pub(super) overlay: Arc<dyn OverlayPort>,
     pub(super) provider: Arc<dyn AiProvider>,
     pub(super) state: Mutex<SelectionState>,
+    pub(super) presentation: Mutex<Option<SelectionPresentation>>,
     pub(super) active_transform: Mutex<Option<ActiveTransform>>,
+}
+
+pub(super) struct SelectionPresentation {
+    pub(super) snapshot: SelectionSnapshot,
+    pub(super) guard: PublicationGuard,
 }
 
 pub(super) struct ActiveTransform {
@@ -30,6 +36,7 @@ impl SelectionCoordinator {
             overlay,
             provider,
             state: Mutex::new(SelectionState::Idle),
+            presentation: Mutex::new(None),
             active_transform: Mutex::new(None),
         }
     }
@@ -57,25 +64,11 @@ impl SelectionCoordinator {
         if matches!(event, SelectionEvent::Invalidated) {
             return self.invalidate(false);
         }
-        let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
         match event {
             SelectionEvent::Candidate(_) => unreachable!(),
-            SelectionEvent::DebounceElapsed(id) => {
-                if let SelectionState::Candidate(snapshot) = &*state {
-                    if snapshot.id == id {
-                        diagnostics::coordinator("debounce_accepted", Some(snapshot));
-                        self.overlay.show_toolbar(snapshot.bounds)?;
-                        *state = SelectionState::ToolbarVisible(snapshot.clone());
-                    } else {
-                        diagnostics::coordinator("debounce_ignored_id", Some(snapshot));
-                    }
-                } else {
-                    diagnostics::coordinator("debounce_ignored_state", None);
-                }
-            }
+            SelectionEvent::DebounceElapsed(id) => self.show_candidate_toolbar(id),
             SelectionEvent::TransientInvalidated | SelectionEvent::Invalidated => unreachable!(),
         }
-        Ok(())
     }
 
     fn invalidate(&self, transient: bool) -> Result<(), VerbalixError> {
@@ -85,6 +78,7 @@ impl SelectionCoordinator {
                 diagnostics::coordinator("transient_invalidation_ignored", None);
                 return Ok(());
             }
+            self.cancel_presentation()?;
             self.cancel_active_transform()?;
             diagnostics::coordinator(
                 if transient {
@@ -111,10 +105,12 @@ impl SelectionCoordinator {
                     return Ok(());
                 }
                 diagnostics::coordinator("candidate_superseded_processing", Some(&snapshot));
+                self.install_presentation(snapshot.clone())?;
                 self.cancel_active_transform()?;
                 *state = SelectionState::Candidate(snapshot.clone());
                 true
             } else {
+                self.install_presentation(snapshot.clone())?;
                 let superseded = self.cancel_active_transform_if_different(&snapshot)?;
                 diagnostics::coordinator("candidate_stored", Some(&snapshot));
                 *state = SelectionState::Candidate(snapshot.clone());
@@ -142,6 +138,30 @@ impl SelectionCoordinator {
                 .owns(snapshot_id, request_id)
                 .then(|| active.lease.clone())
         }))
+    }
+
+    pub(crate) fn feedback_guard(
+        &self,
+        snapshot_id: uuid::Uuid,
+    ) -> Result<Option<PublicationGuard>, VerbalixError> {
+        if let Some(guard) = self
+            .presentation
+            .lock()
+            .map_err(|_| VerbalixError::LocalFailure)?
+            .as_ref()
+            .filter(|presentation| presentation.snapshot.id == snapshot_id)
+            .map(|presentation| presentation.guard.clone())
+        {
+            return Ok(Some(guard));
+        }
+        let active = self
+            .active_transform
+            .lock()
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        Ok(active
+            .as_ref()
+            .filter(|active| active.snapshot.id == snapshot_id)
+            .map(|active| active.lease.clone()))
     }
 
     pub(super) fn install_active_transform(

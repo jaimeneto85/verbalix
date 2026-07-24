@@ -108,7 +108,16 @@ impl TauriOverlay {
 impl OverlayPort for TauriOverlay {
     fn show_toolbar(&self, bounds: Rect) -> Result<(), VerbalixError> {
         self.dispatcher
-            .dispatch(OverlayCommand::ShowToolbar(bounds))
+            .dispatch(OverlayCommand::ShowToolbar(bounds, None))
+    }
+
+    fn show_toolbar_guarded(
+        &self,
+        bounds: Rect,
+        guard: PublicationGuard,
+    ) -> Result<(), VerbalixError> {
+        self.dispatcher
+            .dispatch(OverlayCommand::ShowToolbar(bounds, Some(guard)))
     }
 
     fn show_note(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError> {

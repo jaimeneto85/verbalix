@@ -1,10 +1,7 @@
 use super::SelectionCoordinator;
 use crate::{
     diagnostics,
-    domain::{
-        SelectionEvent, SelectionSnapshot, SelectionState, TransformRequest, TransformResult,
-        VerbalixError,
-    },
+    domain::{SelectionSnapshot, SelectionState, TransformRequest, TransformResult, VerbalixError},
 };
 use uuid::Uuid;
 
@@ -28,6 +25,7 @@ impl SelectionCoordinator {
             }
             _ => return Err(VerbalixError::StaleSelection),
         };
+        self.cancel_presentation()?;
         self.install_active_transform(snapshot.clone(), request_id)?;
         *state = SelectionState::Processing {
             snapshot: snapshot.clone(),
@@ -88,12 +86,14 @@ impl SelectionCoordinator {
         }
         self.selection
             .replace_guarded(&active, &response.result, &lease)?;
-        if !self.commit_applied(&active, request.request_id, &response.result, &lease)? {
+        let Some(undo_lease) =
+            self.commit_applied(&active, request.request_id, &response.result, &lease)?
+        else {
             return Ok(());
-        }
+        };
         if self
             .overlay
-            .show_undo_guarded(active.bounds, &response.result, lease)
+            .show_undo_guarded(active.bounds, &response.result, undo_lease)
             .is_err()
         {
             diagnostics::coordinator("undo_feedback_failed_after_write", Some(&active));
@@ -126,12 +126,12 @@ impl SelectionCoordinator {
             (snapshot, result, lease)
         };
         self.selection.replace_guarded(&snapshot, &result, &lease)?;
-        if !self.commit_applied(&snapshot, request_id, &result, &lease)? {
+        let Some(undo_lease) = self.commit_applied(&snapshot, request_id, &result, &lease)? else {
             return Ok(result);
-        }
+        };
         if self
             .overlay
-            .show_undo_guarded(snapshot.bounds, &result, lease)
+            .show_undo_guarded(snapshot.bounds, &result, undo_lease)
             .is_err()
         {
             diagnostics::coordinator("undo_feedback_failed_after_write", Some(&snapshot));
@@ -140,18 +140,81 @@ impl SelectionCoordinator {
     }
 
     pub fn undo(&self, transformed_text: &str) -> Result<(), VerbalixError> {
-        let snapshot = {
+        let (snapshot, lease) = {
             let state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
-            match &*state {
+            let snapshot = match &*state {
                 SelectionState::Applied {
                     snapshot,
                     transformed_text: active,
                 } if active == transformed_text => snapshot.clone(),
                 _ => return Err(VerbalixError::StaleSelection),
-            }
+            };
+            let active = self
+                .active_transform
+                .lock()
+                .map_err(|_| VerbalixError::LocalFailure)?;
+            let lease = active
+                .as_ref()
+                .filter(|active| active.snapshot.same_target(&snapshot))
+                .map(|active| active.lease.clone())
+                .ok_or(VerbalixError::StaleSelection)?;
+            (snapshot, lease)
         };
-        self.selection.restore(&snapshot, transformed_text)?;
-        self.dispatch(SelectionEvent::Invalidated)
+        self.selection
+            .restore_guarded(&snapshot, transformed_text, &lease)?;
+        if self.commit_undo(&snapshot, transformed_text, &lease)?
+            && self.overlay.hide_all().is_err()
+        {
+            diagnostics::coordinator("undo_hide_failed_after_restore", Some(&snapshot));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn preview_feedback(
+        &self,
+        request_id: Uuid,
+    ) -> Result<Option<(crate::domain::Rect, crate::application::PublicationGuard)>, VerbalixError>
+    {
+        let state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+        let snapshot = match &*state {
+            SelectionState::PreviewVisible {
+                snapshot,
+                request_id: active,
+                ..
+            } if *active == request_id => snapshot,
+            _ => return Ok(None),
+        };
+        let active = self
+            .active_transform
+            .lock()
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        Ok(active
+            .as_ref()
+            .filter(|active| active.request_id == request_id)
+            .map(|active| (snapshot.bounds, active.lease.clone())))
+    }
+
+    pub(crate) fn undo_feedback(
+        &self,
+        transformed_text: &str,
+    ) -> Result<Option<(crate::domain::Rect, crate::application::PublicationGuard)>, VerbalixError>
+    {
+        let state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+        let snapshot = match &*state {
+            SelectionState::Applied {
+                snapshot,
+                transformed_text: active,
+            } if active == transformed_text => snapshot,
+            _ => return Ok(None),
+        };
+        let active = self
+            .active_transform
+            .lock()
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        Ok(active
+            .as_ref()
+            .filter(|active| active.snapshot.same_target(snapshot))
+            .map(|active| (snapshot.bounds, active.lease.clone())))
     }
 
     fn fail<T>(&self, request_id: Uuid, error: VerbalixError) -> Result<T, VerbalixError> {

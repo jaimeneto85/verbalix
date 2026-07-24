@@ -173,7 +173,12 @@ pub(crate) fn apply_preview(
     runtime: State<'_, Arc<AppRuntime>>,
     request_id: uuid::Uuid,
 ) -> Result<String, VerbalixError> {
-    runtime.coordinator.apply_preview(request_id)
+    let feedback = runtime.coordinator.preview_feedback(request_id)?;
+    let result = runtime.coordinator.apply_preview(request_id);
+    if let (Err(error), Some((bounds, guard))) = (&result, feedback) {
+        crate::commands_transform::show_transform_failure(&runtime, bounds, error, guard);
+    }
+    result
 }
 
 #[tauri::command]
@@ -181,7 +186,12 @@ pub(crate) fn undo_replacement(
     runtime: State<'_, Arc<AppRuntime>>,
     transformed_text: String,
 ) -> Result<(), VerbalixError> {
-    runtime.coordinator.undo(&transformed_text)
+    let feedback = runtime.coordinator.undo_feedback(&transformed_text)?;
+    let result = runtime.coordinator.undo(&transformed_text);
+    if let (Err(error), Some((bounds, guard))) = (&result, feedback) {
+        crate::commands_transform::show_transform_failure(&runtime, bounds, error, guard);
+    }
+    result
 }
 
 #[tauri::command]

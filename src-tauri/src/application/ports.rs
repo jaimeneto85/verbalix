@@ -18,6 +18,17 @@ pub trait SelectionPort: Send + Sync {
         }
         self.replace(expected, text)
     }
+    fn restore_guarded(
+        &self,
+        expected: &SelectionSnapshot,
+        transformed_text: &str,
+        lease: &TransformLease,
+    ) -> Result<(), VerbalixError> {
+        if !lease.try_claim_write() {
+            return Err(VerbalixError::StaleSelection);
+        }
+        self.restore(expected, transformed_text)
+    }
     fn restore(
         &self,
         expected: &SelectionSnapshot,
@@ -27,6 +38,17 @@ pub trait SelectionPort: Send + Sync {
 
 pub trait OverlayPort: Send + Sync {
     fn show_toolbar(&self, bounds: Rect) -> Result<(), VerbalixError>;
+    fn show_toolbar_guarded(
+        &self,
+        bounds: Rect,
+        guard: PublicationGuard,
+    ) -> Result<(), VerbalixError> {
+        if guard.may_publish() {
+            self.show_toolbar(bounds)
+        } else {
+            Ok(())
+        }
+    }
     fn show_note(&self, bounds: Rect, text: &str) -> Result<(), VerbalixError>;
     fn show_preview(
         &self,

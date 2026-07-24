@@ -68,6 +68,15 @@ impl SelectionPort for MacAccessibility {
     ) -> Result<(), VerbalixError> {
         super::macos_restore::restore(expected, transformed_text)
     }
+
+    fn restore_guarded(
+        &self,
+        expected: &SelectionSnapshot,
+        transformed_text: &str,
+        lease: &TransformLease,
+    ) -> Result<(), VerbalixError> {
+        super::macos_restore::restore_guarded(expected, transformed_text, lease)
+    }
 }
 
 #[cfg(test)]
