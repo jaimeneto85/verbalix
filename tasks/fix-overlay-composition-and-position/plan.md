@@ -209,4 +209,22 @@ Fora do escopo:
 - [x] Cobrir `build success → configure fail → rollback → next creation` com geração fresca e sem documento reutilizável.
 - [x] Cobrir falhas de destruição e ocultação mantendo o estado nativo invalidado.
 - [x] Reexecutar gates: Rust 90/90, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt/check, clippy estrito, diff-check e limite de linhas.
+- [x] Submeter nova revisão dual antes de Computer Use, merge ou release.
+
+### Veredito da sexta revisão
+
+`REJECTED_CODE`
+
+- Criação transacional, rollback, reload, UUID/URL, caller `NSView`, retries e composição foram aprovados.
+- `invalidate_document(surface)` não comparava a geração esperada. Um callback ou rollback atrasado de G1 podia remover G2 já criada e pronta.
+
+### Remediação da sexta revisão
+
+- [x] Substituir invalidação incondicional por `invalidate_if_current(surface, expected_generation)`.
+- [x] Capturar a geração no callback one-shot de page load e passá-la a toda invalidação de reload.
+- [x] Passar a geração da transação aos rollbacks de build e configuração.
+- [x] Tratar invalidação stale como resultado esperado e diagnosticado, sem tocar no documento atual.
+- [x] Cobrir `G1 → G2 pronta → invalidate G1=false`, preservando ACK e `should_show` de G2.
+- [x] Cobrir rollback stale da transação A sem apagar ou bloquear o documento B.
+- [x] Reexecutar gates: Rust 93/93, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt/check, clippy estrito, diff-check e limite de linhas.
 - [ ] Submeter nova revisão dual antes de Computer Use, merge ou release.

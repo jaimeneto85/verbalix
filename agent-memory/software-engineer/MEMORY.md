@@ -46,6 +46,7 @@
 - Retries frontend são estritamente sequenciais após `false`/erro, limitados a três e não usam timeout por `Promise.race`.
 - Rotas `?overlay=` sem um UUID v4 Rust válido preservam a superfície transparente, mas renderizam root vazio e nunca a aplicação principal.
 - Criação de overlay é transacional: a geração aberta por `build` só permanece válida após `configure`; qualquer falha invalida o documento e executa rollback `destroy → hide`, com diagnóstico de todas as etapas. Uma janela parcialmente configurada nunca pode ser reutilizada.
+- Toda invalidação de documento usa compare-and-invalidate com a geração esperada. Callbacks e rollbacks stale retornam `false`, são diagnosticados e nunca removem a geração atual.
 - `AppRuntime` vive em `runtime.rs`; o registro de comandos em `lib.rs` não deve voltar a ultrapassar o hard gate de 300 linhas.
 - Durante o MVP diagnosticável, `ActivationPolicy::Regular`, fechamento da janela principal como hide e reabertura centralizada por Dock/tray mantêm o processo observável.
 - Configuração pública do backend usa pares completos na ordem processo `VITE_*`, processo legado `VERBALIX_*`, embedded `VITE_*`, embedded legado; o build gera constantes em `OUT_DIR` para não transportar valores por stdout.
