@@ -146,7 +146,7 @@
 - [x] T3.4 `[MEDIUM]` Cobrir polling/observer durante Processing, outro alvo com texto idêntico, duplo clique e falha pós-write.
 - [x] T3.5 `[LOW]` Executar gates automatizados e limite de linhas.
 - [x] T3.6 `[MEDIUM]` Provar insert/list do histórico após Translate e Improve bem-sucedidos.
-- [ ] T3.7 `[HIGH]` Provar supersede antes/depois do provider, mesmo texto com PID/identidade diferente, same-target preservado e ausência de feedback stale.
+- [x] T3.7 `[HIGH]` Provar supersede antes/depois do provider, mesmo texto com PID/identidade diferente, same-target preservado e ausência de feedback stale.
 
 ### Fase 4 — QA real
 

@@ -10,6 +10,7 @@
 - O fluxo composto de fallback AX deve combinar matriz pura de categorias com contrato de integração do source: falha estrutural de CFRange não pode alcançar `marker_selection`, enquanto somente falhas explícitas de capacidade podem fazê-lo.
 - Transformações do toolbar delegam readiness exclusivamente ao comando Rust; testes frontend e Playwright exigem uma única chamada `transform_selection`, não chamam `ai_readiness` e não abrem a janela principal para todo erro.
 - A transação de transformação é testada com `snapshot.id + request_id`: captura transitória durante `Processing` preserva o alvo pinado, invalidação real bloqueia provider/write, segunda ação é rejeitada e falha de undo após write mantém `Applied`.
+- Supersede durante transformação exige testes separados: candidato equivalente preserva exatamente `snapshot.id + request_id`; PID ou identidade AX diferentes substituem o lease antes do provider; resposta de provider já iniciado fica inerte; falha de hide não ressuscita `Processing`; preview superseded falha antes do write. Feedback de erro usa helper puro e só pertence ao snapshot ID original.
 - Histórico remoto pode ser testado sem Supabase real com servidor HTTP loopback que cobre `/auth/v1/user`, inserts de `translate`/`improve` e listagem autenticada; o contrato causal do command exige insert somente após `coordinator.transform` bem-sucedido.
 - O budget da Responses API usa caracteres Unicode e precisa de boundaries discriminatórios: 558 caracteres ainda resultam no piso 500, 559 produzem 501, 11.806 produzem 7.999 e 11.807 alcançam 8.000; emoji não-BMP deve provar que UTF-16 não é usado.
 - Validação de envelope Responses deve ser testada com output parcial que seria semanticamente válido: status ausente, desconhecido ou incomplete e `incomplete_details` não nulo precisam falhar antes do parse; completed aceita details nulo ou ausente.
@@ -45,7 +46,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 110 testes, incluindo pinning da transformação, invalidação transitória/real, pós-write, histórico insert/list, identidade AX e a matriz de fallback geométrico.
+- A suíte Rust possui 121 testes, incluindo pinning e supersede da transformação, invalidação transitória/real, resposta remota fora de ordem, feedback stale, pós-write, histórico insert/list, identidade AX e a matriz de fallback geométrico.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
