@@ -71,6 +71,7 @@
 - A toolbar usa uma guarda de apresentação reservada junto ao candidato, executada fora do mutex e confirmada condicionalmente; Candidate/Invalidated revogam comandos ainda enfileirados.
 - O undo possui lease próprio criado no commit `Applied`; restore faz revalidação antes do claim e o commit posterior preserva qualquer Candidate B que tenha supersedido A.
 - Persistência de histórico é best-effort, detached e limitada por timeout no cliente e na tarefa; falhas expõem somente evento e código sanitizado, sem bloquear nem alterar o resultado da transformação.
+- Publicação visual guardada possui fase CAS independente da escrita: a janela pode ser criada e posicionada invisível, mas `emit/show` exige `Active → Claimed` imediatamente depois da preparação. Cancelamento que vence o claim limpa readiness e produz zero efeito; cancelamento posterior revoga payload/visibilidade e o `HideAll` serializado encerra a publicação já reivindicada.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.
