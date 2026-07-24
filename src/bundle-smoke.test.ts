@@ -211,7 +211,10 @@ describe("macOS bundle smoke contract", () => {
     expect(commands).toContain('show_main_window(&app, "login_required")');
     expect(commands).toContain('ai_readiness("provider_unavailable")');
     expect(commands).toContain(".show_error(");
-    expect(commands).toContain("begin_transform(snapshot.id, request.request_id)");
+    expect(commands).toContain("begin_transform(snapshot.id, request_id)");
+    expect(commands.indexOf("begin_transform(snapshot.id, request_id)")).toBeLessThan(
+      commands.indexOf("let request = TransformRequest")
+    );
     expect(commands).toContain("abort_transform(request.request_id)");
     expect(overlay).not.toContain("native.aiReadiness()");
     expect(overlay).not.toMatch(/catch[\s\S]{0,80}openMainWindow/);
@@ -246,11 +249,13 @@ describe("macOS bundle smoke contract", () => {
     const transform = command.indexOf(".coordinator\n        .transform(");
     const success = command.indexOf(".await?;", transform);
     const historyGate = command.indexOf("if settings.history_enabled", success);
-    const insert = command.indexOf(".insert(request, &response", historyGate);
+    const detached = command.indexOf("persist_history(runtime", historyGate);
+    const spawn = command.indexOf("async_runtime::spawn", detached);
 
     expect(transform).toBeGreaterThan(-1);
     expect(success).toBeGreaterThan(transform);
     expect(historyGate).toBeGreaterThan(success);
-    expect(insert).toBeGreaterThan(historyGate);
+    expect(detached).toBeGreaterThan(historyGate);
+    expect(spawn).toBeGreaterThan(detached);
   });
 });

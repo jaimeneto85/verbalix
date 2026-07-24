@@ -173,7 +173,65 @@ describe("selection overlays", () => {
     await user.click(screen.getByRole("button", { name: "Desfazer" }));
 
     expect(mocks.undoReplacement).toHaveBeenCalledWith("Improved text");
-    expect(mocks.dismissOverlays).toHaveBeenCalledOnce();
+    expect(mocks.dismissOverlays).not.toHaveBeenCalled();
+  });
+
+  it("keeps apply and undo failures native and blocks repeated pending actions", async () => {
+    const user = userEvent.setup();
+    let rejectApply: (reason?: unknown) => void = () => undefined;
+    mocks.applyPreview.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectApply = reject;
+      })
+    );
+    render(<Overlay kind="note" generation="note-generation" />);
+    await waitFor(() => expect(mocks.listener).toBeTypeOf("function"));
+    act(() => {
+      mocks.listener!({
+        payload: {
+          mode: "preview",
+          requestId: "request-1",
+          text: "Improved text"
+        }
+      });
+    });
+
+    const apply = screen.getByRole("button", { name: "Aplicar" });
+    await user.click(apply);
+    await user.click(apply);
+    expect(mocks.applyPreview).toHaveBeenCalledOnce();
+    expect(apply).toBeDisabled();
+    rejectApply("stale preview");
+    await waitFor(() => expect(apply).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Aplicar" })).toBeInTheDocument();
+    expect(mocks.dismissOverlays).not.toHaveBeenCalled();
+  });
+
+  it("keeps a rejected undo visible and prevents duplicate native calls", async () => {
+    const user = userEvent.setup();
+    let rejectUndo: (reason?: unknown) => void = () => undefined;
+    mocks.undoReplacement.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectUndo = reject;
+      })
+    );
+    render(<Overlay kind="note" generation="note-generation" />);
+    await waitFor(() => expect(mocks.listener).toBeTypeOf("function"));
+    act(() => {
+      mocks.listener!({
+        payload: { mode: "undo", text: "Improved text" }
+      });
+    });
+
+    const undo = screen.getByRole("button", { name: "Desfazer" });
+    await user.click(undo);
+    await user.click(undo);
+    expect(mocks.undoReplacement).toHaveBeenCalledOnce();
+    expect(undo).toBeDisabled();
+    rejectUndo("stale undo");
+    await waitFor(() => expect(undo).toBeEnabled());
+    expect(screen.getByText("Improved text")).toBeInTheDocument();
+    expect(mocks.dismissOverlays).not.toHaveBeenCalled();
   });
 
   it("recovers the first note result published before its listener was ready", async () => {
