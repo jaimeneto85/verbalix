@@ -203,7 +203,10 @@ Fora do escopo:
 
 ### Remediação da quinta revisão
 
-- [ ] Em falha de configuração nativa, invalidar o documento, destruir a janela e usar `hide` como fallback se a destruição falhar.
-- [ ] Diagnosticar falha de configuração e os resultados do rollback sem dados sensíveis.
-- [ ] Cobrir o rollback transacional para impedir reuso de janela sem composição nativa válida.
-- [ ] Reexecutar todos os gates e nova revisão dual antes de Computer Use, merge ou release.
+- [x] Tornar `build → configure → commit` transacional; falha de build ou configuração invalida o documento.
+- [x] Em falha de configuração nativa, destruir a janela e usar `hide` como fallback se a destruição falhar.
+- [x] Diagnosticar falha de build/configuração, invalidação, destruição e ocultação sem dados sensíveis.
+- [x] Cobrir `build success → configure fail → rollback → next creation` com geração fresca e sem documento reutilizável.
+- [x] Cobrir falhas de destruição e ocultação mantendo o estado nativo invalidado.
+- [x] Reexecutar gates: Rust 90/90, Vitest 47/47, cobertura configurada 100%, Playwright 6/6, build, fmt/check, clippy estrito, diff-check e limite de linhas.
+- [ ] Submeter nova revisão dual antes de Computer Use, merge ou release.
