@@ -36,7 +36,7 @@
 
 - [ ] RF01: Translate e Improve usam `gpt-5.4-nano` configurado por secret remoto.
 - [ ] RF02: O payload envia `reasoning: { effort: "none" }`.
-- [ ] RF03: `max_output_tokens` é limitado a valor documentado e coberto por teste.
+- [ ] RF03: `max_output_tokens` é limitado a 500 e coberto por teste.
 - [ ] RF04: Timeout continua retornando `PROVIDER_TIMEOUT` 504 com feedback acionável no app.
 - [ ] RF05: Transformação autenticada bem-sucedida é seguida de insert e aparece no listHistory do mesmo usuário.
 
@@ -48,7 +48,7 @@
 
 ### Critérios de aceitação
 
-- [ ] CA01: Teste do provider valida model, reasoning none e limite de output.
+- [ ] CA01: Teste do provider valida model, reasoning none e `max_output_tokens: 500`.
 - [ ] CA02: Teste de timeout continua vencendo provider não cooperativo.
 - [ ] CA03: Smoke autenticado real de Translate e Improve conclui abaixo do hard timeout.
 - [ ] CA04: Histórico lista os dois resultados para o usuário e não expõe registros de outro usuário.
@@ -71,7 +71,7 @@
 
 - O modelo permanece configurável por `OPENAI_MODEL`; somente o secret remoto muda.
 - `reasoning.effort: none` explicita o perfil de baixa latência suportado pelo modelo.
-- O limite de output será uma constante única do provider e validado por teste de payload.
+- O limite de output será 500, uma constante única do provider validada por teste de payload.
 - Timeout total não aumenta: latência é resolvida por modelo/payload, preservando UX e contenção de custos.
 - Histórico continua após sucesso da transformação; falha independente de history deve ser reportada como nova subtask, sem mascarar a transformação concluída.
 
@@ -79,7 +79,7 @@
 
 ### Especificação e testes
 
-- [ ] T1.1 `[LOW]` Definir limite de saída adequado com justificativa técnica.
+- [x] T1.1 `[LOW]` Definir limite de saída adequado com justificativa técnica: chamada direta oficial com `gpt-5.4-nano`, reasoning none e 500 tokens retornou HTTP 200 estruturado em 1,550139 s, abaixo do timeout de 20 s; o payload anterior com `gpt-5-mini` excedeu 20 s.
 - [ ] T1.2 `[LOW]` Atualizar teste do payload para reasoning none e limite.
 - [ ] T1.3 `[MEDIUM]` Cobrir timeout, erro provider e outputs limítrofes.
 
@@ -95,4 +95,3 @@
 - [ ] T3.2 `[MEDIUM]` Atualizar secret remoto para `gpt-5.4-nano` e implantar função após QA.
 - [ ] T3.3 `[MEDIUM]` Executar smoke autenticado Translate/Improve e histórico/RLS.
 - [ ] T3.4 `[LOW]` Registrar evidências sanitizadas e verdict.
-
