@@ -129,7 +129,7 @@ describe("macOS bundle smoke contract", () => {
       eligibilityCheck
     );
     const recapture = replacement.indexOf(
-      "macos_selection::capture(&element)?",
+      "macos_selection::capture_with_strategy(&element, expected.extraction_strategy)?",
       focusedElementLookup
     );
     const setter = replacement.indexOf(
