@@ -43,3 +43,10 @@ Não há baseline histórico auditável suficiente para executar rollback autom�
 ## Gate pendente
 
 O smoke end-to-end precisa de um magic link novo. O link anterior não deve ser reutilizado. O teste deve cobrir app aberto e cold start, confirmar a callback efetivamente entregue como `verbalix://auth/callback` sem registrar query/code e observar apenas o estado booleano da sessão.
+
+## QA e integração
+
+- testes Auth/deep-link: 8/8;
+- re-QA independente após o artefato contemporâneo: `APPROVED`;
+- classificação: segura para merge;
+- pendência operacional pós-merge: smoke com magic link novo.

@@ -120,6 +120,12 @@ Autorizar somente a mutação remota mínima quando todos os preconditions forem
 - [x] T3 Aplicar append idempotente via PATCH mínimo.
 - [x] T4 Verificar preservação integral e callback exata sem wildcard.
 - [ ] T5 Executar smoke com magic link novo e callback no app — aguarda link novo solicitado pelo usuário.
-- [ ] T6 QA independente emitir verdict — primeiro ciclo retornou `REJECTED_TESTS`; re-QA pendente após evidência contemporânea.
+- [x] T6 QA independente emitir verdict — re-QA `APPROVED` após a evidência contemporânea; 8/8 testes de Auth/deep-link aprovados.
 - [x] T7 Documentar evidências sanitizadas e rollback.
 - [x] T8 Executar ciclo read-only contemporâneo GET/no-op/GET e persistir evidência sanitizada.
+
+## 4. STATUS
+
+`APPROVED` para integração. O estado remoto atual e a idempotência foram auditados, o contrato local passou em 8/8 testes e a re-QA foi aprovada.
+
+T5 permanece como gate operacional pós-merge: solicitar um magic link novo e validar app aberto/cold start. Essa pendência não exige manter a worktree e não invalida a correção remota já auditada.
