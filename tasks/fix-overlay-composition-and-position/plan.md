@@ -125,7 +125,8 @@ Fora do escopo:
 
 ### Remediação obrigatória
 
-- Usar a zero screen como referência global AX → Cocoa e cobrir key window em uma tela secundária com origem/altura diferentes.
-- Substituir o teste Retina tautológico por um contrato que exerça o boundary de coordenadas em pontos e impeça o uso de `mainScreen` como zero screen.
-- Impedir a exibição do overlay antes de a superfície transparente estar pronta, sem alterar a janela principal.
-- Reexecutar todos os gates e submeter nova revisão dual antes de Computer Use, merge ou release.
+- [x] Usar a zero screen como referência global AX → Cocoa e cobrir key window em uma tela secundária com origem/altura diferentes.
+- [x] Substituir o teste Retina tautológico por um contrato que exerça o boundary de coordenadas em pontos e impeça o uso de `mainScreen` como zero screen.
+- [x] Impedir a exibição do overlay antes de a superfície transparente estar pronta, sem alterar a janela principal.
+- [x] Impedir que um handshake atrasado reabra um overlay invalidado antes de ficar pronto.
+- [x] Reexecutar todos os gates antes de submeter nova revisão dual, sem Computer Use, merge ou release.

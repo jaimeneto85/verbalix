@@ -184,7 +184,9 @@ describe("macOS bundle smoke contract", () => {
       readFileSync("src/supabase.ts", "utf8")
     ].join("\n");
 
-    expect(dispatcher).toContain('window(app, "note", 420.0, 220.0');
+    expect(dispatcher).toContain(
+      "get_or_create(app, surface, 420.0, 220.0, sequence, readiness)"
+    );
     expect(overlay).toContain('"Ação necessária"');
     expect(overlay).toContain("Abrir Verbalix");
     expect(commands).toContain('show_main_window(&app, "login_required")');
