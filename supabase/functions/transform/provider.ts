@@ -1,11 +1,14 @@
 import {
-  validateResponse,
   TransformRequest,
-  TransformResponse
+  TransformResponse,
+  validateResponse,
 } from "./contract.ts";
 
 export interface AiProvider {
-  transform(request: TransformRequest, signal: AbortSignal): Promise<TransformResponse>;
+  transform(
+    request: TransformRequest,
+    signal: AbortSignal,
+  ): Promise<TransformResponse>;
 }
 
 type OpenAiPayload = {
@@ -18,12 +21,12 @@ export class OpenAiProvider implements AiProvider {
   constructor(
     private readonly apiKey: string,
     private readonly model: string,
-    private readonly fetcher: typeof fetch = fetch
+    private readonly fetcher: typeof fetch = fetch,
   ) {}
 
   async transform(
     request: TransformRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
   ): Promise<TransformResponse> {
     let response: Response;
     try {
@@ -31,25 +34,26 @@ export class OpenAiProvider implements AiProvider {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         signal,
         body: JSON.stringify({
           model: this.model,
+          max_output_tokens: 8_000,
           input: [
             {
               role: "system",
-              content: [{ type: "input_text", text: systemPrompt(request) }]
+              content: [{ type: "input_text", text: systemPrompt(request) }],
             },
             {
               role: "user",
               content: [
                 {
                   type: "input_text",
-                  text: `<untrusted_text>\n${request.text}\n</untrusted_text>`
-                }
-              ]
-            }
+                  text: `<untrusted_text>\n${request.text}\n</untrusted_text>`,
+                },
+              ],
+            },
           ],
           text: {
             format: {
@@ -61,14 +65,14 @@ export class OpenAiProvider implements AiProvider {
                 properties: {
                   sourceLanguage: { type: "string" },
                   targetLanguage: { type: ["string", "null"] },
-                  result: { type: "string" }
+                  result: { type: "string" },
                 },
                 required: ["sourceLanguage", "targetLanguage", "result"],
-                additionalProperties: false
-              }
-            }
-          }
-        })
+                additionalProperties: false,
+              },
+            },
+          },
+        }),
       });
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") {
@@ -97,7 +101,7 @@ export class OpenAiProvider implements AiProvider {
     }
     return validateResponse(request, {
       requestId: request.requestId,
-      ...parsed
+      ...parsed,
     });
   }
 }

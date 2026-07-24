@@ -9,14 +9,14 @@ export interface UserAuthenticator {
 
 type Fetcher = (
   input: string | URL | Request,
-  init?: RequestInit
+  init?: RequestInit,
 ) => Promise<Response>;
 
 export class SupabaseUserAuthenticator implements UserAuthenticator {
   constructor(
     private readonly url: string,
     private readonly anonKey: string,
-    private readonly fetcher: Fetcher = fetch
+    private readonly fetcher: Fetcher = fetch,
   ) {}
 
   async authenticate(token: string): Promise<AuthenticatedUser | null> {
@@ -28,8 +28,8 @@ export class SupabaseUserAuthenticator implements UserAuthenticator {
       response = await this.fetcher(`${this.url}/auth/v1/user`, {
         headers: {
           apikey: this.anonKey,
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
     } catch {
       return null;

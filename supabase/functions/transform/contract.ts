@@ -52,7 +52,9 @@ export function parseRequest(value: unknown): TransformRequest {
     throw new Error("TEXT_TOO_LONG");
   }
   if (candidate.operation === "improve") {
-    const preferences = candidate.preferences as Record<string, unknown> | undefined;
+    const preferences = candidate.preferences as
+      | Record<string, unknown>
+      | undefined;
     if (
       !preferences ||
       typeof preferences.formality !== "number" ||
@@ -72,7 +74,7 @@ export function parseRequest(value: unknown): TransformRequest {
 
 export function validateResponse(
   request: TransformRequest,
-  value: unknown
+  value: unknown,
 ): TransformResponse {
   if (!value || typeof value !== "object") throw new Error("INVALID_RESPONSE");
   const candidate = value as Record<string, unknown>;
@@ -100,7 +102,8 @@ export function validateResponse(
 }
 
 function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(
+      value,
+    );
 }

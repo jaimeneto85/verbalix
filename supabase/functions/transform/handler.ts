@@ -1,9 +1,9 @@
 import type { UserAuthenticator } from "./auth.ts";
 import {
-  parseRequest,
   type ErrorCode,
+  parseRequest,
   type TransformRequest,
-  validateResponse
+  validateResponse,
 } from "./contract.ts";
 import type { AiProvider } from "./provider.ts";
 
@@ -12,7 +12,7 @@ export const PROVIDER_TIMEOUT_MS = 20_000;
 
 export type ProviderFactory = (
   apiKey: string,
-  model: string
+  model: string,
 ) => AiProvider;
 
 export type TimeoutScheduler = {
@@ -29,7 +29,7 @@ export type HandlerDependencies = {
 
 const responseHeaders = {
   "Content-Type": "application/json",
-  "Cache-Control": "no-store"
+  "Cache-Control": "no-store",
 };
 
 export function createTransformHandler(dependencies: HandlerDependencies) {
@@ -55,7 +55,7 @@ export function createTransformHandler(dependencies: HandlerDependencies) {
       const result = await runProvider(dependencies, apiKey, model, input);
       return new Response(JSON.stringify(validateResponse(input, result)), {
         status: 200,
-        headers: responseHeaders
+        headers: responseHeaders,
       });
     } catch (reason) {
       const code = normalizeError(reason);
@@ -114,16 +114,26 @@ async function runProvider(
   dependencies: HandlerDependencies,
   apiKey: string,
   model: string,
-  request: TransformRequest
+  request: TransformRequest,
 ) {
   const controller = new AbortController();
+  let rejectTimeout = (_reason: Error) => {};
+  const timeout = new Promise<never>((_resolve, reject) => {
+    rejectTimeout = reject;
+  });
   const handle = dependencies.timeout.schedule(
-    () => controller.abort(),
-    PROVIDER_TIMEOUT_MS
+    () => {
+      controller.abort();
+      rejectTimeout(new Error("PROVIDER_TIMEOUT"));
+    },
+    PROVIDER_TIMEOUT_MS,
   );
   try {
     const provider = dependencies.providerFactory(apiKey, model);
-    return await provider.transform(request, controller.signal);
+    return await Promise.race([
+      provider.transform(request, controller.signal),
+      timeout,
+    ]);
   } finally {
     dependencies.timeout.cancel(handle);
   }
@@ -151,7 +161,7 @@ function isErrorCode(value: string): value is ErrorCode {
     "RATE_LIMITED",
     "PROVIDER_TIMEOUT",
     "INVALID_RESPONSE",
-    "INTERNAL_ERROR"
+    "INTERNAL_ERROR",
   ].includes(value);
 }
 
@@ -162,7 +172,7 @@ function statusFor(code: ErrorCode) {
     RATE_LIMITED: 429,
     PROVIDER_TIMEOUT: 504,
     INVALID_RESPONSE: 422,
-    INTERNAL_ERROR: 500
+    INTERNAL_ERROR: 500,
   };
   return statuses[code];
 }
@@ -170,6 +180,6 @@ function statusFor(code: ErrorCode) {
 function errorResponse(code: ErrorCode, status: number) {
   return new Response(JSON.stringify({ error: { code } }), {
     status,
-    headers: responseHeaders
+    headers: responseHeaders,
   });
 }
