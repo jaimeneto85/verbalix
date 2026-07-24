@@ -8,6 +8,7 @@ use crate::{
     AppRuntime,
 };
 use std::sync::Arc;
+use std::{future::Future, time::Duration};
 use tauri::{AppHandle, State};
 
 pub(crate) fn show_transform_failure(
@@ -149,19 +150,47 @@ fn persist_history(
     let request = request.clone();
     let response = response.clone();
     let access_token = access_token.to_owned();
+    spawn_history_insert(
+        async move { history.insert(&request, &response, &access_token).await },
+        Duration::from_secs(8),
+    );
+}
+
+enum HistoryInsertOutcome {
+    Inserted,
+    Failed(VerbalixError),
+    TimedOut,
+}
+
+fn spawn_history_insert<F>(insert: F, timeout: Duration)
+where
+    F: Future<Output = Result<(), VerbalixError>> + Send + 'static,
+{
     tauri::async_runtime::spawn(async move {
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(8),
-            history.insert(&request, &response, &access_token),
-        )
-        .await
-        {
-            Ok(Ok(())) => crate::diagnostics::history::record("inserted", None),
-            Ok(Err(error)) => crate::diagnostics::history::record("insert_failed", Some(&error)),
-            Err(_) => crate::diagnostics::history::record(
+        match history_insert_outcome(insert, timeout).await {
+            HistoryInsertOutcome::Inserted => crate::diagnostics::history::record("inserted", None),
+            HistoryInsertOutcome::Failed(error) => {
+                crate::diagnostics::history::record("insert_failed", Some(&error))
+            }
+            HistoryInsertOutcome::TimedOut => crate::diagnostics::history::record(
                 "insert_timeout",
                 Some(&VerbalixError::ProviderTimeout),
             ),
         }
     });
 }
+
+async fn history_insert_outcome<F>(insert: F, timeout: Duration) -> HistoryInsertOutcome
+where
+    F: Future<Output = Result<(), VerbalixError>>,
+{
+    match tokio::time::timeout(timeout, insert).await {
+        Ok(Ok(())) => HistoryInsertOutcome::Inserted,
+        Ok(Err(error)) => HistoryInsertOutcome::Failed(error),
+        Err(_) => HistoryInsertOutcome::TimedOut,
+    }
+}
+
+#[cfg(test)]
+#[path = "commands_transform_tests.rs"]
+mod tests;
