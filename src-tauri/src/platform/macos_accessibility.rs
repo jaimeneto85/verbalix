@@ -124,12 +124,19 @@ mod tests {
         let mut weak_identity = snapshot(true, true);
         weak_identity.element_identity.as_mut().unwrap().identifier = None;
         let mut empty_identity = snapshot(true, true);
-        empty_identity.element_identity.as_mut().unwrap().identifier = Some("  ".to_owned());
+        empty_identity.element_identity.as_mut().unwrap().identifier = Some(String::new());
+        let mut whitespace_identity = snapshot(true, true);
+        whitespace_identity
+            .element_identity
+            .as_mut()
+            .unwrap()
+            .identifier = Some("  ".to_owned());
 
         assert!(!replacement_eligible(&snapshot(false, true)));
         assert!(!replacement_eligible(&snapshot(true, false)));
         assert!(!replacement_eligible(&weak_identity));
         assert!(!replacement_eligible(&empty_identity));
+        assert!(!replacement_eligible(&whitespace_identity));
         assert!(replacement_eligible(&snapshot(true, true)));
     }
 }

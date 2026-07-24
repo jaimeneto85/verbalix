@@ -163,37 +163,40 @@ fn restore_rejects_another_field_in_the_same_pid_even_with_matching_selection() 
 
 #[test]
 fn restore_without_identifier_rejects_before_the_write_boundary() {
-    let mut expected = snapshot(true);
-    expected.element_identity.as_mut().unwrap().identifier = None;
-    let weak_identity = expected.element_identity.as_ref().unwrap();
     let transformed = "A👩🏽‍💻";
-    let matching_selection = macos_selection::ClassicSelection {
-        text: transformed.to_owned(),
-        range: CFRange {
-            location: expected.range.location as isize,
-            length: transformed.encode_utf16().count() as isize,
-        },
-    };
-    let mut writes = 0;
 
-    let validation = expected_strong_identity(&expected)
-        .and_then(|identity| {
-            validate_restore_target(
-                &expected,
-                identity,
-                expected.pid,
-                7,
-                "AXTextArea",
-                true,
-                weak_identity,
-            )
-        })
-        .and_then(|_| validate_restore_selection(&expected, transformed, &matching_selection));
-    if validation.is_ok() {
-        writes += 1;
+    for identifier in [None, Some(String::new()), Some("  ".to_owned())] {
+        let mut expected = snapshot(true);
+        expected.element_identity.as_mut().unwrap().identifier = identifier;
+        let weak_identity = expected.element_identity.as_ref().unwrap();
+        let matching_selection = macos_selection::ClassicSelection {
+            text: transformed.to_owned(),
+            range: CFRange {
+                location: expected.range.location as isize,
+                length: transformed.encode_utf16().count() as isize,
+            },
+        };
+        let mut writes = 0;
+
+        let validation = expected_strong_identity(&expected)
+            .and_then(|identity| {
+                validate_restore_target(
+                    &expected,
+                    identity,
+                    expected.pid,
+                    7,
+                    "AXTextArea",
+                    true,
+                    weak_identity,
+                )
+            })
+            .and_then(|_| validate_restore_selection(&expected, transformed, &matching_selection));
+        if validation.is_ok() {
+            writes += 1;
+        }
+
+        assert!(matches!(validation, Err(VerbalixError::StaleSelection)));
+        assert_eq!(writes, 0);
+        assert!(validate_restore_selection(&expected, transformed, &matching_selection).is_ok());
     }
-
-    assert!(matches!(validation, Err(VerbalixError::StaleSelection)));
-    assert_eq!(writes, 0);
-    assert!(validate_restore_selection(&expected, transformed, &matching_selection).is_ok());
 }

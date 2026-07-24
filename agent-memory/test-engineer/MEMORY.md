@@ -9,6 +9,7 @@
 - Text markers permanecem sem mocks FFI: a suíte combina matriz pura e exaustiva de categorias AX, validação de índices/length em UTF-16, fluxo read-only até nota e contrato estático das APIs públicas/RAII; o gate real cobre o adapter nativo.
 - O fluxo composto de fallback AX deve combinar matriz pura de categorias com contrato de integração do source: falha estrutural de CFRange não pode alcançar `marker_selection`, enquanto somente falhas explícitas de capacidade podem fazê-lo.
 - Restore precisa de testes separados e combinados para PID, identidade estável do elemento, texto selecionado e range UTF-16 atual; coincidência de texto/range em outro campo do mesmo PID deve continuar falhando fechada.
+- Replace e restore exigem identidade forte antes de qualquer lookup/write AX; testes devem cobrir `identifier=None`, string vazia e somente whitespace, todos com zero escrita.
 - Fluxos críticos de recuperação visual usam Playwright com `__TAURI_INTERNALS__` simulado e verificam tanto invocações IPC quanto clipping pelo bounding box.
 
 ## Estratégias de Mock
@@ -23,11 +24,11 @@
 - Coordenadas globais negativas são válidas em monitores secundários; validação geométrica deve rejeitar valores não finitos e dimensões inválidas sem rejeitar a origem negativa.
 - Doubles Deno que implementam interfaces assíncronas sem executar `await` devem retornar `Promise.resolve`/`Promise.reject` explicitamente para satisfazer `deno lint require-await`.
 - Limites superiores de índices marker em macOS arm64 devem considerar que `isize::MAX == i64::MAX`; o maior location válido antes de um range de length 1 é `isize::MAX - 1`.
-- O analyzer QA considera linhas efetivas e impõe máximo de 300 por arquivo modificado; após a refatoração AX, `macos_geometry.rs` ainda ficou com 340 e requer nova divisão antes de re-QA.
+- O analyzer QA considera linhas efetivas e impõe máximo de 300 por arquivo modificado; os boundaries macOS foram divididos e devem permanecer abaixo desse limite.
 
 ## Cobertura & Métricas
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
-- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, target de restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 68 testes Rust e os gates `clippy -D warnings` são usados como evidência.
+- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 30 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 3 testes Playwright E2E também passam.
 
 ## Observações
