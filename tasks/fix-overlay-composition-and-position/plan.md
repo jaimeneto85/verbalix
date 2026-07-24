@@ -88,11 +88,11 @@ Fora do escopo:
 ## 3. TASKS
 
 - [x] T1: executar análise dual de riscos e oportunidades e sintetizar o design final.
-- [ ] T2: adicionar testes que reproduzam documento opaco e erro de posição em Retina/múltiplos monitores.
-- [ ] T3: implementar transparência restrita às rotas de overlay no frontend.
-- [ ] T4: implementar composição nativa transparente de `NSWindow`/WebView no macOS.
-- [ ] T5: corrigir seleção de tela, conversão de coordenadas e posicionamento nativo em pontos.
-- [ ] T6: executar gates automatizados e análise de segurança/regressão.
+- [x] T2: adicionar testes que reproduzam documento opaco e erro de posição em Retina/múltiplos monitores.
+- [x] T3: implementar transparência restrita às rotas de overlay no frontend.
+- [x] T4: implementar composição nativa transparente de `NSWindow`/WebView no macOS.
+- [x] T5: corrigir seleção de tela, conversão de coordenadas e posicionamento nativo em pontos.
+- [x] T6: executar gates automatizados e análise de segurança/regressão.
 - [ ] T7: QA dual emitir `APPROVED`, `REJECTED_CODE` ou `REJECTED_TESTS`.
 - [ ] T8: registrar evidências e atualizar memórias; deixar Computer Use, merge e release para o agente raiz.
 
