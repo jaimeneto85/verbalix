@@ -264,3 +264,6 @@ async fn assert_superseded_before_provider(next: SelectionSnapshot) {
 
 #[path = "coordinator_supersede_race_tests.rs"]
 mod races;
+
+#[path = "coordinator_transform_lease_tests.rs"]
+mod lease_races;

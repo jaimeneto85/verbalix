@@ -1,4 +1,5 @@
 use super::*;
+use crate::{application::TransformLease, platform::overlay_publication::execute_if_publishable};
 use std::sync::Mutex;
 
 #[derive(Default)]
@@ -101,4 +102,37 @@ async fn readiness_returns_an_ack_and_rejects_unknown_surfaces() {
         overlay.surface_ready("main", generation).await,
         Err(VerbalixError::LocalFailure)
     ));
+}
+
+#[test]
+fn queued_result_cancelled_before_execution_has_no_effect_or_current_payload() {
+    let dispatcher = Arc::new(RecordingDispatcher::default());
+    let overlay = TauriOverlay::with_dispatcher(dispatcher.clone());
+    let guard = Arc::new(TransformLease::new(
+        uuid::Uuid::new_v4(),
+        uuid::Uuid::new_v4(),
+    ));
+    overlay
+        .show_error_guarded(bounds(), "stale failure", guard.clone())
+        .unwrap();
+    assert!(overlay.current_note_result().unwrap().is_some());
+
+    guard.cancel();
+    let queued_guard = {
+        let commands = dispatcher.commands.lock().unwrap();
+        match &commands[0] {
+            OverlayCommand::ShowResult(_, _, guard) => guard.clone(),
+            _ => panic!("expected a queued result"),
+        }
+    };
+    let executions = std::cell::Cell::new(0);
+    let executed = execute_if_publishable(queued_guard.as_ref(), || {
+        executions.set(executions.get() + 1);
+        Ok(())
+    })
+    .unwrap();
+
+    assert!(!executed);
+    assert_eq!(executions.get(), 0);
+    assert_eq!(overlay.current_note_result().unwrap(), None);
 }
