@@ -73,6 +73,10 @@
 - [ ] CA07: Uma recaptura de outro alvo com o mesmo texto nunca herda a ação iniciada.
 - [ ] CA08: Falha transitória de captura causada pelo overlay não apaga uma ação em processamento; uma mudança real do alvo continua impedindo a escrita.
 - [ ] CA09: O smoke registra o valor de `confirm_before_replace`; no modo preview, Aplicar é parte obrigatória do fluxo.
+- [ ] CA10: Persistência de histórico nunca mantém a transformação pendente indefinidamente; falha de sync é observável e não desfaz o resultado.
+- [ ] CA11: Falhas de pin, Aplicar e Desfazer exibem feedback tipado guardado e não parecem cliques inertes.
+- [ ] CA12: Undo de A concorrente com Candidate B nunca apaga, oculta ou substitui B.
+- [ ] CA13: Readiness/falha de A enfileirada antes do provider nunca aparece sobre Candidate B.
 
 ### Edge cases
 
@@ -86,6 +90,8 @@
 - EC08: Outro campo contém exatamente o mesmo texto selecionado.
 - EC09: Escrita AX funciona, mas a publicação de undo falha.
 - EC10: Clique ocorre antes de `loadSettings()` concluir ou dois cliques chegam no mesmo frame.
+- EC11: Restore/undo fica bloqueado enquanto uma nova seleção B é capturada.
+- EC12: Histórico remoto não responde depois de uma transformação aplicada.
 
 ## 2. DESIGN
 
@@ -145,6 +151,7 @@
 - [x] T2.5 `[LOW]` Garantir consistência de estado quando o write funciona e o feedback falha.
 - [x] T2.6 `[HIGH]` Cancelar logicamente a request quando uma captura bem-sucedida identifica outro alvo, preservando apenas falhas transitórias sem candidato.
 - [x] T2.7 `[HIGH]` Remover I/O do mutex de estado, introduzir lease com claim CAS no boundary do setter e guardar publicações no executor.
+- [ ] T2.8 `[HIGH]` Guardar readiness e erros de pin/apply/undo, tornar undo condicional e remover histórico/show_toolbar do caminho bloqueante.
 
 ### Fase 3 — Testes
 
@@ -156,6 +163,7 @@
 - [x] T3.6 `[MEDIUM]` Provar insert/list do histórico após Translate e Improve bem-sucedidos.
 - [x] T3.7 `[HIGH]` Provar supersede antes/depois do provider, mesmo texto com PID/identidade diferente, same-target preservado e ausência de feedback stale.
 - [x] T3.8 `[HIGH]` Provar com adapters bloqueáveis Candidate/Invalidated antes e depois do claim, apply preview concorrente e `ShowResult` cancelado antes da execução.
+- [ ] T3.9 `[HIGH]` Provar readiness pré-pin, undo bloqueável versus Candidate B, feedback de pin/apply/undo, history timeout/off-critical-path e show_toolbar sem mutex.
 
 ### Fase 4 — QA real
 
