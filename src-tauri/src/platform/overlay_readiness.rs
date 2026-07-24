@@ -1,8 +1,9 @@
 use crate::domain::VerbalixError;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::{Mutex, MutexGuard},
 };
+use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum OverlaySurface {
@@ -34,24 +35,38 @@ pub struct OverlayReadiness {
 
 #[derive(Default)]
 struct SurfaceState {
-    ready: HashSet<OverlaySurface>,
+    current: HashMap<OverlaySurface, Uuid>,
+    ready: HashMap<OverlaySurface, Uuid>,
     requested: HashSet<OverlaySurface>,
 }
 
 impl OverlayReadiness {
     pub fn should_show(&self, surface: OverlaySurface) -> Result<bool, VerbalixError> {
         let state = self.lock()?;
-        Ok(state.ready.contains(&surface) && state.requested.contains(&surface))
+        Ok(state.current.get(&surface) == state.ready.get(&surface)
+            && state.current.contains_key(&surface)
+            && state.requested.contains(&surface))
     }
 
-    pub fn mark_ready(&self, surface: OverlaySurface) -> Result<(), VerbalixError> {
-        self.lock()?.ready.insert(surface);
-        Ok(())
+    pub fn begin_document(&self, surface: OverlaySurface) -> Result<Uuid, VerbalixError> {
+        let generation = Uuid::new_v4();
+        let mut state = self.lock()?;
+        state.current.insert(surface, generation);
+        state.ready.remove(&surface);
+        Ok(generation)
     }
 
-    pub fn clear_ready(&self, surface: OverlaySurface) -> Result<(), VerbalixError> {
-        self.lock()?.ready.remove(&surface);
-        Ok(())
+    pub fn mark_ready(
+        &self,
+        surface: OverlaySurface,
+        generation: Uuid,
+    ) -> Result<bool, VerbalixError> {
+        let mut state = self.lock()?;
+        if state.current.get(&surface) != Some(&generation) {
+            return Ok(false);
+        }
+        state.ready.insert(surface, generation);
+        Ok(true)
     }
 
     pub fn request(&self, surface: OverlaySurface) -> Result<(), VerbalixError> {
@@ -81,25 +96,50 @@ mod tests {
     #[test]
     fn a_surface_stays_hidden_until_the_current_document_marks_it_ready() {
         let readiness = OverlayReadiness::default();
+        let generation = readiness.begin_document(OverlaySurface::Toolbar).unwrap();
 
         readiness.request(OverlaySurface::Toolbar).unwrap();
         assert!(!readiness.should_show(OverlaySurface::Toolbar).unwrap());
-        readiness.mark_ready(OverlaySurface::Toolbar).unwrap();
+        assert!(readiness
+            .mark_ready(OverlaySurface::Toolbar, generation)
+            .unwrap());
         assert!(readiness.should_show(OverlaySurface::Toolbar).unwrap());
         assert!(!readiness.should_show(OverlaySurface::Note).unwrap());
-        readiness.clear_ready(OverlaySurface::Toolbar).unwrap();
+        readiness.begin_document(OverlaySurface::Toolbar).unwrap();
         assert!(!readiness.should_show(OverlaySurface::Toolbar).unwrap());
     }
 
     #[test]
     fn a_delayed_ready_signal_cannot_resurrect_a_hidden_surface() {
         let readiness = OverlayReadiness::default();
+        let generation = readiness.begin_document(OverlaySurface::Toolbar).unwrap();
         readiness.request(OverlaySurface::Toolbar).unwrap();
         readiness.cancel_all().unwrap();
 
-        readiness.mark_ready(OverlaySurface::Toolbar).unwrap();
+        readiness
+            .mark_ready(OverlaySurface::Toolbar, generation)
+            .unwrap();
 
         assert!(!readiness.should_show(OverlaySurface::Toolbar).unwrap());
+    }
+
+    #[test]
+    fn an_old_ack_cannot_mark_or_show_a_recreated_document() {
+        let readiness = OverlayReadiness::default();
+        let old_generation = readiness.begin_document(OverlaySurface::Toolbar).unwrap();
+        readiness.request(OverlaySurface::Toolbar).unwrap();
+        readiness.cancel_all().unwrap();
+        let current_generation = readiness.begin_document(OverlaySurface::Toolbar).unwrap();
+        readiness.request(OverlaySurface::Toolbar).unwrap();
+
+        assert!(!readiness
+            .mark_ready(OverlaySurface::Toolbar, old_generation)
+            .unwrap());
+        assert!(!readiness.should_show(OverlaySurface::Toolbar).unwrap());
+        assert!(readiness
+            .mark_ready(OverlaySurface::Toolbar, current_generation)
+            .unwrap());
+        assert!(readiness.should_show(OverlaySurface::Toolbar).unwrap());
     }
 
     #[test]

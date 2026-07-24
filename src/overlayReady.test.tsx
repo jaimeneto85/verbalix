@@ -14,7 +14,11 @@ describe("overlay readiness handshake", () => {
     });
 
     render(
-      <OverlayReadyGate kind="toolbar" acknowledge={acknowledge}>
+      <OverlayReadyGate
+        kind="toolbar"
+        generation="toolbar-generation"
+        acknowledge={acknowledge}
+      >
         <div data-testid="committed-overlay" />
       </OverlayReadyGate>
     );
@@ -31,37 +35,66 @@ describe("overlay readiness handshake", () => {
     const wait = vi.fn(async () => undefined);
     const report = vi.fn();
 
-    const acknowledged = await acknowledgeOverlayReady("note", {
+    const acknowledged = await acknowledgeOverlayReady("note", "note-generation", {
       send,
       wait,
       report,
-      attempts: 4,
-      timeoutMs: 50
+      attempts: 8
     });
 
     expect(acknowledged).toBe(true);
     expect(send).toHaveBeenCalledTimes(3);
-    expect(wait).toHaveBeenCalledTimes(5);
+    expect(wait).toHaveBeenCalledTimes(2);
     expect(report).not.toHaveBeenCalled();
   });
 
   it("bounds retries, reports failure and stops without an ack", async () => {
-    const send = vi.fn(() => new Promise<boolean>(() => undefined));
+    const send = vi.fn(async () => false);
     const wait = vi.fn(async () => undefined);
     const report = vi.fn();
 
-    const acknowledged = await acknowledgeOverlayReady("toolbar", {
-      send,
-      wait,
-      report,
-      attempts: 3,
-      timeoutMs: 50
-    });
+    const acknowledged = await acknowledgeOverlayReady(
+      "toolbar",
+      "toolbar-generation",
+      {
+        send,
+        wait,
+        report,
+        attempts: 30
+      }
+    );
 
     expect(acknowledged).toBe(false);
     expect(send).toHaveBeenCalledTimes(3);
-    expect(wait).toHaveBeenCalledTimes(5);
+    expect(wait).toHaveBeenCalledTimes(2);
     expect(report).toHaveBeenCalledOnce();
+  });
+
+  it("never starts a second invoke before the previous invoke settles", async () => {
+    let settleFirst: ((acknowledged: boolean) => void) | undefined;
+    const first = new Promise<boolean>((resolve) => {
+      settleFirst = resolve;
+    });
+    const send = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockResolvedValueOnce(true);
+    const wait = vi.fn(async () => undefined);
+
+    const handshake = acknowledgeOverlayReady(
+      "toolbar",
+      "current-generation",
+      { send, wait }
+    );
+    await Promise.resolve();
+    expect(send).toHaveBeenCalledTimes(1);
+
+    settleFirst?.(false);
+    await expect(handshake).resolves.toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.invocationCallOrder[0]).toBeLessThan(
+      send.mock.invocationCallOrder[1]
+    );
   });
 
   it("runs the gate from a layout effect after child DOM mutation", async () => {
@@ -78,7 +111,11 @@ describe("overlay readiness handshake", () => {
     });
 
     render(
-      <OverlayReadyGate kind="toolbar" acknowledge={acknowledge}>
+      <OverlayReadyGate
+        kind="toolbar"
+        generation="toolbar-generation"
+        acknowledge={acknowledge}
+      >
         <CommittedChild />
       </OverlayReadyGate>
     );

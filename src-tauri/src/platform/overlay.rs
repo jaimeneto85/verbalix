@@ -48,9 +48,13 @@ impl TauriOverlay {
         self.note_result.current()
     }
 
-    pub async fn surface_ready(&self, label: &str) -> Result<bool, VerbalixError> {
+    pub async fn surface_ready(
+        &self,
+        label: &str,
+        generation: uuid::Uuid,
+    ) -> Result<bool, VerbalixError> {
         self.dispatcher
-            .surface_ready(OverlaySurface::from_label(label)?)
+            .surface_ready(OverlaySurface::from_label(label)?, generation)
             .await
     }
 
@@ -129,7 +133,7 @@ mod tests {
     #[derive(Default)]
     struct RecordingDispatcher {
         commands: Mutex<Vec<OverlayCommand>>,
-        ready: Mutex<Vec<OverlaySurface>>,
+        ready: Mutex<Vec<(OverlaySurface, uuid::Uuid)>>,
         fail: bool,
     }
 
@@ -143,11 +147,15 @@ mod tests {
             Ok(())
         }
 
-        async fn surface_ready(&self, surface: OverlaySurface) -> Result<bool, VerbalixError> {
+        async fn surface_ready(
+            &self,
+            surface: OverlaySurface,
+            generation: uuid::Uuid,
+        ) -> Result<bool, VerbalixError> {
             if self.fail {
                 return Err(VerbalixError::LocalFailure);
             }
-            self.ready.lock().unwrap().push(surface);
+            self.ready.lock().unwrap().push((surface, generation));
             Ok(true)
         }
     }
@@ -211,14 +219,15 @@ mod tests {
     async fn readiness_returns_an_ack_and_rejects_unknown_surfaces() {
         let dispatcher = Arc::new(RecordingDispatcher::default());
         let overlay = TauriOverlay::with_dispatcher(dispatcher.clone());
+        let generation = uuid::Uuid::new_v4();
 
-        assert!(overlay.surface_ready("toolbar").await.unwrap());
+        assert!(overlay.surface_ready("toolbar", generation).await.unwrap());
         assert_eq!(
             dispatcher.ready.lock().unwrap().as_slice(),
-            &[OverlaySurface::Toolbar]
+            &[(OverlaySurface::Toolbar, generation)]
         );
         assert!(matches!(
-            overlay.surface_ready("main").await,
+            overlay.surface_ready("main", generation).await,
             Err(VerbalixError::LocalFailure)
         ));
     }

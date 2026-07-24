@@ -5,10 +5,16 @@ import { Overlay } from "./Overlay";
 import { bootstrapDocument } from "./overlaySurface";
 import "./styles.css";
 
-bootstrapDocument(window.location.search, (root, overlay) => {
+bootstrapDocument(window.location.search, (root, overlay, generation) => {
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
-      {overlay ? <Overlay kind={overlay} /> : <App />}
+      {overlay ? (
+        generation ? (
+          <Overlay kind={overlay} generation={generation} />
+        ) : null
+      ) : (
+        <App />
+      )}
     </React.StrictMode>
   );
 });

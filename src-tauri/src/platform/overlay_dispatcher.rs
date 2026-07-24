@@ -17,6 +17,7 @@ use std::sync::{
 #[cfg(not(target_os = "macos"))]
 use tauri::LogicalPosition;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OverlayCommand {
@@ -28,7 +29,11 @@ pub enum OverlayCommand {
 #[async_trait]
 pub trait OverlayDispatcher: Send + Sync {
     fn dispatch(&self, command: OverlayCommand) -> Result<(), VerbalixError>;
-    async fn surface_ready(&self, surface: OverlaySurface) -> Result<bool, VerbalixError>;
+    async fn surface_ready(
+        &self,
+        surface: OverlaySurface,
+        generation: Uuid,
+    ) -> Result<bool, VerbalixError>;
 }
 
 pub struct MainThreadOverlayDispatcher {
@@ -88,7 +93,11 @@ impl OverlayDispatcher for MainThreadOverlayDispatcher {
             .map_err(|_| VerbalixError::LocalFailure)
     }
 
-    async fn surface_ready(&self, surface: OverlaySurface) -> Result<bool, VerbalixError> {
+    async fn surface_ready(
+        &self,
+        surface: OverlaySurface,
+        generation: Uuid,
+    ) -> Result<bool, VerbalixError> {
         self.execution_failure.take()?;
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
         let label = surface.label();
@@ -99,7 +108,7 @@ impl OverlayDispatcher for MainThreadOverlayDispatcher {
         self.app
             .run_on_main_thread(move || {
                 diagnostics::overlay("executing", label, sequence);
-                let result = execute_surface_ready(&app, surface, sequence, &readiness);
+                let result = execute_surface_ready(&app, surface, generation, sequence, &readiness);
                 if result.is_err() {
                     diagnostics::overlay("failed", label, sequence);
                 }
@@ -124,7 +133,7 @@ fn execute_command(
     app: &AppHandle,
     command: OverlayCommand,
     sequence: u64,
-    readiness: &OverlayReadiness,
+    readiness: &Arc<OverlayReadiness>,
 ) -> Result<(), VerbalixError> {
     match command {
         OverlayCommand::ShowToolbar(bounds) => {
@@ -179,13 +188,17 @@ fn execute_command(
 fn execute_surface_ready(
     app: &AppHandle,
     surface: OverlaySurface,
+    generation: Uuid,
     sequence: u64,
     readiness: &OverlayReadiness,
 ) -> Result<bool, VerbalixError> {
     let window = app
         .get_webview_window(surface.label())
         .ok_or(VerbalixError::LocalFailure)?;
-    readiness.mark_ready(surface)?;
+    if !readiness.mark_ready(surface, generation)? {
+        diagnostics::overlay("stale_surface", surface.label(), sequence);
+        return Ok(false);
+    }
     show_if_ready(&window, surface, sequence, readiness)?;
     Ok(true)
 }

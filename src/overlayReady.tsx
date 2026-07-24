@@ -6,7 +6,10 @@ import {
 import { native } from "./native";
 import type { OverlayKind } from "./overlaySurface";
 
-type ReadyClient = (kind: OverlayKind) => Promise<boolean>;
+type ReadyClient = (
+  kind: OverlayKind,
+  generation: string
+) => Promise<boolean>;
 type Wait = (milliseconds: number) => Promise<void>;
 type Report = (error: unknown) => void;
 
@@ -15,7 +18,6 @@ type ReadyOptions = {
   wait?: Wait;
   report?: Report;
   attempts?: number;
-  timeoutMs?: number;
 };
 
 const waitFor = (milliseconds: number) =>
@@ -27,25 +29,22 @@ const reportFailure = (error: unknown) => {
 
 export async function acknowledgeOverlayReady(
   kind: OverlayKind,
+  generation: string,
   options: ReadyOptions = {}
 ): Promise<boolean> {
   const send = options.send ?? native.overlaySurfaceReady;
   const wait = options.wait ?? waitFor;
   const report = options.report ?? reportFailure;
-  const attempts = Math.max(1, options.attempts ?? 3);
-  const timeoutMs = options.timeoutMs ?? 500;
+  const attempts = Math.min(3, Math.max(1, options.attempts ?? 3));
   let lastError: unknown = new Error("Overlay readiness was not acknowledged");
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const acknowledged = await Promise.race([
-        send(kind),
-        wait(timeoutMs).then(() => false)
-      ]);
+      const acknowledged = await send(kind, generation);
       if (acknowledged) {
         return true;
       }
-      lastError = new Error("Overlay readiness acknowledgment timed out");
+      lastError = new Error("Overlay readiness was not acknowledged");
     } catch (error) {
       lastError = error;
     }
@@ -60,11 +59,13 @@ export async function acknowledgeOverlayReady(
 
 type GateProps = PropsWithChildren<{
   kind: OverlayKind;
+  generation: string;
   acknowledge?: ReadyClient;
 }>;
 
 export function OverlayReadyGate({
   kind,
+  generation,
   acknowledge = acknowledgeOverlayReady,
   children
 }: GateProps) {
@@ -76,7 +77,7 @@ export function OverlayReadyGate({
     }
     started.current = true;
     let active = true;
-    void acknowledge(kind).then((acknowledged) => {
+    void acknowledge(kind, generation).then((acknowledged) => {
       if (active) {
         document.documentElement.dataset.overlayReadiness = acknowledged
           ? "acknowledged"
@@ -86,7 +87,7 @@ export function OverlayReadyGate({
     return () => {
       active = false;
     };
-  }, [acknowledge, kind]);
+  }, [acknowledge, generation, kind]);
 
   return children;
 }

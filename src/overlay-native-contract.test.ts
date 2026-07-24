@@ -62,7 +62,31 @@ describe("macOS overlay native contract", () => {
     expect(ready).toContain("receiver.await");
     expect(ready).not.toContain("show_and_confirm");
     expect(readyExecution).toContain("mark_ready");
+    expect(readyExecution).toContain("generation");
+    expect(readyExecution).toContain("stale_surface");
     expect(readyExecution).toContain("show_if_ready");
     expect(readyExecution).toContain("Ok(true)");
+  });
+
+  it("binds a readiness ack to the exact caller and Rust-issued generation", () => {
+    const command = readFileSync(
+      "src-tauri/src/overlay_commands.rs",
+      "utf8"
+    );
+    const window = readFileSync(
+      "src-tauri/src/platform/overlay_window.rs",
+      "utf8"
+    );
+
+    expect(command).toContain("window: WebviewWindow");
+    expect(command).toContain("generation: uuid::Uuid");
+    expect(command).toContain("is_current_caller");
+    expect(window).toContain("begin_document");
+    expect(window).toContain("&generation=");
+    expect(window).toContain("caller.ns_view()");
+    expect(window).toContain("current.ns_view()");
+    expect(window).toContain("PageLoadEvent::Started");
+    expect(window).toContain("reload_readiness.begin_document");
+    expect(window).toContain("window.hide()");
   });
 });

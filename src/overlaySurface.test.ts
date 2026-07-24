@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bootstrapDocument, overlayKind } from "./overlaySurface";
+import {
+  bootstrapDocument,
+  overlayGeneration,
+  overlayKind
+} from "./overlaySurface";
 
 const overlayCss = readFileSync("src/styles/base.css", "utf8");
 
@@ -26,10 +30,18 @@ describe("overlay document surface", () => {
         expect(document.documentElement).toHaveClass("overlay-surface");
       });
 
-      const resolved = bootstrapDocument(`?overlay=${kind}`, render);
+      const resolved = bootstrapDocument(
+        `?overlay=${kind}&generation=current-document`,
+        render
+      );
 
       expect(resolved).toBe(kind);
       expect(render).toHaveBeenCalledOnce();
+      expect(render).toHaveBeenCalledWith(
+        document.getElementById("root"),
+        kind,
+        "current-document"
+      );
       for (const element of [
         document.documentElement,
         document.body,
@@ -68,4 +80,9 @@ describe("overlay document surface", () => {
     expect(overlayKind("?overlay=settings")).toBeNull();
   });
 
+  it("reads the Rust-issued document generation from the overlay URL", () => {
+    expect(overlayGeneration("?generation=95a1")).toBe("95a1");
+    expect(overlayGeneration("?generation=")).toBeNull();
+    expect(overlayGeneration("")).toBeNull();
+  });
 });

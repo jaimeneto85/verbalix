@@ -5,7 +5,13 @@ import { OverlayReadyGate } from "./overlayReady";
 import type { AppSettings, NoteResult } from "./types";
 import { defaultSettings } from "./types";
 
-export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
+export function Overlay({
+  kind,
+  generation
+}: {
+  kind: "toolbar" | "note";
+  generation: string;
+}) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [result, setResult] = useState("");
   const [noteMode, setNoteMode] =
@@ -71,7 +77,7 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
       await native.dismissOverlays();
     };
     return (
-      <OverlayReadyGate kind={kind}>
+      <OverlayReadyGate kind={kind} generation={generation}>
         <main className="note">
           <div className="note-heading">
             <span>{noteMode === "error" ? "Ação necessária" : "Resultado"}</span>
@@ -109,7 +115,7 @@ export function Overlay({ kind }: { kind: "toolbar" | "note" }) {
   }
 
   return (
-    <OverlayReadyGate kind={kind}>
+    <OverlayReadyGate kind={kind} generation={generation}>
       <main className="toolbar">
         <button disabled={busy !== null} onClick={() => transform("translate")}>
           <span>文</span>

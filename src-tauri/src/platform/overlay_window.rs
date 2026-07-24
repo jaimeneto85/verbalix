@@ -5,7 +5,13 @@ use crate::{
     domain::VerbalixError,
     platform::overlay_readiness::{OverlayReadiness, OverlaySurface},
 };
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use tauri::{
+    webview::PageLoadEvent, AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 
 pub fn get_or_create(
     app: &AppHandle,
@@ -13,19 +19,29 @@ pub fn get_or_create(
     width: f64,
     height: f64,
     sequence: u64,
-    readiness: &OverlayReadiness,
+    readiness: &Arc<OverlayReadiness>,
 ) -> Result<WebviewWindow, VerbalixError> {
     let label = surface.label();
     if let Some(window) = app.get_webview_window(label) {
         diagnostics::overlay("window_reused", label, sequence);
         return Ok(window);
     }
-    readiness.clear_ready(surface)?;
+    let generation = readiness.begin_document(surface)?;
+    let document_started = Arc::new(AtomicBool::new(false));
+    let reload_started = document_started.clone();
+    let reload_readiness = readiness.clone();
     let window = WebviewWindowBuilder::new(
         app,
         label,
-        WebviewUrl::App(format!("index.html?overlay={label}").into()),
+        WebviewUrl::App(format!("index.html?overlay={label}&generation={generation}").into()),
     )
+    .on_page_load(move |window, payload| {
+        if payload.event() == PageLoadEvent::Started && reload_started.swap(true, Ordering::AcqRel)
+        {
+            let _ = reload_readiness.begin_document(surface);
+            let _ = window.hide();
+        }
+    })
     .title("Verbalix")
     .inner_size(width, height)
     .decorations(false)
@@ -41,6 +57,27 @@ pub fn get_or_create(
     macos_overlay_panel::configure(&window)?;
     diagnostics::overlay("window_created", label, sequence);
     Ok(window)
+}
+
+pub fn is_current_caller(
+    app: &AppHandle,
+    caller: &WebviewWindow,
+    surface: OverlaySurface,
+) -> Result<bool, VerbalixError> {
+    if caller.label() != surface.label() {
+        return Ok(false);
+    }
+    let current = app
+        .get_webview_window(surface.label())
+        .ok_or(VerbalixError::LocalFailure)?;
+    #[cfg(target_os = "macos")]
+    {
+        let caller_view = caller.ns_view().map_err(|_| VerbalixError::LocalFailure)?;
+        let current_view = current.ns_view().map_err(|_| VerbalixError::LocalFailure)?;
+        return Ok(caller_view == current_view);
+    }
+    #[cfg(not(target_os = "macos"))]
+    Ok(caller == &current)
 }
 
 pub fn show_if_ready(

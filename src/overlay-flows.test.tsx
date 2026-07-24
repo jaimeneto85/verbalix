@@ -67,7 +67,7 @@ describe("selection overlays", () => {
 
   it("starts translation and improvement only from explicit toolbar actions", async () => {
     const user = userEvent.setup();
-    render(<Overlay kind="toolbar" />);
+    render(<Overlay kind="toolbar" generation="toolbar-generation" />);
 
     expect(mocks.transformSelection).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /Traduzir/ }));
@@ -81,7 +81,7 @@ describe("selection overlays", () => {
 
   it("opens the main window as a safe fallback for transformation failures", async () => {
     mocks.transformSelection.mockRejectedValue("provider unavailable");
-    render(<Overlay kind="toolbar" />);
+    render(<Overlay kind="toolbar" generation="toolbar-generation" />);
 
     fireEvent.click(screen.getByRole("button", { name: /Traduzir/ }));
     await waitFor(() => expect(mocks.openMainWindow).toHaveBeenCalledOnce());
@@ -94,7 +94,7 @@ describe("selection overlays", () => {
       status: "login_required",
       message: "Entre no Verbalix."
     });
-    render(<Overlay kind="toolbar" />);
+    render(<Overlay kind="toolbar" generation="toolbar-generation" />);
 
     fireEvent.click(screen.getByRole("button", { name: /Aprimorar/ }));
 
@@ -104,7 +104,7 @@ describe("selection overlays", () => {
 
   it("renders actionable errors in the full-size note surface", async () => {
     const user = userEvent.setup();
-    render(<Overlay kind="note" />);
+    render(<Overlay kind="note" generation="note-generation" />);
     await waitFor(() => expect(mocks.listener).toBeTypeOf("function"));
     act(() => {
       mocks.listener!({
@@ -123,7 +123,7 @@ describe("selection overlays", () => {
 
   it("applies a preview and then offers strict undo", async () => {
     const user = userEvent.setup();
-    render(<Overlay kind="note" />);
+    render(<Overlay kind="note" generation="note-generation" />);
     await waitFor(() => expect(mocks.listener).toBeTypeOf("function"));
     act(() => {
       mocks.listener!({
@@ -149,14 +149,14 @@ describe("selection overlays", () => {
       text: "Already translated"
     });
 
-    render(<Overlay kind="note" />);
+    render(<Overlay kind="note" generation="note-generation" />);
 
     expect(await screen.findByText("Already translated")).toBeInTheDocument();
     expect(screen.queryByText("Processando…")).not.toBeInTheDocument();
   });
 
   it("receives the first note result published after its listener was ready", async () => {
-    render(<Overlay kind="note" />);
+    render(<Overlay kind="note" generation="note-generation" />);
     await waitFor(() => expect(mocks.listener).toBeTypeOf("function"));
 
     act(() => {
@@ -175,7 +175,7 @@ describe("selection overlays", () => {
       configurable: true,
       value: { writeText }
     });
-    render(<Overlay kind="note" />);
+    render(<Overlay kind="note" generation="note-generation" />);
     await waitFor(() => expect(mocks.listener).toBeTypeOf("function"));
     act(() => {
       mocks.listener!({

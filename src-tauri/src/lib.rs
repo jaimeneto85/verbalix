@@ -5,6 +5,7 @@ mod commands_tests;
 mod diagnostics;
 mod domain;
 mod lifecycle;
+mod overlay_commands;
 mod platform;
 mod runtime;
 
@@ -14,6 +15,7 @@ use application::{
 };
 use commands::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
+use overlay_commands::*;
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
 pub(crate) use runtime::AppRuntime;
 use std::{sync::Arc, thread, time::Duration};

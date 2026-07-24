@@ -34,6 +34,8 @@ pub use note_result::NoteResultPayload;
 #[cfg(target_os = "macos")]
 pub use overlay::install_mouse_dismiss_monitor;
 pub use overlay::TauriOverlay;
+pub(crate) use overlay_readiness::OverlaySurface;
+pub(crate) use overlay_window::is_current_caller;
 
 #[cfg(target_os = "macos")]
 pub use macos_accessibility::MacAccessibility;
