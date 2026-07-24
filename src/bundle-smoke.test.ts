@@ -94,8 +94,8 @@ describe("macOS bundle smoke contract", () => {
   });
 
   it("keeps fallback, mutation, bounds, and diagnostics fail-closed", () => {
-    const accessibility = readFileSync(
-      "src-tauri/src/platform/macos_accessibility.rs",
+    const replacement = readFileSync(
+      "src-tauri/src/platform/macos_replace.rs",
       "utf8"
     );
     const selection = readFileSync(
@@ -123,15 +123,23 @@ describe("macOS bundle smoke contract", () => {
       "marker_fallback_rejects_structural_and_cross_stage_failures"
     );
 
-    const eligibilityCheck = accessibility.indexOf(
-      "if !replacement_eligible(expected)"
-    );
-    const focusedElementLookup = accessibility.indexOf(
-      "let element = Self::focused_element()?",
+    const eligibilityCheck = replacement.indexOf("validate_expected(expected)?");
+    const focusedElementLookup = replacement.indexOf(
+      "macos_ax::focused_element_for_pid(expected.pid)",
       eligibilityCheck
+    );
+    const recapture = replacement.indexOf(
+      "macos_selection::capture(&element)?",
+      focusedElementLookup
+    );
+    const setter = replacement.indexOf(
+      "macos_ax::set_selected_text(element.as_ref(), text)",
+      recapture
     );
     expect(eligibilityCheck).toBeGreaterThan(-1);
     expect(focusedElementLookup).toBeGreaterThan(eligibilityCheck);
+    expect(recapture).toBeGreaterThan(focusedElementLookup);
+    expect(setter).toBeGreaterThan(recapture);
 
     const rectDecoder = geometry.slice(
       geometry.indexOf("pub(super) fn rect_from_value"),
@@ -180,7 +188,10 @@ describe("macOS bundle smoke contract", () => {
       "utf8"
     );
     const buildScript = readFileSync("src-tauri/build.rs", "utf8");
-    const commands = readFileSync("src-tauri/src/commands.rs", "utf8");
+    const commands = [
+      readFileSync("src-tauri/src/commands.rs", "utf8"),
+      readFileSync("src-tauri/src/commands_transform.rs", "utf8")
+    ].join("\n");
     const example = readFileSync(".env.example", "utf8");
     const gitignore = readFileSync(".gitignore", "utf8");
     const publicRuntime = [
@@ -200,6 +211,10 @@ describe("macOS bundle smoke contract", () => {
     expect(commands).toContain('show_main_window(&app, "login_required")');
     expect(commands).toContain('ai_readiness("provider_unavailable")');
     expect(commands).toContain(".show_error(");
+    expect(commands).toContain("begin_transform(snapshot.id, request.request_id)");
+    expect(commands).toContain("abort_transform(request.request_id)");
+    expect(overlay).not.toContain("native.aiReadiness()");
+    expect(overlay).not.toMatch(/catch[\s\S]{0,80}openMainWindow/);
     expect(config).toContain('include!(concat!(env!("OUT_DIR")');
     expect(config).toContain(
       'process_pair("VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY")'

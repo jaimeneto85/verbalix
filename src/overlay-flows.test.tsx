@@ -12,7 +12,6 @@ type NoteEvent = {
 };
 
 const mocks = vi.hoisted(() => ({
-  aiReadiness: vi.fn(),
   applyPreview: vi.fn(),
   currentNoteResult: vi.fn(),
   dismissOverlays: vi.fn(),
@@ -28,7 +27,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./native", () => ({
   native: {
     applyPreview: mocks.applyPreview,
-    aiReadiness: mocks.aiReadiness,
     currentNoteResult: mocks.currentNoteResult,
     dismissOverlays: mocks.dismissOverlays,
     loadSettings: mocks.loadSettings,
@@ -53,10 +51,6 @@ describe("selection overlays", () => {
     vi.clearAllMocks();
     mocks.listener = undefined;
     mocks.loadSettings.mockResolvedValue(defaultSettings);
-    mocks.aiReadiness.mockResolvedValue({
-      status: "ready",
-      message: "A IA está pronta."
-    });
     mocks.openMainWindow.mockResolvedValue(undefined);
     mocks.overlaySurfaceReady.mockResolvedValue(true);
     mocks.applyPreview.mockResolvedValue("Improved");
@@ -79,27 +73,66 @@ describe("selection overlays", () => {
     ]);
   });
 
-  it("opens the main window as a safe fallback for transformation failures", async () => {
+  it("leaves typed native failures to the native feedback surface", async () => {
     mocks.transformSelection.mockRejectedValue("provider unavailable");
     render(<Overlay kind="toolbar" generation="toolbar-generation" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Traduzir/ }));
-    await waitFor(() => expect(mocks.openMainWindow).toHaveBeenCalledOnce());
+    const translate = screen.getByRole("button", { name: /Traduzir/ });
+    await waitFor(() => expect(translate).toBeEnabled());
+    fireEvent.click(translate);
+    await waitFor(() => expect(translate).toBeEnabled());
+    expect(mocks.transformSelection).toHaveBeenCalledOnce();
+    expect(mocks.openMainWindow).not.toHaveBeenCalled();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(mocks.dismissOverlays).toHaveBeenCalledOnce();
   });
 
-  it("blocks transforms when backend readiness requires login", async () => {
-    mocks.aiReadiness.mockResolvedValue({
-      status: "login_required",
-      message: "Entre no Verbalix."
-    });
+  it("waits for settings and delegates readiness to the native command", async () => {
+    let resolveSettings: (settings: typeof defaultSettings) => void = () => undefined;
+    mocks.loadSettings.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSettings = resolve;
+      })
+    );
     render(<Overlay kind="toolbar" generation="toolbar-generation" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Aprimorar/ }));
-
-    await waitFor(() => expect(mocks.aiReadiness).toHaveBeenCalledOnce());
+    const improve = screen.getByRole("button", { name: /Aprimorar/ });
+    expect(improve).toBeDisabled();
+    fireEvent.click(improve);
     expect(mocks.transformSelection).not.toHaveBeenCalled();
+
+    resolveSettings(defaultSettings);
+    await waitFor(() => expect(improve).toBeEnabled());
+    fireEvent.click(improve);
+
+    await waitFor(() => expect(mocks.transformSelection).toHaveBeenCalledOnce());
+    expect(mocks.transformSelection).toHaveBeenCalledWith(
+      "improve",
+      defaultSettings
+    );
+  });
+
+  it("submits at most one action while the native request is pending", async () => {
+    let resolveTransform: (value: object) => void = () => undefined;
+    mocks.transformSelection.mockReturnValue(
+      new Promise((resolve) => {
+        resolveTransform = resolve;
+      })
+    );
+    render(<Overlay kind="toolbar" generation="toolbar-generation" />);
+
+    const translate = screen.getByRole("button", { name: /Traduzir/ });
+    const improve = screen.getByRole("button", { name: /Aprimorar/ });
+    await waitFor(() => expect(translate).toBeEnabled());
+    fireEvent.click(translate);
+    fireEvent.click(translate);
+    fireEvent.click(improve);
+
+    expect(mocks.transformSelection).toHaveBeenCalledOnce();
+    expect(translate).toBeDisabled();
+    expect(improve).toBeDisabled();
+    resolveTransform({});
+    await waitFor(() => expect(translate).toBeEnabled());
   });
 
   it("renders actionable errors in the full-size note surface", async () => {

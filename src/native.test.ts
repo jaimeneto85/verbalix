@@ -33,26 +33,29 @@ describe("native command contract", () => {
     });
   });
 
-  it("sends only transformation preferences after an explicit action", async () => {
-    invoke.mockResolvedValue({
-      requestId: "request",
-      sourceLanguage: "pt",
-      targetLanguage: "en",
-      result: "Result"
-    });
+  it.each(["translate", "improve"] as const)(
+    "sends the %s operation and only transformation preferences",
+    async (operation) => {
+      invoke.mockResolvedValue({
+        requestId: "request",
+        sourceLanguage: "pt",
+        targetLanguage: "en",
+        result: "Result"
+      });
 
-    await native.transformSelection("improve", defaultSettings);
+      await native.transformSelection(operation, defaultSettings);
 
-    expect(invoke).toHaveBeenCalledTimes(1);
-    expect(invoke).toHaveBeenCalledWith("transform_selection", {
-      operation: "improve",
-      preferences: {
-        formality: 3,
-        length: "balanced",
-        tone: "technical"
-      }
-    });
-  });
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledWith("transform_selection", {
+        operation,
+        preferences: {
+          formality: 3,
+          length: "balanced",
+          tone: "technical"
+        }
+      });
+    }
+  );
 
   it("passes transformed content to strict undo revalidation", async () => {
     invoke.mockResolvedValue(undefined);
