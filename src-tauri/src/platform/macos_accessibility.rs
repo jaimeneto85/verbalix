@@ -682,6 +682,29 @@ mod tests {
             marker_cf_range(-1, 3, 4),
             Err(VerbalixError::SelectionUnavailable)
         ));
+        assert!(matches!(
+            marker_cf_range(9, 5, -4),
+            Err(VerbalixError::SelectionUnavailable)
+        ));
+        assert!(matches!(
+            marker_cf_range(5, 9, -4),
+            Err(VerbalixError::SelectionUnavailable)
+        ));
+    }
+
+    #[test]
+    fn marker_coordinates_reject_arithmetic_overflow_and_accept_upper_boundary() {
+        assert!(matches!(
+            marker_cf_range(i64::MIN, i64::MAX, 1),
+            Err(VerbalixError::SelectionUnavailable)
+        ));
+        assert!(matches!(
+            marker_cf_range(i64::MAX - 1, i64::MAX, 1),
+            Ok(CFRange {
+                location,
+                length: 1
+            }) if location == isize::MAX - 1
+        ));
     }
 
     #[test]
@@ -690,5 +713,16 @@ mod tests {
         let range = marker_cf_range(10, 14, 4).unwrap();
 
         assert_eq!(text.encode_utf16().count(), range.length as usize);
+    }
+
+    #[test]
+    fn marker_range_counts_combining_sequences_as_utf16_code_units() {
+        let text = "e\u{301}👩🏽‍💻";
+        let utf16_length = i64::try_from(text.encode_utf16().count()).unwrap();
+        let range = marker_cf_range(21, 21 + utf16_length, utf16_length).unwrap();
+
+        assert_eq!(range.location, 21);
+        assert_eq!(range.length, utf16_length as isize);
+        assert_ne!(text.chars().count(), text.encode_utf16().count());
     }
 }

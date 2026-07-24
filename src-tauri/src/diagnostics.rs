@@ -222,6 +222,34 @@ mod tests {
     }
 
     #[test]
+    fn marker_geometry_and_read_only_state_are_reported_without_content() {
+        let snapshot = SelectionSnapshot::new(
+            42,
+            "pid:42".to_owned(),
+            "private marker content".to_owned(),
+            TextRange {
+                location: 3,
+                length: 8,
+            },
+            Rect {
+                x: -1200.0,
+                y: 20.0,
+                width: 80.0,
+                height: 18.0,
+            },
+            false,
+        )
+        .with_geometry_source(crate::domain::GeometrySource::TextMarkerRange);
+
+        let metadata = snapshot_metadata(&snapshot);
+
+        assert!(metadata.contains("geometry_source=text_marker_range"));
+        assert!(metadata.contains("writable=false"));
+        assert!(!metadata.contains("private marker content"));
+        assert!(!metadata.contains("pid:42"));
+    }
+
+    #[test]
     fn permission_failure_uses_a_sanitized_stable_code() {
         assert_eq!(
             error_code(&VerbalixError::PermissionDenied),
@@ -261,6 +289,16 @@ mod tests {
         assert!(should_emit_ax_transition(
             &mut last,
             key,
+            AxCategory::NoValue
+        ));
+        assert!(should_emit_ax_transition(
+            &mut last,
+            (AxStage::SelectedText, ExtractionOrigin::TextMarker),
+            AxCategory::NoValue
+        ));
+        assert!(!should_emit_ax_transition(
+            &mut last,
+            (AxStage::SelectedText, ExtractionOrigin::TextMarker),
             AxCategory::NoValue
         ));
     }

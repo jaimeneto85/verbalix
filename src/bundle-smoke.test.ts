@@ -56,6 +56,36 @@ describe("macOS bundle smoke contract", () => {
     expect(accessibility).toContain("with_geometry_source");
   });
 
+  it("keeps text-marker capture read-only on public AX APIs with owned values", () => {
+    const accessibility = readFileSync(
+      "src-tauri/src/platform/macos_accessibility.rs",
+      "utf8"
+    );
+    const restore = readFileSync(
+      "src-tauri/src/platform/macos_restore.rs",
+      "utf8"
+    );
+
+    expect(accessibility).toContain("AXUIElementCreateSystemWide");
+    expect(accessibility).toContain('"AXFocusedUIElement"');
+    expect(accessibility).toContain("AXTextMarkerRangeGetTypeID");
+    expect(accessibility).toContain('"AXStringForTextMarkerRange"');
+    expect(accessibility).toContain('"AXBoundsForTextMarkerRange"');
+    expect(accessibility).toContain("AXTextMarkerRangeCopyStartMarker");
+    expect(accessibility).toContain("AXTextMarkerRangeCopyEndMarker");
+    expect(accessibility).toContain('"AXIndexForTextMarker"');
+    expect(accessibility).toContain('"AXLengthForTextMarkerRange"');
+    expect(accessibility).toMatch(
+      /geometry_source:\s*GeometrySource::TextMarkerRange,\s*writable:\s*false/
+    );
+    expect(accessibility).toContain("impl Drop for OwnedAxElement");
+    expect(accessibility).toContain("impl Drop for OwnedCfValue");
+    expect(accessibility).not.toContain("AXFocusedApplication");
+    expect(accessibility).not.toContain("copy_selection_preserving_clipboard");
+    expect(restore).toContain("if !expected.writable");
+    expect(restore).toContain('role == "AXSecureTextField"');
+  });
+
   it("preserves the visible Regular lifecycle and close-reopen paths", () => {
     const runtime = readFileSync("src-tauri/src/lib.rs", "utf8");
 

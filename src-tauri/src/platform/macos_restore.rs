@@ -174,6 +174,23 @@ mod tests {
     }
 
     #[test]
+    fn restore_rejects_missing_invalid_and_unidentified_targets() {
+        let expected = snapshot(true);
+
+        for (pid_available, pid, role) in [
+            (false, 42, "AXTextArea"),
+            (true, 0, "AXTextArea"),
+            (true, -1, "AXTextArea"),
+            (true, 42, ""),
+        ] {
+            assert!(matches!(
+                validate_restore_target(&expected, pid_available, pid, 7, role, true),
+                Err(VerbalixError::StaleSelection)
+            ));
+        }
+    }
+
+    #[test]
     fn restore_accepts_the_expected_classic_target() {
         assert!(validate_restore_target(&snapshot(true), true, 42, 7, "AXTextArea", true).is_ok());
     }

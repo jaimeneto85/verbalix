@@ -173,4 +173,28 @@ mod tests {
         moved.pid = 99;
         assert!(!first.same_target(&moved));
     }
+
+    #[test]
+    fn target_identity_includes_bundle_and_text_but_not_visual_metadata() {
+        let first = snapshot(
+            "same text",
+            TextRange {
+                location: 4,
+                length: 9,
+            },
+        );
+        let mut changed = first.clone();
+        changed.bundle_id = "com.other.editor".to_owned();
+        assert!(!first.same_target(&changed));
+        changed.bundle_id = first.bundle_id.clone();
+        changed.text = "different".to_owned();
+        assert!(!first.same_target(&changed));
+
+        changed.text = first.text.clone();
+        changed.id = Uuid::new_v4();
+        changed.bounds.x = -1440.0;
+        changed.geometry_source = Some(GeometrySource::TextMarkerRange);
+        changed.writable = false;
+        assert!(first.same_target(&changed));
+    }
 }
