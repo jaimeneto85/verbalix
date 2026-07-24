@@ -34,6 +34,7 @@
 - Reload não pode apenas girar a geração mantendo a URL antiga: no segundo `PageLoadEvent::Started`, a geração é invalidada e a WebView destruída; a próxima solicitação deve recriar janela, UUID e URL. Testes combinam lifecycle puro e contrato estático de destroy/diagnósticos/fallback.
 - Criação de overlay deve ser transacional: `begin_document → build → configure`. Falha de build invalida sem executar rollback de recurso inexistente; falha de configure invalida antes de tentar `destroy → hide`, e uma criação posterior recebe geração nova.
 - Invalidação deve ser compare-and-invalidate: callbacks e rollbacks carregam a geração esperada e só removem `current/ready` quando ela ainda coincide. Um rollback stale de G1 nunca pode apagar G2 já pronta.
+- Uma lifetime guard reutilizável precisa de `PublicationPermit` independente por comando: clones do mesmo permit compartilham um único claim, enquanto permits distintos da mesma ação podem publicar feedbacks sequenciais. Os testes de Preview/Undo/Toolbar seguidos de erro devem afirmar emissão e visibilidade, não apenas ordem dos comandos.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -54,7 +55,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 141 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX e a matriz de fallback geométrico.
+- A suíte Rust possui 145 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, permits visuais reutilizáveis por ação, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX e a matriz de fallback geométrico.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
@@ -63,4 +64,5 @@
 - Testes pré-deploy da Edge mantêm Auth, scheduler e OpenAI totalmente injetados: cobrem usuário real/anon, timeout que vence provider não cooperativo, respostas por operação e limites exatos sem rede ou secrets reais.
 - O 504 `PROVIDER_TIMEOUT` da Edge ainda não prova `ProviderTimeout` no Rust: `RemoteTransformer` converte non-2xx genérico em `ProviderRejected`, enquanto somente timeout de transporte reqwest vira `ProviderTimeout`. Não alegar tipagem ponta a ponta sem teste/correção específica.
 - Contratos estáticos do overlay precisam acompanhar a fronteira entre `overlay_dispatcher.rs`, `overlay_execution.rs` e `overlay_publication.rs`; ler apenas o dispatcher gera falso negativo quando a execução é extraída sem mudança de comportamento.
+- Contratos estáticos devem proteger `PublicationPermit::try_claim` e sua criação antes do dispatch; nomes removidos como `try_claim_publication` transformam o teste em trava da implementação antiga.
 - O hard gate Trivy pode ser reutilizado quando executado contemporaneamente na mesma worktree: scan `vuln,misconfig` HIGH/CRITICAL com `--ignore-unfixed --exit-code 1` passou para `package-lock`, `Cargo.lock` e configurações.
