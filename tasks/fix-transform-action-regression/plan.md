@@ -47,6 +47,10 @@
 - [ ] RF04: Em seleção somente leitura, o resultado é exibido como nota, sem tentativa de escrita.
 - [ ] RF05: Falhas de backend, autenticação, seleção stale ou escrita AX geram estado/erro acionável e não desaparecem silenciosamente.
 - [ ] RF06: A transformação usa o snapshot capturado antes do clique e revalida sua identidade antes da escrita.
+- [ ] RF07: O `snapshot.id` da ação é fixado antes do primeiro `await` e permanece associado ao `request_id` até o resultado.
+- [ ] RF08: Com confirmação desligada, o resultado substitui diretamente; com confirmação ligada, zero writes ocorrem antes de Aplicar.
+- [ ] RF09: Um erro de seleção/AX não pode ser apresentado como indisponibilidade do provider.
+- [ ] RF10: Falha do feedback de undo depois de uma escrita bem-sucedida não pode reclassificar a mutação como inexistente.
 
 ### Requisitos não funcionais
 
@@ -63,6 +67,9 @@
 - [ ] CA04: Testes AX provam escrita no handle original com identidade/range atuais e zero escrita após divergência.
 - [ ] CA05: Computer Use em seleção editável comprova Traduzir e Aprimorar alterando textos de teste distintos.
 - [ ] CA06: Diagnósticos sanitizados identificam estágios sem registrar conteúdo ou credenciais.
+- [ ] CA07: Uma recaptura de outro alvo com o mesmo texto nunca herda a ação iniciada.
+- [ ] CA08: Falha transitória de captura causada pelo overlay não apaga uma ação em processamento; uma mudança real do alvo continua impedindo a escrita.
+- [ ] CA09: O smoke registra o valor de `confirm_before_replace`; no modo preview, Aplicar é parte obrigatória do fluxo.
 
 ### Edge cases
 
@@ -73,6 +80,9 @@
 - EC05: Seleção, foco, range ou conteúdo muda durante a transformação.
 - EC06: Unicode e ranges UTF-16.
 - EC07: Elemento editável sem setter AX suportado.
+- EC08: Outro campo contém exatamente o mesmo texto selecionado.
+- EC09: Escrita AX funciona, mas a publicação de undo falha.
+- EC10: Clique ocorre antes de `loadSettings()` concluir ou dois cliques chegam no mesmo frame.
 
 ## 2. DESIGN
 
@@ -82,18 +92,25 @@
 - Manter a UI como entrypoint explícito e o comando Tauri como boundary de validação/readiness.
 - Manter o `SelectionCoordinator` como dono de latest-wins, revalidação e decisão `replace` versus `note`.
 - Manter o adapter Accessibility como único responsável pela escrita real e pela revalidação do mesmo handle.
+- Tornar o comando nativo a autoridade de readiness, reduzindo a janela criada pela pré-checagem frontend duplicada.
+- Fixar `snapshot.id + request_id` antes de refresh de sessão/provider e iniciar o estado Processing antes do primeiro `await`.
+- Tratar falha de captura enquanto Processing como sinal transitório somente para retenção de estado; o setter AX ainda deve recapturar/resolver e revalidar o alvo antes de qualquer escrita.
 
 ### Fluxo de dados esperado
 
-`click(operation) → native.transformSelection(operation, settings) → transform_selection → session/readiness → coordinator.transform(snapshot, operation) → provider → recapture/revalidate → replace(editável) | note(read-only) → feedback`
+`click(operation) → native.transformSelection(operation, settings) → transform_selection → pin(snapshot.id, request_id) → session/readiness → provider → recapture/resolve/revalidate → replace(editável) | note(read-only) → feedback`
 
 ### Contratos e invariantes
 
 - Cada ação explícita gera no máximo uma request ativa.
-- O snapshot/request ID enviado ao provider deve ser o mesmo validado no retorno.
+- O snapshot ID fixado e o request ID enviado ao provider devem ser os mesmos validados no retorno.
 - `replace` só ocorre quando `writable=true`, identidade forte coincide, texto/range atuais coincidem e setter AX é suportado.
 - Falha em qualquer invariável é terminal e observável, nunca convertida em “sucesso”.
 - Não ocultar o toolbar de forma que o clique destrua o snapshot antes do comando assumir a operação.
+- Texto igual não equivale a alvo igual; a ação exige ID, identidade, range e conteúdo compatíveis.
+- O alvo AX não pode ser escolhido apenas pelo foco corrente depois da latência remota; a implementação deve reter uma referência com lifecycle seguro ou resolver o alvo original por PID/identidade forte antes da escrita.
+- Depois de uma escrita confirmada, o estado lógico permanece Applied mesmo se o feedback de undo falhar; a falha visual é diagnosticada separadamente.
+- Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
 
@@ -101,31 +118,59 @@
 - `commands::transform_selection`.
 - `SelectionCoordinator` e fakes existentes.
 - Matriz AX de identidade, replace/restore e diagnósticos tipados.
+- `TransformOperation`, `request_id`, `NoteResultState`, `route_refresh_failure` e `error_code` existentes.
 
 ## 3. TASKS
 
 ### Fase 1 — Reprodução e causa
 
 - [ ] T1.1 `[MEDIUM]` Reproduzir ambos os botões e registrar o primeiro estágio que falha.
-- [ ] T1.2 `[LOW]` Inspecionar payload IPC, readiness/session e lifecycle do snapshot.
-- [ ] T1.3 `[MEDIUM]` Inspecionar revalidação e setter AX no mesmo handle.
+- [ ] T1.2 `[MEDIUM]` Inspecionar payload IPC, readiness duplicada, settings, sessão e lifecycle do snapshot.
+- [ ] T1.3 `[MEDIUM]` Inspecionar observer/mouse dismiss durante `ToolbarVisible` e `Processing`.
+- [ ] T1.4 `[MEDIUM]` Inspecionar como o alvo AX original é retido/resolvido e como o setter é classificado.
 
 ### Fase 2 — Implementação
 
-- [ ] T2.1 `[MEDIUM]` Corrigir a causa comum sem enfraquecer identidade/staleness.
-- [ ] T2.2 `[LOW]` Garantir feedback acionável para falhas reais.
-- [ ] T2.3 `[LOW]` Preservar note read-only e overlay lifecycle.
+- [ ] T2.1 `[MEDIUM]` Fixar snapshot/request antes de awaits e tornar Processing resistente apenas a falhas transitórias do overlay.
+- [ ] T2.2 `[MEDIUM]` Corrigir a resolução/revalidação do alvo AX original sem afrouxar identidade/staleness.
+- [ ] T2.3 `[MEDIUM]` Implementar roteamento tipado e feedback acionável para falhas reais.
+- [ ] T2.4 `[LOW]` Preservar note read-only, preview, undo e overlay lifecycle.
+- [ ] T2.5 `[LOW]` Garantir consistência de estado quando o write funciona e o feedback falha.
 
 ### Fase 3 — Testes
 
 - [ ] T3.1 `[LOW]` Cobrir os dois botões e payloads no frontend.
-- [ ] T3.2 `[MEDIUM]` Cobrir translate/improve e replace/note no coordinator.
+- [ ] T3.2 `[MEDIUM]` Cobrir translate/improve, replace/note/preview e erros tipados no boundary do comando/coordinator.
 - [ ] T3.3 `[MEDIUM]` Cobrir revalidação e escrita AX, incluindo Unicode/stale/unsupported.
-- [ ] T3.4 `[LOW]` Executar gates automatizados e limite de linhas.
+- [ ] T3.4 `[MEDIUM]` Cobrir polling/observer durante Processing, outro alvo com texto idêntico, duplo clique e falha pós-write.
+- [ ] T3.5 `[LOW]` Executar gates automatizados e limite de linhas.
 
 ### Fase 4 — QA real
 
-- [ ] T4.1 `[MEDIUM]` Validar Traduzir em texto editável via Computer Use.
-- [ ] T4.2 `[MEDIUM]` Validar Aprimorar em texto editável via Computer Use.
-- [ ] T4.3 `[LOW]` Verificar logs sanitizados, ausência de regressão visual e verdict formal.
+- [ ] T4.1 `[MEDIUM]` Validar Traduzir no TextEdit e Slack com confirmação desligada.
+- [ ] T4.2 `[MEDIUM]` Validar Aprimorar no TextEdit e Slack com confirmação desligada.
+- [ ] T4.3 `[MEDIUM]` Validar preview + Aplicar com confirmação ligada e zero write antes de Aplicar.
+- [ ] T4.4 `[LOW]` Verificar logs sanitizados, ausência de regressão visual e verdict formal.
 
+## Análise Dual
+
+### 🔴 Riscos incorporados
+
+- A ação não estava vinculada ao snapshot original através do refresh assíncrono; ID e request agora são invariantes explícitas.
+- `replace` reencontrava apenas o elemento focado depois da chamada remota; o plano exige retenção ou resolução segura do alvo original.
+- Polling/observer podiam apagar o estado entre clique e resultado; os testes agora distinguem falha transitória do overlay de mudança real.
+- O modo `confirm_before_replace` estava ausente dos critérios e agora tem dois fluxos objetivos.
+- Erros stale/AX eram mascarados como provider e pelo `catch` frontend; o roteamento tipado passou a requisito.
+- Escrita bem-sucedida seguida de falha de undo criava estado parcial; a consistência pós-write passou a invariável.
+
+### 🟢 Oportunidades incorporadas
+
+- Reuso de `TransformOperation`, `request_id`, state machine, ports/fakes, `NoteResultState` e diagnósticos privacy-safe.
+- Testes paramétricos de Translate/Improve e extensão dos harnesses existentes, sem criar arquitetura paralela.
+- Command nativo como authority de readiness, reduzindo round-trip e janela de corrida.
+- Timeline sanitizada por `request_id + snapshot_id`, útil para diagnosticar cada estágio sem conteúdo do usuário.
+- TextEdit como baseline AX e Slack como editor complexo na matriz real.
+
+### Síntese
+
+A correção será tratada como uma transação ligada a `snapshot.id + request_id`, e não como um simples clique seguido de chamada remota. O ganho rápido é remover o mascaramento de erro e fixar a ação antes dos awaits; o núcleo de segurança é revalidar o alvo AX original sem relaxar identidade. Nenhum sleep ou atraso artificial será aceito como solução.
