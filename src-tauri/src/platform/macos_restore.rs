@@ -60,7 +60,8 @@ fn expected_strong_identity(
         .then_some(expected.element_identity.as_ref())
         .flatten()
         .ok_or(VerbalixError::StaleSelection)?;
-    strong_identifier(identity)
+    identity
+        .strong_identifier()
         .is_some()
         .then_some(identity)
         .ok_or(VerbalixError::StaleSelection)
@@ -70,19 +71,12 @@ fn same_strong_identity(
     expected: &SelectionElementIdentity,
     current: &SelectionElementIdentity,
 ) -> bool {
-    match (strong_identifier(expected), strong_identifier(current)) {
+    match (expected.strong_identifier(), current.strong_identifier()) {
         (Some(expected_identifier), Some(current_identifier)) => {
             expected_identifier == current_identifier && expected == current
         }
         _ => false,
     }
-}
-
-fn strong_identifier(identity: &SelectionElementIdentity) -> Option<&str> {
-    identity
-        .identifier
-        .as_deref()
-        .filter(|identifier| !identifier.trim().is_empty())
 }
 
 fn validate_restore_selection(

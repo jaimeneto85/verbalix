@@ -47,6 +47,14 @@ pub struct SelectionElementIdentity {
     pub frame: Rect,
 }
 
+impl SelectionElementIdentity {
+    pub fn strong_identifier(&self) -> Option<&str> {
+        self.identifier
+            .as_deref()
+            .filter(|identifier| !identifier.trim().is_empty())
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SelectionSnapshot {

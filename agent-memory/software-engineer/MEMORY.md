@@ -24,7 +24,7 @@
 - No macOS 26, uma seleção física pode expor `AXSelectedTextMarkerRange` mesmo quando `AXSelectedText` retorna `no_value`/`attribute_unsupported` e `AXSelectedTextRange` é um CFRange vazio. A rota segura usa o marker opaco com `AXStringForTextMarkerRange`, `AXBoundsForTextMarkerRange`, start/end markers e índices/length parametrizados; nunca lê `AXValue` do documento inteiro.
 - Fallback de text marker deve preservar `AxFailure` completo e autorizar somente combinações explícitas de estágio/categoria; falhas estruturais, de geometria ou de tipo encerram a captura.
 - `EmptyRange` é um estado temporal terminal da rota clássica, não evidência de capacidade marker; nunca deve autorizar fallback entre leituras.
-- Restore clássico precisa exigir `AXIdentifier` não vazio e revalidar identidade completa, PID, role, writability, texto atual, location e length UTF-16 no mesmo handle antes de qualquer escrita.
+- Replace e restore clássicos precisam exigir `AXIdentifier` não vazio antes do primeiro lookup AX; restore também revalida identidade completa, PID, role, writability, texto atual, location e length UTF-16 no mesmo handle antes de qualquer escrita.
 - Testes assíncronos Rust exigem `macros` e um runtime habilitados no Tokio.
 - Erros de setup Tauri precisam ser convertidos para `Box<dyn std::error::Error>`.
 - Bundles ad-hoc podem manter uma entrada TCC visualmente habilitada que não corresponde ao requisito designado do build atual; nunca resetar TCC automaticamente.

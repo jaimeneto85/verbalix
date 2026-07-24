@@ -244,6 +244,7 @@ Manter o resolver system-wide e implementar o adapter mínimo de text marker cau
   - [x] T15.6 Adicionar testes compostos das cinco correções e repetir gates; Trivy externo na mesma worktree passou sem HIGH/CRITICAL ou misconfigurações.
   - [x] T15.7 Fazer restore falhar fechado sem identidade forte não opcional do elemento; cobrir colisão intra-PID com `identifier=None`.
   - [x] T15.8 Remover `EmptyRange` das categorias elegíveis para marker e testar que estados temporais não são misturados.
+  - [x] T15.9 Exigir `AXIdentifier` forte também no gate pré-AX de replace e cobrir identidade ausente ou vazia.
 - [ ] T16 [LOW] Atualizar memória e gerar documento de entrega.
 - [ ] T17 [LOW] Merge autorizado preservando todo dirty state user-owned.
 - [ ] T18 [MEDIUM] Gerar e validar build release, recursos, codesign e launch smoke.

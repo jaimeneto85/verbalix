@@ -72,7 +72,12 @@ impl SelectionPort for MacAccessibility {
 }
 
 fn replacement_eligible(expected: &SelectionSnapshot) -> bool {
-    expected.writable && expected.element_identity.is_some()
+    expected.writable
+        && expected
+            .element_identity
+            .as_ref()
+            .and_then(|identity| identity.strong_identifier())
+            .is_some()
 }
 
 #[cfg(test)]
@@ -116,8 +121,15 @@ mod tests {
 
     #[test]
     fn replacement_fails_before_ax_for_read_only_or_unidentified_snapshots() {
+        let mut weak_identity = snapshot(true, true);
+        weak_identity.element_identity.as_mut().unwrap().identifier = None;
+        let mut empty_identity = snapshot(true, true);
+        empty_identity.element_identity.as_mut().unwrap().identifier = Some("  ".to_owned());
+
         assert!(!replacement_eligible(&snapshot(false, true)));
         assert!(!replacement_eligible(&snapshot(true, false)));
+        assert!(!replacement_eligible(&weak_identity));
+        assert!(!replacement_eligible(&empty_identity));
         assert!(replacement_eligible(&snapshot(true, true)));
     }
 }
