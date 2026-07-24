@@ -1,10 +1,14 @@
-import type {
+import {
   TransformRequest,
-  TransformResponse
+  TransformResponse,
+  validateResponse,
 } from "./contract.ts";
 
 export interface AiProvider {
-  transform(request: TransformRequest, signal: AbortSignal): Promise<TransformResponse>;
+  transform(
+    request: TransformRequest,
+    signal: AbortSignal,
+  ): Promise<TransformResponse>;
 }
 
 type OpenAiPayload = {
@@ -16,74 +20,89 @@ type OpenAiPayload = {
 export class OpenAiProvider implements AiProvider {
   constructor(
     private readonly apiKey: string,
-    private readonly model: string
+    private readonly model: string,
+    private readonly fetcher: typeof fetch = fetch,
   ) {}
 
   async transform(
     request: TransformRequest,
-    signal: AbortSignal
+    signal: AbortSignal,
   ): Promise<TransformResponse> {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json"
-      },
-      signal,
-      body: JSON.stringify({
-        model: this.model,
-        input: [
-          {
-            role: "system",
-            content: [{ type: "input_text", text: systemPrompt(request) }]
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: `<untrusted_text>\n${request.text}\n</untrusted_text>`
-              }
-            ]
-          }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "verbalix_transform",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                sourceLanguage: { type: "string" },
-                targetLanguage: { type: ["string", "null"] },
-                result: { type: "string" }
+    let response: Response;
+    try {
+      response = await this.fetcher("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        signal,
+        body: JSON.stringify({
+          model: this.model,
+          max_output_tokens: 8_000,
+          input: [
+            {
+              role: "system",
+              content: [{ type: "input_text", text: systemPrompt(request) }],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `<untrusted_text>\n${request.text}\n</untrusted_text>`,
+                },
+              ],
+            },
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "verbalix_transform",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  sourceLanguage: { type: "string" },
+                  targetLanguage: { type: ["string", "null"] },
+                  result: { type: "string" },
+                },
+                required: ["sourceLanguage", "targetLanguage", "result"],
+                additionalProperties: false,
               },
-              required: ["sourceLanguage", "targetLanguage", "result"],
-              additionalProperties: false
-            }
-          }
-        }
-      })
-    });
+            },
+          },
+        }),
+      });
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") {
+        throw reason;
+      }
+      throw new Error("INVALID_RESPONSE");
+    }
 
     if (response.status === 429) throw new Error("RATE_LIMITED");
     if (!response.ok) throw new Error("INVALID_RESPONSE");
-    const payload = (await response.json()) as OpenAiPayload;
+    let payload: OpenAiPayload;
+    try {
+      payload = await response.json() as OpenAiPayload;
+    } catch {
+      throw new Error("INVALID_RESPONSE");
+    }
     const text = payload.output
       ?.flatMap((output) => output.content ?? [])
       .find((content) => content.type === "output_text")?.text;
     if (!text) throw new Error("INVALID_RESPONSE");
-    const parsed = JSON.parse(text) as Omit<TransformResponse, "requestId">;
-    if (
-      typeof parsed.sourceLanguage !== "string" ||
-      typeof parsed.result !== "string" ||
-      parsed.result.trim().length === 0 ||
-      (parsed.targetLanguage !== null && typeof parsed.targetLanguage !== "string")
-    ) {
+    let parsed: Omit<TransformResponse, "requestId">;
+    try {
+      parsed = JSON.parse(text) as Omit<TransformResponse, "requestId">;
+    } catch {
       throw new Error("INVALID_RESPONSE");
     }
-    return { requestId: request.requestId, ...parsed };
+    return validateResponse(request, {
+      requestId: request.requestId,
+      ...parsed,
+    });
   }
 }
 

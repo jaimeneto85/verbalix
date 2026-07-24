@@ -33,6 +33,10 @@
 - Depois de trocar a classe nativa de uma WebView para `NSPanel`, não chamar setters de janela do wrapper Tauri que dependam da classe/ivars originais; o painel não ativante deve ser configurado integralmente no boundary AppKit.
 - Durante o MVP diagnosticável, `ActivationPolicy::Regular`, fechamento da janela principal como hide e reabertura centralizada por Dock/tray mantêm o processo observável.
 - Configuração pública do backend usa pares completos na ordem processo `VITE_*`, processo legado `VERBALIX_*`, embedded `VITE_*`, embedded legado; o build gera constantes em `OUT_DIR` para não transportar valores por stdout.
+- Edge Functions mantêm `Deno.serve` apenas no entrypoint; handler, autenticação, provider factory, secrets e scheduler são injetáveis para testes sem rede ou efeitos colaterais.
+- A defesa de autenticação da Edge confirma o bearer no endpoint `/auth/v1/user` e rejeita a anon key e papéis anônimos mesmo com `verify_jwt=true`.
+- Limites da transformação são aplicados em três camadas: body HTTP em streaming antes do parse, caracteres Unicode no contrato e tokens/caracteres na saída do provider.
+- Timeout total usa `Promise.race` além de `AbortController`, pois um adapter defeituoso pode ignorar o sinal de cancelamento.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.
