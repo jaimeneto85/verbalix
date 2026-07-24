@@ -1,11 +1,13 @@
 mod ai_readiness;
 mod auth_refresh;
 mod coordinator;
+mod coordinator_commit;
 mod coordinator_transform;
 mod ports;
 mod runtime_pause;
 mod settings_file;
 mod supabase;
+mod transform_lease;
 
 pub use ai_readiness::{
     classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
@@ -20,3 +22,4 @@ pub use supabase::{
     HistoryItem, KeychainSessionRepository, RemoteHistoryRepository, RemoteTransformer,
     SessionRepository, StoredSession,
 };
+pub(crate) use transform_lease::{PublicationGuard, TransformLease};

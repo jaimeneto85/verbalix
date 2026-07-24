@@ -28,6 +28,7 @@ impl SelectionCoordinator {
             }
             _ => return Err(VerbalixError::StaleSelection),
         };
+        self.install_active_transform(snapshot.clone(), request_id)?;
         *state = SelectionState::Processing {
             snapshot: snapshot.clone(),
             request_id,
@@ -68,39 +69,31 @@ impl SelectionCoordinator {
         if response.request_id != request.request_id || response.result.trim().is_empty() {
             return Err(VerbalixError::InvalidResponse);
         }
-        let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
-        let active = match &*state {
-            SelectionState::Processing {
-                snapshot: current,
-                request_id: active_request,
-            } if *active_request == request.request_id && current.same_target(snapshot) => {
-                current.clone()
-            }
-            _ => return Err(VerbalixError::StaleSelection),
-        };
+        let (active, lease) = self.active_processing(snapshot, request.request_id)?;
         if !active.writable {
-            self.overlay.show_note(active.bounds, &response.result)?;
-            *state = SelectionState::ResultVisible(active);
+            self.overlay
+                .show_note_guarded(active.bounds, &response.result, lease.clone())?;
+            self.commit_result_visible(&active, request.request_id, &lease)?;
             return Ok(());
         }
         if preview_writable {
-            self.overlay
-                .show_preview(active.bounds, request.request_id, &response.result)?;
-            *state = SelectionState::PreviewVisible {
-                snapshot: active,
-                request_id: request.request_id,
-                result: response.result.clone(),
-            };
+            self.overlay.show_preview_guarded(
+                active.bounds,
+                request.request_id,
+                &response.result,
+                lease.clone(),
+            )?;
+            self.commit_preview_visible(&active, request.request_id, &response.result, &lease)?;
             return Ok(());
         }
-        self.selection.replace(&active, &response.result)?;
-        *state = SelectionState::Applied {
-            snapshot: active.clone(),
-            transformed_text: response.result.clone(),
-        };
+        self.selection
+            .replace_guarded(&active, &response.result, &lease)?;
+        if !self.commit_applied(&active, request.request_id, &response.result, &lease)? {
+            return Ok(());
+        }
         if self
             .overlay
-            .show_undo(active.bounds, &response.result)
+            .show_undo_guarded(active.bounds, &response.result, lease)
             .is_err()
         {
             diagnostics::coordinator("undo_feedback_failed_after_write", Some(&active));
@@ -109,21 +102,38 @@ impl SelectionCoordinator {
     }
 
     pub fn apply_preview(&self, request_id: Uuid) -> Result<String, VerbalixError> {
-        let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
-        let (snapshot, result) = match &*state {
-            SelectionState::PreviewVisible {
-                snapshot,
-                request_id: active,
-                result,
-            } if *active == request_id => (snapshot.clone(), result.clone()),
-            _ => return Err(VerbalixError::StaleSelection),
+        let (snapshot, result, lease) = {
+            let state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
+            let (snapshot, result) = match &*state {
+                SelectionState::PreviewVisible {
+                    snapshot,
+                    request_id: active,
+                    result,
+                } if *active == request_id => (snapshot.clone(), result.clone()),
+                _ => return Err(VerbalixError::StaleSelection),
+            };
+            let active = self
+                .active_transform
+                .lock()
+                .map_err(|_| VerbalixError::LocalFailure)?;
+            let lease = active
+                .as_ref()
+                .filter(|active| {
+                    active.request_id == request_id && active.snapshot.same_target(&snapshot)
+                })
+                .map(|active| active.lease.clone())
+                .ok_or(VerbalixError::StaleSelection)?;
+            (snapshot, result, lease)
         };
-        self.selection.replace(&snapshot, &result)?;
-        *state = SelectionState::Applied {
-            snapshot: snapshot.clone(),
-            transformed_text: result.clone(),
-        };
-        if self.overlay.show_undo(snapshot.bounds, &result).is_err() {
+        self.selection.replace_guarded(&snapshot, &result, &lease)?;
+        if !self.commit_applied(&snapshot, request_id, &result, &lease)? {
+            return Ok(result);
+        }
+        if self
+            .overlay
+            .show_undo_guarded(snapshot.bounds, &result, lease)
+            .is_err()
+        {
             diagnostics::coordinator("undo_feedback_failed_after_write", Some(&snapshot));
         }
         Ok(result)

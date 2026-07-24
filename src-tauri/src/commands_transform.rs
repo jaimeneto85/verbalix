@@ -1,18 +1,23 @@
 use crate::{
-    application::{AiReadiness, AiReadinessStatus, SessionRepository},
+    application::{AiReadinessStatus, PublicationGuard, SessionRepository},
     commands::{
         current_ai_readiness, route_refresh_failure, show_provider_unavailable, show_readiness,
     },
     domain::{
-        SelectionSnapshot, SettingsRepository, TransformOperation, TransformPreferences,
-        TransformRequest, TransformResult, VerbalixError,
+        SettingsRepository, TransformOperation, TransformPreferences, TransformRequest,
+        TransformResult, VerbalixError,
     },
     AppRuntime,
 };
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
-fn show_transform_failure(runtime: &AppRuntime, error: &VerbalixError) {
+fn show_transform_failure(
+    runtime: &AppRuntime,
+    bounds: crate::domain::Rect,
+    error: &VerbalixError,
+    guard: PublicationGuard,
+) {
     let message = match error {
         VerbalixError::PermissionDenied => "Permita o Acesso à Acessibilidade para continuar.",
         VerbalixError::SelectionUnavailable | VerbalixError::StaleSelection => {
@@ -26,25 +31,13 @@ fn show_transform_failure(runtime: &AppRuntime, error: &VerbalixError) {
         | VerbalixError::ProviderTimeout
         | VerbalixError::ProviderRejected
         | VerbalixError::InvalidResponse => {
-            show_provider_unavailable(runtime);
-            return;
+            "O serviço de IA está indisponível. Tente novamente ou abra o Verbalix."
         }
         #[cfg(not(target_os = "macos"))]
         VerbalixError::UnsupportedPlatform => "Esta operação não está disponível nesta plataforma.",
         VerbalixError::LocalFailure => "Não foi possível aplicar o resultado. Tente novamente.",
     };
-    if let Some(snapshot) = runtime.coordinator.current_snapshot() {
-        let _ = runtime.overlay.show_error(snapshot.bounds, message);
-    }
-}
-
-fn request_owns_feedback(runtime: &AppRuntime, snapshot_id: uuid::Uuid) -> bool {
-    let current = runtime.coordinator.current_snapshot();
-    snapshot_owns_feedback(current.as_ref(), snapshot_id)
-}
-
-fn snapshot_owns_feedback(current: Option<&SelectionSnapshot>, snapshot_id: uuid::Uuid) -> bool {
-    current.is_some_and(|snapshot| snapshot.id == snapshot_id)
+    let _ = runtime.overlay.show_error_guarded(bounds, message, guard);
 }
 
 #[tauri::command]
@@ -81,8 +74,11 @@ pub(crate) async fn transform_selection(
     let result = transform_pinned(&app, &runtime, &snapshot, &request).await;
     if let Err(error) = &result {
         let _ = runtime.coordinator.abort_transform(request.request_id);
-        if request_owns_feedback(&runtime, snapshot.id) {
-            show_transform_failure(&runtime, error);
+        if let Ok(Some(guard)) = runtime
+            .coordinator
+            .publication_guard(snapshot.id, request.request_id)
+        {
+            show_transform_failure(&runtime, snapshot.bounds, error, guard);
         }
     }
     result
@@ -101,19 +97,19 @@ async fn transform_pinned(
     let session = match runtime.auth.refresh(&stored).await {
         Ok(session) => session,
         Err(error) => {
+            let guard = runtime
+                .coordinator
+                .publication_guard(snapshot.id, request.request_id)
+                .ok()
+                .flatten();
             route_refresh_failure(
                 &error,
                 || {
-                    if request_owns_feedback(runtime, snapshot.id) {
-                        show_readiness(runtime, &AiReadiness::login_required());
+                    if guard.as_ref().is_some_and(|guard| guard.may_publish()) {
                         crate::show_main_window(app, "login_required");
                     }
                 },
-                || {
-                    if request_owns_feedback(runtime, snapshot.id) {
-                        show_provider_unavailable(runtime);
-                    }
-                },
+                || {},
             );
             return Err(error);
         }
@@ -136,40 +132,4 @@ async fn transform_pinned(
             .await;
     }
     Ok(response)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::{Rect, TextRange};
-
-    fn snapshot() -> SelectionSnapshot {
-        SelectionSnapshot::new(
-            42,
-            "pid:42".to_owned(),
-            "selected".to_owned(),
-            TextRange {
-                location: 0,
-                length: 8,
-            },
-            Rect {
-                x: 1.0,
-                y: 2.0,
-                width: 3.0,
-                height: 4.0,
-            },
-            true,
-        )
-    }
-
-    #[test]
-    fn feedback_requires_the_original_snapshot_to_still_own_the_action() {
-        let current = snapshot();
-        assert!(snapshot_owns_feedback(Some(&current), current.id));
-        assert!(!snapshot_owns_feedback(
-            Some(&current),
-            uuid::Uuid::new_v4()
-        ));
-        assert!(!snapshot_owns_feedback(None, current.id));
-    }
 }

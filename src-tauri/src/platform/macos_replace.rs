@@ -1,12 +1,34 @@
 use super::{macos_ax, macos_selection};
-use crate::domain::{SelectionSnapshot, VerbalixError};
+use crate::{
+    application::TransformLease,
+    domain::{SelectionSnapshot, VerbalixError},
+};
 
 pub fn replace(expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
+    replace_validated(expected, text, || true)
+}
+
+pub fn replace_guarded(
+    expected: &SelectionSnapshot,
+    text: &str,
+    lease: &TransformLease,
+) -> Result<(), VerbalixError> {
+    replace_validated(expected, text, || lease.try_claim_write())
+}
+
+fn replace_validated(
+    expected: &SelectionSnapshot,
+    text: &str,
+    claim: impl FnOnce() -> bool,
+) -> Result<(), VerbalixError> {
     validate_expected(expected)?;
     let element = macos_ax::focused_element_for_pid(expected.pid)
         .map_err(|_| VerbalixError::StaleSelection)?;
     let current = macos_selection::capture(&element)?;
     validate_current(expected, &current)?;
+    if !claim() {
+        return Err(VerbalixError::StaleSelection);
+    }
     macos_ax::set_selected_text(element.as_ref(), text)
         .then_some(())
         .ok_or(VerbalixError::LocalFailure)

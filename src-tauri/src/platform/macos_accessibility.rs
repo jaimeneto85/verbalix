@@ -4,7 +4,7 @@ use super::{
     macos_selection,
 };
 use crate::{
-    application::SelectionPort,
+    application::{SelectionPort, TransformLease},
     domain::{SelectionSnapshot, VerbalixError},
 };
 use std::sync::Arc;
@@ -50,6 +50,15 @@ impl SelectionPort for MacAccessibility {
 
     fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
         super::macos_replace::replace(expected, text)
+    }
+
+    fn replace_guarded(
+        &self,
+        expected: &SelectionSnapshot,
+        text: &str,
+        lease: &TransformLease,
+    ) -> Result<(), VerbalixError> {
+        super::macos_replace::replace_guarded(expected, text, lease)
     }
 
     fn restore(

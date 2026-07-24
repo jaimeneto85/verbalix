@@ -1,6 +1,7 @@
 #[cfg(target_os = "macos")]
 use crate::platform::macos_overlay_panel;
 use crate::{
+    application::PublicationGuard,
     diagnostics,
     domain::{Rect, VerbalixError},
     platform::{
@@ -22,7 +23,7 @@ use uuid::Uuid;
 #[derive(Clone, Debug, PartialEq)]
 pub enum OverlayCommand {
     ShowToolbar(Rect),
-    ShowResult(Rect, NoteResultPayload),
+    ShowResult(Rect, NoteResultPayload, Option<PublicationGuard>),
     HideAll,
 }
 
@@ -123,7 +124,7 @@ impl OverlayCommand {
     fn label(&self) -> &'static str {
         match self {
             Self::ShowToolbar(_) => "toolbar",
-            Self::ShowResult(_, _) => "note",
+            Self::ShowResult(_, _, _) => "note",
             Self::HideAll => "all",
         }
     }
@@ -149,7 +150,11 @@ fn execute_command(
             }
             result
         }
-        OverlayCommand::ShowResult(bounds, payload) => {
+        OverlayCommand::ShowResult(bounds, payload, guard) => {
+            if guard.as_ref().is_some_and(|guard| !guard.may_publish()) {
+                diagnostics::overlay("cancelled", "note", sequence);
+                return Ok(());
+            }
             let surface = OverlaySurface::Note;
             readiness.request(surface)?;
             let result = (|| {
