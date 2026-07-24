@@ -136,6 +136,7 @@
 - [x] T2.3 `[MEDIUM]` Implementar roteamento tipado e feedback acionável para falhas reais.
 - [x] T2.4 `[LOW]` Preservar note read-only, preview, undo e overlay lifecycle.
 - [x] T2.5 `[LOW]` Garantir consistência de estado quando o write funciona e o feedback falha.
+- [x] T2.6 `[HIGH]` Cancelar logicamente a request quando uma captura bem-sucedida identifica outro alvo, preservando apenas falhas transitórias sem candidato.
 
 ### Fase 3 — Testes
 
@@ -145,6 +146,7 @@
 - [x] T3.4 `[MEDIUM]` Cobrir polling/observer durante Processing, outro alvo com texto idêntico, duplo clique e falha pós-write.
 - [x] T3.5 `[LOW]` Executar gates automatizados e limite de linhas.
 - [x] T3.6 `[MEDIUM]` Provar insert/list do histórico após Translate e Improve bem-sucedidos.
+- [ ] T3.7 `[HIGH]` Provar supersede antes/depois do provider, mesmo texto com PID/identidade diferente, same-target preservado e ausência de feedback stale.
 
 ### Fase 4 — QA real
 
@@ -160,6 +162,7 @@
 - A ação não estava vinculada ao snapshot original através do refresh assíncrono; ID e request agora são invariantes explícitas.
 - `replace` reencontrava apenas o elemento focado depois da chamada remota; o plano exige retenção ou resolução segura do alvo original.
 - Polling/observer podiam apagar o estado entre clique e resultado; os testes agora distinguem falha transitória do overlay de mudança real.
+- Ignorar todo `Candidate` durante `Processing` permitiria escrever no alvo anterior após uma captura real diferente; somente um candidato equivalente preserva o lease.
 - O modo `confirm_before_replace` estava ausente dos critérios e agora tem dois fluxos objetivos.
 - Erros stale/AX eram mascarados como provider e pelo `catch` frontend; o roteamento tipado passou a requisito.
 - Escrita bem-sucedida seguida de falha de undo criava estado parcial; a consistência pós-write passou a invariável.
