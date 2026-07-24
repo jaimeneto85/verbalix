@@ -61,7 +61,7 @@ fn worker_thread_forwards_every_window_operation_to_dispatcher() {
     worker.join().unwrap();
 
     let commands = dispatcher.commands.lock().unwrap();
-    assert!(matches!(commands[0], OverlayCommand::ShowToolbar(_)));
+    assert!(matches!(commands[0], OverlayCommand::ShowToolbar(_, _)));
     assert!(matches!(commands[1], OverlayCommand::ShowResult(_, _, _)));
     assert!(matches!(commands[2], OverlayCommand::ShowResult(_, _, _)));
     assert!(matches!(commands[3], OverlayCommand::ShowResult(_, _, _)));
