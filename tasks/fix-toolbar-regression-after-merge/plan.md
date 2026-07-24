@@ -236,11 +236,11 @@ Manter o resolver system-wide e implementar o adapter mínimo de text marker cau
 - [x] T13 [MEDIUM] Executar QA dual de código, concorrência, FFI e testes — verdict `REJECTED_CODE`.
 - [ ] T14 [MEDIUM] Build/install debug e validação real por Computer Use em TextEdit e segundo app.
 - [ ] T15 [MEDIUM] Corrigir rejeições e obter verdict `APPROVED`.
-  - [ ] T15.1 Preservar `AxFailure` no fluxo composto e permitir marker somente após categorias elegíveis da rota CFRange.
-  - [ ] T15.2 Revalidar seleção/range e identidade estável do elemento antes de restore; falhar fechado intra-PID.
-  - [ ] T15.3 Type-check `AXValue<CGRect>` antes de `AXValueGetValue` em bounds marker e clássico.
-  - [ ] T15.4 Falhar cedo quando `expected.writable=false` e remover PID/range/bounds dos diagnostics.
-  - [ ] T15.5 Refatorar `macos_focus.rs` e `macos_accessibility.rs` para arquivos com no máximo 300 linhas e responsabilidade única.
+  - [x] T15.1 Preservar `AxFailure` no fluxo composto e permitir marker somente após categorias elegíveis da rota CFRange.
+  - [x] T15.2 Revalidar seleção/range e identidade estável do elemento antes de restore; falhar fechado intra-PID.
+  - [x] T15.3 Type-check `AXValue<CGRect>` antes de `AXValueGetValue` em bounds marker e clássico.
+  - [x] T15.4 Falhar cedo quando `expected.writable=false` e remover PID/range/bounds dos diagnostics.
+  - [x] T15.5 Refatorar boundaries macOS para arquivos com no máximo 300 linhas e responsabilidade única.
   - [x] T15.6 Adicionar testes compostos das cinco correções e repetir gates; Trivy externo na mesma worktree passou sem HIGH/CRITICAL ou misconfigurações.
 - [ ] T16 [LOW] Atualizar memória e gerar documento de entrega.
 - [ ] T17 [LOW] Merge autorizado preservando todo dirty state user-owned.

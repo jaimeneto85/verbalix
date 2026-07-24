@@ -17,10 +17,13 @@
 - Resultados da nota usam evento mais state pull: o backend publica o estado antes de emitir e o frontend registra o listener antes de consultar `current_note_result`.
 - Recapturas AX equivalentes devem devolver o snapshot ativo do coordinator; retornar o UUID recém-capturado quebra `DebounceElapsed`.
 - Diagnóstico do pipeline usa `VERBALIX_DIAGNOSTICS=1` e metadados estruturados sem texto, tokens ou credenciais.
+- Boundaries macOS e seus testes ficam em módulos separados quando necessário para manter responsabilidade única e o hard gate de 300 linhas por arquivo.
 
 ## Erros Recorrentes & Soluções
 - A Accessibility API é incompleta em alguns aplicativos; ausência de atributos deve produzir degradação segura.
 - No macOS 26, uma seleção física pode expor `AXSelectedTextMarkerRange` mesmo quando `AXSelectedText` retorna `no_value`/`attribute_unsupported` e `AXSelectedTextRange` é um CFRange vazio. A rota segura usa o marker opaco com `AXStringForTextMarkerRange`, `AXBoundsForTextMarkerRange`, start/end markers e índices/length parametrizados; nunca lê `AXValue` do documento inteiro.
+- Fallback de text marker deve preservar `AxFailure` completo e autorizar somente combinações explícitas de estágio/categoria; falhas estruturais, de geometria ou de tipo encerram a captura.
+- Restore clássico precisa revalidar identidade estável do elemento, PID, role, writability, texto atual, location e length UTF-16 no mesmo handle antes de qualquer escrita.
 - Testes assíncronos Rust exigem `macros` e um runtime habilitados no Tokio.
 - Erros de setup Tauri precisam ser convertidos para `Box<dyn std::error::Error>`.
 - Bundles ad-hoc podem manter uma entrada TCC visualmente habilitada que não corresponde ao requisito designado do build atual; nunca resetar TCC automaticamente.
