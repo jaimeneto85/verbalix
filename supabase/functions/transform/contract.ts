@@ -28,6 +28,9 @@ export type ErrorCode =
   | "INVALID_RESPONSE"
   | "INTERNAL_ERROR";
 
+export const MAX_TEXT_CHARACTERS = 12_000;
+export const MAX_RESULT_CHARACTERS = 24_000;
+
 const operations = new Set(["translate", "improve"]);
 const lengths = new Set(["concise", "balanced", "detailed"]);
 const tones = new Set(["neutral", "friendly", "assertive", "technical"]);
@@ -45,12 +48,15 @@ export function parseRequest(value: unknown): TransformRequest {
   ) {
     throw new Error("INVALID_RESPONSE");
   }
-  if ([...candidate.text].length > 12_000) throw new Error("TEXT_TOO_LONG");
+  if ([...candidate.text].length > MAX_TEXT_CHARACTERS) {
+    throw new Error("TEXT_TOO_LONG");
+  }
   if (candidate.operation === "improve") {
     const preferences = candidate.preferences as Record<string, unknown> | undefined;
     if (
       !preferences ||
       typeof preferences.formality !== "number" ||
+      !Number.isInteger(preferences.formality) ||
       preferences.formality < 1 ||
       preferences.formality > 5 ||
       typeof preferences.length !== "string" ||
@@ -62,6 +68,35 @@ export function parseRequest(value: unknown): TransformRequest {
     }
   }
   return candidate as TransformRequest;
+}
+
+export function validateResponse(
+  request: TransformRequest,
+  value: unknown
+): TransformResponse {
+  if (!value || typeof value !== "object") throw new Error("INVALID_RESPONSE");
+  const candidate = value as Record<string, unknown>;
+  if (
+    candidate.requestId !== request.requestId ||
+    typeof candidate.sourceLanguage !== "string" ||
+    candidate.sourceLanguage.trim().length === 0 ||
+    typeof candidate.result !== "string" ||
+    candidate.result.trim().length === 0 ||
+    [...candidate.result].length > MAX_RESULT_CHARACTERS
+  ) {
+    throw new Error("INVALID_RESPONSE");
+  }
+  if (
+    request.operation === "translate" &&
+    (typeof candidate.targetLanguage !== "string" ||
+      candidate.targetLanguage.trim().length === 0)
+  ) {
+    throw new Error("INVALID_RESPONSE");
+  }
+  if (request.operation === "improve" && candidate.targetLanguage !== null) {
+    throw new Error("INVALID_RESPONSE");
+  }
+  return candidate as TransformResponse;
 }
 
 function isUuid(value: string) {
