@@ -6,6 +6,7 @@ mod diagnostics;
 mod domain;
 mod lifecycle;
 mod platform;
+mod runtime;
 
 use application::{
     JsonSettingsRepository, KeychainSessionRepository, PublicBackendConfig, RemoteAuthRepository,
@@ -14,25 +15,13 @@ use application::{
 use commands::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
+pub(crate) use runtime::AppRuntime;
 use std::{sync::Arc, thread, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     AppHandle, Manager, RunEvent, WindowEvent,
 };
-
-pub(crate) struct AppRuntime {
-    pub coordinator: Arc<SelectionCoordinator>,
-    pub overlay: Arc<TauriOverlay>,
-    pub selection: Arc<MacAccessibility>,
-    pub settings: Arc<JsonSettingsRepository>,
-    pub session: Arc<KeychainSessionRepository>,
-    pub clipboard: Arc<SystemClipboard>,
-    pub history: Arc<RemoteHistoryRepository>,
-    pub auth: Arc<RemoteAuthRepository>,
-    pub backend_config: PublicBackendConfig,
-    pub pause: RuntimePause,
-}
 
 fn start_selection_observer(runtime: Arc<AppRuntime>) {
     thread::spawn(move || {

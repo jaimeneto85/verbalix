@@ -161,6 +161,14 @@ describe("macOS bundle smoke contract", () => {
     expect(runtime).toContain('show_main_window(app, "dock_reopen")');
   });
 
+  it("keeps the runtime composition root within the file-size gate", () => {
+    const runtime = readFileSync("src-tauri/src/lib.rs", "utf8");
+    const state = readFileSync("src-tauri/src/runtime.rs", "utf8");
+
+    expect(runtime.split("\n").length).toBeLessThanOrEqual(301);
+    expect(state).toContain("pub(crate) struct AppRuntime");
+  });
+
   it("uses a full note for actionable errors and a single public config policy", () => {
     const dispatcher = readFileSync(
       "src-tauri/src/platform/overlay_dispatcher.rs",
