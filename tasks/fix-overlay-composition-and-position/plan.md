@@ -93,8 +93,8 @@ Fora do escopo:
 - [x] T4: implementar composição nativa transparente de `NSWindow`/WebView no macOS.
 - [x] T5: corrigir seleção de tela, conversão de coordenadas e posicionamento nativo em pontos.
 - [x] T6: executar gates automatizados e análise de segurança/regressão.
-- [ ] T7: QA dual emitir `APPROVED`, `REJECTED_CODE` ou `REJECTED_TESTS`.
-- [ ] T8: registrar evidências e atualizar memórias; deixar Computer Use, merge e release para o agente raiz.
+- [x] T7: QA dual emitir `APPROVED`, `REJECTED_CODE` ou `REJECTED_TESTS`.
+- [x] T8: registrar evidências e atualizar memórias; deixar Computer Use, merge e release para o agente raiz.
 
 ### Casos de teste obrigatórios
 
@@ -104,3 +104,28 @@ Fora do escopo:
 - Conversão: AX → Cocoa → AX preserva retângulo; janela toolbar e note usam alturas distintas.
 - Lifecycle: janela reutilizada muda entre telas sem herdar a escala/posição anterior.
 - Contrato: caminho macOS não usa APIs Tauri de posição/escala; painel continua não ativante e transparente.
+
+## 4. QA
+
+### Veredito da primeira revisão
+
+`REJECTED_CODE`
+
+- A conversão AX → Cocoa usa `NSScreen.mainScreen.frame.maxY`, mas o SDK define `mainScreen` como a tela da key window. Como o painel não ativa, essa tela pode ser a secundária do aplicativo alvo. A referência global correta precisa vir da zero screen, `NSScreen.screens.first`.
+- O caso nominal 1x/2x executa duas chamadas idênticas e não protege o boundary que escolhe a referência vertical. É necessário testar explicitamente que a zero screen, e não a key-window screen, alimenta a conversão.
+- A classe transparente é instalada antes do render React, porém não há sincronização que impeça `show()` antes do bootstrap do documento. O caminho deve tornar a primeira pintura determinística ou fornecer um handshake de readiness.
+
+### Evidências aprovadas
+
+- 14/14 testes focados de geometria Rust passaram.
+- 7/7 testes focados de superfície/contrato Vitest passaram.
+- `cargo clippy --all-targets --all-features -- -D warnings` passou na análise dual.
+- Geometria pura, clamp, fallback vertical, seleção determinística de tela, transparência em três camadas e aplicação via `setFrameOrigin:` são direções corretas.
+- Arquivos de produção do escopo permanecem abaixo de 300 linhas.
+
+### Remediação obrigatória
+
+- Usar a zero screen como referência global AX → Cocoa e cobrir key window em uma tela secundária com origem/altura diferentes.
+- Substituir o teste Retina tautológico por um contrato que exerça o boundary de coordenadas em pontos e impeça o uso de `mainScreen` como zero screen.
+- Impedir a exibição do overlay antes de a superfície transparente estar pronta, sem alterar a janela principal.
+- Reexecutar todos os gates e submeter nova revisão dual antes de Computer Use, merge ou release.

@@ -10,6 +10,9 @@
 - Identidade baseada somente em PID, role, subrole, frame e `AXIdentifier` opcional pode colidir entre campos ou documentos sobrepostos no mesmo processo.
 - Fallback AX deve preservar estágio e categoria; falhas estruturais, TCC, tipo inesperado e range vazio não autorizam migração de representação.
 - Testes puros e contratos textuais não substituem o gate real de focus, apply e undo em apps macOS.
+- `NSScreen.mainScreen` é a tela da key window, não a zero screen. Conversões entre coordenadas AX globais e Cocoa devem obter a referência vertical de `NSScreen.screens.first`.
+- Um teste Retina que repete entradas idênticas prova apenas determinismo, não o boundary 1x/2x nem a escolha correta da referência global.
+- Aplicar transparência antes do React não garante primeira pintura transparente se a janela puder ser mostrada antes do bootstrap da WebView.
 
 ## Critérios de Rejeição
 - Possibilidade de replace/restore em elemento diferente, mesmo dentro do PID esperado.
@@ -18,6 +21,8 @@
 - Diagnostics com texto selecionado, PID, range ou bounds.
 - Arquivo modificado acima de 300 linhas efetivas.
 - Trivy com vulnerabilidade HIGH/CRITICAL ou scan obrigatório não concluído.
+- Conversão AX → Cocoa baseada na tela da key window em vez da zero screen.
+- Overlay mostrado antes de existir garantia de que a superfície WebView transparente está pronta.
 
 ## Stack & Ferramentas
 - Desktop Tauri 2, Rust, React/Vite e Vitest.
@@ -29,3 +34,4 @@
 - Em `aca5f44`, analyzer passou para 19 arquivos; Rust 68/68, Vitest 30/30, Playwright 3/3, cobertura frontend 100%, fmt/check/clippy/build/diff-check passaram.
 - Trivy contemporâneo na mesma worktree passou com zero HIGH/CRITICAL em `package-lock` e `Cargo.lock` e zero misconfigurações.
 - SonarQube não estava configurado.
+- Na revisão de `a085121`, o SDK local confirmou `screens.first` como zero screen e `mainScreen` como tela da key window; a primeira revisão do overlay foi `REJECTED_CODE` apesar dos gates automatizados verdes.
