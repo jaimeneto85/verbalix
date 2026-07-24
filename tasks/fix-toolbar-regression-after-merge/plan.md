@@ -242,6 +242,8 @@ Manter o resolver system-wide e implementar o adapter mínimo de text marker cau
   - [x] T15.4 Falhar cedo quando `expected.writable=false` e remover PID/range/bounds dos diagnostics.
   - [x] T15.5 Refatorar boundaries macOS para arquivos com no máximo 300 linhas e responsabilidade única.
   - [x] T15.6 Adicionar testes compostos das cinco correções e repetir gates; Trivy externo na mesma worktree passou sem HIGH/CRITICAL ou misconfigurações.
+  - [ ] T15.7 Fazer restore falhar fechado sem identidade forte não opcional do elemento; cobrir colisão intra-PID com `identifier=None`.
+  - [ ] T15.8 Remover `EmptyRange` das categorias elegíveis para marker e testar que estados temporais não são misturados.
 - [ ] T16 [LOW] Atualizar memória e gerar documento de entrega.
 - [ ] T17 [LOW] Merge autorizado preservando todo dirty state user-owned.
 - [ ] T18 [MEDIUM] Gerar e validar build release, recursos, codesign e launch smoke.
