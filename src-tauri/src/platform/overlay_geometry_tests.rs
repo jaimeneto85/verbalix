@@ -1,0 +1,174 @@
+use super::*;
+
+fn rect(x: f64, y: f64, width: f64, height: f64) -> Rect {
+    Rect {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+fn screen(full: Rect, visible: Rect) -> ScreenFrame {
+    ScreenFrame {
+        full: CocoaRect(full),
+        visible: CocoaRect(visible),
+    }
+}
+
+fn primary() -> ScreenFrame {
+    screen(rect(0.0, 0.0, 1000.0, 900.0), rect(0.0, 0.0, 1000.0, 800.0))
+}
+
+#[test]
+fn converts_ax_and_cocoa_with_a_nonzero_main_origin() {
+    let ax = AxRect(rect(-450.0, 120.0, 80.0, 24.0));
+
+    let cocoa = ax_to_cocoa(ax, 980.0).unwrap();
+
+    assert_eq!(cocoa, CocoaRect(rect(-450.0, 836.0, 80.0, 24.0)));
+    assert_eq!(cocoa_to_ax(cocoa, 980.0), Some(ax));
+}
+
+#[test]
+fn centers_above_without_clamping() {
+    let origin = anchored_origin(
+        CocoaRect(rect(200.0, 300.0, 100.0, 20.0)),
+        236.0,
+        52.0,
+        primary(),
+    );
+
+    assert_eq!(origin, Some(CocoaPoint { x: 132.0, y: 330.0 }));
+}
+
+#[test]
+fn falls_below_when_above_does_not_fit() {
+    let origin = anchored_origin(
+        CocoaRect(rect(200.0, 740.0, 100.0, 20.0)),
+        236.0,
+        52.0,
+        primary(),
+    );
+
+    assert_eq!(origin, Some(CocoaPoint { x: 132.0, y: 678.0 }));
+}
+
+#[test]
+fn clamps_to_all_visible_edges() {
+    let cases = [
+        (
+            rect(-80.0, 300.0, 20.0, 20.0),
+            CocoaPoint { x: 8.0, y: 330.0 },
+        ),
+        (
+            rect(990.0, 300.0, 20.0, 20.0),
+            CocoaPoint { x: 756.0, y: 330.0 },
+        ),
+        (
+            rect(200.0, -70.0, 100.0, 20.0),
+            CocoaPoint { x: 132.0, y: 8.0 },
+        ),
+        (
+            rect(200.0, 790.0, 100.0, 20.0),
+            CocoaPoint { x: 132.0, y: 728.0 },
+        ),
+    ];
+
+    for (selection, expected) in cases {
+        assert_eq!(
+            anchored_origin(CocoaRect(selection), 236.0, 52.0, primary()),
+            Some(expected)
+        );
+    }
+}
+
+#[test]
+fn centers_an_overlay_larger_than_the_visible_frame() {
+    let tiny = screen(rect(0.0, 0.0, 100.0, 80.0), rect(0.0, 0.0, 100.0, 80.0));
+
+    let origin = anchored_origin(CocoaRect(rect(30.0, 30.0, 20.0, 20.0)), 420.0, 220.0, tiny);
+
+    assert_eq!(
+        origin,
+        Some(CocoaPoint {
+            x: -160.0,
+            y: -70.0
+        })
+    );
+}
+
+#[test]
+fn chooses_full_frame_even_outside_the_visible_frame() {
+    let selected = CocoaRect(rect(400.0, 880.0, 50.0, 12.0));
+
+    assert_eq!(select_screen(selected, &[primary()]), Some(primary()));
+}
+
+#[test]
+fn chooses_largest_intersection_when_center_is_in_a_display_gap() {
+    let left = screen(
+        rect(-1000.0, 0.0, 900.0, 900.0),
+        rect(-1000.0, 0.0, 900.0, 800.0),
+    );
+    let right = screen(
+        rect(100.0, 0.0, 900.0, 900.0),
+        rect(100.0, 0.0, 900.0, 800.0),
+    );
+    let selected = CocoaRect(rect(-200.0, 200.0, 500.0, 20.0));
+
+    assert_eq!(select_screen(selected, &[left, right]), Some(right));
+    assert_eq!(select_screen(selected, &[right, left]), Some(right));
+}
+
+#[test]
+fn handles_displays_left_above_and_below_the_main_screen() {
+    let left = screen(
+        rect(-1200.0, 0.0, 1200.0, 900.0),
+        rect(-1200.0, 0.0, 1200.0, 860.0),
+    );
+    let above = screen(
+        rect(0.0, 900.0, 1000.0, 900.0),
+        rect(0.0, 900.0, 1000.0, 860.0),
+    );
+    let below = screen(
+        rect(0.0, -900.0, 1000.0, 900.0),
+        rect(0.0, -900.0, 1000.0, 860.0),
+    );
+    let screens = [primary(), left, above, below];
+
+    assert_eq!(
+        select_screen(CocoaRect(rect(-500.0, 300.0, 20.0, 20.0)), &screens),
+        Some(left)
+    );
+    assert_eq!(
+        select_screen(CocoaRect(rect(400.0, 1100.0, 20.0, 20.0)), &screens),
+        Some(above)
+    );
+    assert_eq!(
+        select_screen(CocoaRect(rect(400.0, -500.0, 20.0, 20.0)), &screens),
+        Some(below)
+    );
+}
+
+#[test]
+fn point_geometry_is_identical_for_one_x_and_two_x_displays() {
+    let selection = CocoaRect(rect(320.0, 240.0, 120.0, 30.0));
+
+    let one_x = anchored_origin(selection, 236.0, 52.0, primary());
+    let two_x = anchored_origin(selection, 236.0, 52.0, primary());
+
+    assert_eq!(one_x, two_x);
+}
+
+#[test]
+fn rejects_nonfinite_or_negative_geometry() {
+    assert_eq!(
+        ax_to_cocoa(AxRect(rect(f64::NAN, 0.0, 1.0, 1.0)), 900.0),
+        None
+    );
+    assert_eq!(
+        anchored_origin(CocoaRect(rect(0.0, 0.0, 1.0, 1.0)), -1.0, 52.0, primary()),
+        None
+    );
+}
