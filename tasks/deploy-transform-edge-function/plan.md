@@ -111,8 +111,8 @@ Oportunidades (downsideup):
 ## 3. TASKS
 
 - [x] T1 Criar draft, análise dual e síntese final do SDD.
-- [ ] T2 Refatorar handler para injeção sem alterar o contrato público.
-- [ ] T3 Adicionar testes unitários/integrados para HTTP, secrets, timeout e provider.
+- [x] T2 Refatorar handler para injeção sem alterar o contrato público.
+- [x] T3 Adicionar testes unitários/integrados para HTTP, secrets, timeout e provider.
 - [ ] T4 Executar Deno, Rust, frontend, E2E, Edge, analyzer e scans.
 - [ ] T5 Descobrir acesso/projeto e verificar secrets por presença.
 - [ ] T6 Implantar `transform` no projeto autorizado.
