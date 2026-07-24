@@ -130,3 +130,18 @@ Fora do escopo:
 - [x] Impedir a exibição do overlay antes de a superfície transparente estar pronta, sem alterar a janela principal.
 - [x] Impedir que um handshake atrasado reabra um overlay invalidado antes de ficar pronto.
 - [x] Reexecutar todos os gates antes de submeter nova revisão dual, sem Computer Use, merge ou release.
+
+### Veredito da segunda revisão
+
+`REJECTED_CODE`
+
+- As remediações de zero screen, posicionamento nativo em pontos, transparência e lifecycle foram aprovadas pela análise dual.
+- `src-tauri/src/lib.rs` foi modificado pelo registro de `overlay_surface_ready` e possui 309 linhas, violando o limite obrigatório de 300 linhas de CA5 e o gate do projeto para arquivos modificados.
+- O handshake mantém a janela oculta até `ready && requested`; `HideAll` cancela solicitações antes de esconder e um `SurfaceReady` tardio não reabre a superfície.
+- A sinalização ocorre antes do commit React, mas a classe e o CSS transparentes são aplicados sincronicamente antes do handshake; este ponto permanece como observação não bloqueante para a validação visual final.
+
+### Remediação da segunda revisão
+
+- [ ] Extrair responsabilidade de `src-tauri/src/lib.rs` até o arquivo ficar com no máximo 300 linhas, sem alterar o comportamento do runtime.
+- [ ] Reexecutar Rust, Vitest, cobertura, Playwright, clippy estrito, build, diff-check e limite de linhas.
+- [ ] Submeter nova revisão QA antes de Computer Use, merge ou release.

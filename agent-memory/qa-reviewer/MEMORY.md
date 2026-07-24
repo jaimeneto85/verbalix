@@ -35,3 +35,4 @@
 - Trivy contemporâneo na mesma worktree passou com zero HIGH/CRITICAL em `package-lock` e `Cargo.lock` e zero misconfigurações.
 - SonarQube não estava configurado.
 - Na revisão de `a085121`, o SDK local confirmou `screens.first` como zero screen e `mainScreen` como tela da key window; a primeira revisão do overlay foi `REJECTED_CODE` apesar dos gates automatizados verdes.
+- Na segunda revisão do overlay, zero screen, posicionamento AppKit em pontos, transparência e readiness foram considerados corretos, mas `src-tauri/src/lib.rs` foi modificado e ficou com 309 linhas; o veredito permaneceu `REJECTED_CODE` pelo gate objetivo de 300 linhas.
