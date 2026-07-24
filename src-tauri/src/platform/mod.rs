@@ -3,6 +3,7 @@ mod note_result;
 mod overlay;
 mod overlay_dispatcher;
 mod overlay_geometry;
+mod overlay_publication;
 mod overlay_readiness;
 mod overlay_window;
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use crate::domain::VerbalixError;
+use crate::{application::PublicationGuard, domain::VerbalixError};
 use serde::Serialize;
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -22,22 +22,39 @@ pub struct NoteResultPayload {
 
 #[derive(Default)]
 pub struct NoteResultState {
-    current: Mutex<Option<NoteResultPayload>>,
+    current: Mutex<Option<StoredNoteResult>>,
+}
+
+struct StoredNoteResult {
+    payload: NoteResultPayload,
+    guard: Option<PublicationGuard>,
 }
 
 impl NoteResultState {
-    pub fn publish(&self, payload: NoteResultPayload) -> Result<(), VerbalixError> {
+    pub fn publish(
+        &self,
+        payload: NoteResultPayload,
+        guard: Option<PublicationGuard>,
+    ) -> Result<(), VerbalixError> {
         *self
             .current
             .lock()
-            .map_err(|_| VerbalixError::LocalFailure)? = Some(payload);
+            .map_err(|_| VerbalixError::LocalFailure)? = Some(StoredNoteResult { payload, guard });
         Ok(())
     }
 
     pub fn current(&self) -> Result<Option<NoteResultPayload>, VerbalixError> {
         self.current
             .lock()
-            .map(|payload| payload.clone())
+            .map(|current| {
+                current.as_ref().and_then(|current| {
+                    current
+                        .guard
+                        .as_ref()
+                        .is_none_or(|guard| guard.may_publish())
+                        .then(|| current.payload.clone())
+                })
+            })
             .map_err(|_| VerbalixError::LocalFailure)
     }
 }
@@ -55,7 +72,7 @@ mod tests {
             text: "Translated".to_owned(),
         };
 
-        state.publish(payload.clone()).unwrap();
+        state.publish(payload.clone(), None).unwrap();
 
         assert_eq!(state.current().unwrap(), Some(payload));
     }
@@ -64,11 +81,14 @@ mod tests {
     fn returns_the_latest_result_after_a_listener_is_ready() {
         let state = NoteResultState::default();
         state
-            .publish(NoteResultPayload {
-                mode: NoteMode::Preview,
-                request_id: Some(Uuid::new_v4()),
-                text: "Preview".to_owned(),
-            })
+            .publish(
+                NoteResultPayload {
+                    mode: NoteMode::Preview,
+                    request_id: Some(Uuid::new_v4()),
+                    text: "Preview".to_owned(),
+                },
+                None,
+            )
             .unwrap();
         let updated = NoteResultPayload {
             mode: NoteMode::Error,
@@ -76,7 +96,7 @@ mod tests {
             text: "Entre no Verbalix para continuar.".to_owned(),
         };
 
-        state.publish(updated.clone()).unwrap();
+        state.publish(updated.clone(), None).unwrap();
 
         assert_eq!(state.current().unwrap(), Some(updated));
     }

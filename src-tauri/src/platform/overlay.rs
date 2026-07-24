@@ -99,7 +99,7 @@ impl TauriOverlay {
         if guard.as_ref().is_some_and(|guard| !guard.may_publish()) {
             return Ok(());
         }
-        self.note_result.publish(payload.clone())?;
+        self.note_result.publish(payload.clone(), guard.clone())?;
         self.dispatcher
             .dispatch(OverlayCommand::ShowResult(bounds, payload, guard))
     }

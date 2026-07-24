@@ -6,6 +6,7 @@ use crate::{
     domain::{Rect, VerbalixError},
     platform::{
         note_result::NoteResultPayload,
+        overlay_publication::execute_if_publishable,
         overlay_readiness::{OverlayReadiness, OverlaySurface},
         overlay_window::{get_or_create, show_if_ready},
     },
@@ -151,25 +152,27 @@ fn execute_command(
             result
         }
         OverlayCommand::ShowResult(bounds, payload, guard) => {
-            if guard.as_ref().is_some_and(|guard| !guard.may_publish()) {
+            let executed = execute_if_publishable(guard.as_ref(), || {
+                let surface = OverlaySurface::Note;
+                readiness.request(surface)?;
+                let result = (|| {
+                    let window = get_or_create(app, surface, 420.0, 220.0, sequence, readiness)?;
+                    place(app, &window, bounds, 420.0, 220.0, "note", sequence)?;
+                    window
+                        .emit("note-result", payload)
+                        .map_err(|_| VerbalixError::LocalFailure)?;
+                    diagnostics::overlay("emitted", "note", sequence);
+                    show_if_ready(&window, surface, sequence, readiness)
+                })();
+                if result.is_err() {
+                    readiness.cancel(surface)?;
+                }
+                result
+            })?;
+            if !executed {
                 diagnostics::overlay("cancelled", "note", sequence);
-                return Ok(());
             }
-            let surface = OverlaySurface::Note;
-            readiness.request(surface)?;
-            let result = (|| {
-                let window = get_or_create(app, surface, 420.0, 220.0, sequence, readiness)?;
-                place(app, &window, bounds, 420.0, 220.0, "note", sequence)?;
-                window
-                    .emit("note-result", payload)
-                    .map_err(|_| VerbalixError::LocalFailure)?;
-                diagnostics::overlay("emitted", "note", sequence);
-                show_if_ready(&window, surface, sequence, readiness)
-            })();
-            if result.is_err() {
-                readiness.cancel(surface)?;
-            }
-            result
+            Ok(())
         }
         OverlayCommand::HideAll => {
             readiness.cancel_all()?;
