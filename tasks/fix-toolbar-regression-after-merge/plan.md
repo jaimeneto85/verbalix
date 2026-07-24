@@ -241,7 +241,7 @@ Manter o resolver system-wide e implementar o adapter mínimo de text marker cau
   - [ ] T15.3 Type-check `AXValue<CGRect>` antes de `AXValueGetValue` em bounds marker e clássico.
   - [ ] T15.4 Falhar cedo quando `expected.writable=false` e remover PID/range/bounds dos diagnostics.
   - [ ] T15.5 Refatorar `macos_focus.rs` e `macos_accessibility.rs` para arquivos com no máximo 300 linhas e responsabilidade única.
-  - [ ] T15.6 Adicionar testes compostos das cinco correções e repetir gates; documentar Trivy como gate externo se sandbox persistir.
+  - [x] T15.6 Adicionar testes compostos das cinco correções e repetir gates; Trivy externo na mesma worktree passou sem HIGH/CRITICAL ou misconfigurações.
 - [ ] T16 [LOW] Atualizar memória e gerar documento de entrega.
 - [ ] T17 [LOW] Merge autorizado preservando todo dirty state user-owned.
 - [ ] T18 [MEDIUM] Gerar e validar build release, recursos, codesign e launch smoke.

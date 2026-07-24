@@ -7,6 +7,8 @@
 - Smoke tests validam configuração e também executam o bundle `.app` pelo CLI do Tauri.
 - Boundaries macOS que não podem ser exercitados sem permissão real usam uma combinação de funções puras Rust para geometria e contratos estáticos Vitest para garantir APIs AX/Core Graphics, ausência de AppKit no worker e lifecycle do shell.
 - Text markers permanecem sem mocks FFI: a suíte combina matriz pura e exaustiva de categorias AX, validação de índices/length em UTF-16, fluxo read-only até nota e contrato estático das APIs públicas/RAII; o gate real cobre o adapter nativo.
+- O fluxo composto de fallback AX deve combinar matriz pura de categorias com contrato de integração do source: falha estrutural de CFRange não pode alcançar `marker_selection`, enquanto somente falhas explícitas de capacidade podem fazê-lo.
+- Restore precisa de testes separados e combinados para PID, identidade estável do elemento, texto selecionado e range UTF-16 atual; coincidência de texto/range em outro campo do mesmo PID deve continuar falhando fechada.
 - Fluxos críticos de recuperação visual usam Playwright com `__TAURI_INTERNALS__` simulado e verificam tanto invocações IPC quanto clipping pelo bounding box.
 
 ## Estratégias de Mock
@@ -21,13 +23,16 @@
 - Coordenadas globais negativas são válidas em monitores secundários; validação geométrica deve rejeitar valores não finitos e dimensões inválidas sem rejeitar a origem negativa.
 - Doubles Deno que implementam interfaces assíncronas sem executar `await` devem retornar `Promise.resolve`/`Promise.reject` explicitamente para satisfazer `deno lint require-await`.
 - Limites superiores de índices marker em macOS arm64 devem considerar que `isize::MAX == i64::MAX`; o maior location válido antes de um range de length 1 é `isize::MAX - 1`.
+- O analyzer QA considera linhas efetivas e impõe máximo de 300 por arquivo modificado; após a refatoração AX, `macos_geometry.rs` ainda ficou com 340 e requer nova divisão antes de re-QA.
 
 ## Cobertura & Métricas
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
-- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, target de restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 68 testes Rust e os gates `clippy -D warnings` são usados como evidência, enquanto o frontend instrumentado mantém 100%.
+- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, target de restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 68 testes Rust e os gates `clippy -D warnings` são usados como evidência.
+- O frontend possui 30 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 3 testes Playwright E2E também passam.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
 - Configuração pública do Supabase é testada como build-time embutido com override de runtime; OpenAI/service-role não podem aparecer nos arquivos do runtime público.
 - Limites HTTP da Edge são testados em bytes com JSON válido seguido de whitespace até exatamente 64 KiB; isso separa o boundary de transporte do limite de 12.000 caracteres do domínio.
 - Testes pré-deploy da Edge mantêm Auth, scheduler e OpenAI totalmente injetados: cobrem usuário real/anon, timeout que vence provider não cooperativo, respostas por operação e limites exatos sem rede ou secrets reais.
+- O hard gate Trivy pode ser reutilizado quando executado contemporaneamente na mesma worktree: scan `vuln,misconfig` HIGH/CRITICAL com `--ignore-unfixed --exit-code 1` passou para `package-lock`, `Cargo.lock` e configurações.
