@@ -41,6 +41,10 @@ fn diagnostic_labels_are_stable_and_sanitized() {
         (AxStage::SelectedRange, "selected_range"),
         (AxStage::SelectedRangeType, "selected_range_type"),
         (AxStage::StringForRange, "string_for_range"),
+        (AxStage::Value, "value"),
+        (AxStage::ValueType, "value_type"),
+        (AxStage::ValueLength, "value_length"),
+        (AxStage::RangeStability, "range_stability"),
         (
             AxStage::SelectedTextMarkerRange,
             "selected_text_marker_range",
@@ -64,6 +68,7 @@ fn diagnostic_labels_are_stable_and_sanitized() {
     let origins = [
         (ExtractionOrigin::SelectedText, "selected_text"),
         (ExtractionOrigin::CfRange, "cf_range"),
+        (ExtractionOrigin::ValueRange, "value_range"),
         (ExtractionOrigin::TextMarker, "text_marker"),
     ];
 
@@ -107,6 +112,9 @@ fn marker_fallback_is_closed_to_structural_failures() {
         AxCategory::AxErrorValue,
         AxCategory::IllegalValueType,
         AxCategory::EmptyRange,
+        AxCategory::InvalidRange,
+        AxCategory::RangeChanged,
+        AxCategory::LimitExceeded,
         AxCategory::Settable,
         AxCategory::NotSettable,
         AxCategory::Unknown,

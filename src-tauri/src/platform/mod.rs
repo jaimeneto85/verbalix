@@ -13,6 +13,8 @@ mod overlay_window_tests;
 #[cfg(target_os = "macos")]
 mod macos_accessibility;
 #[cfg(target_os = "macos")]
+mod macos_attribute;
+#[cfg(target_os = "macos")]
 mod macos_ax;
 #[cfg(target_os = "macos")]
 mod macos_classic_range;
@@ -33,7 +35,11 @@ mod macos_restore;
 #[cfg(target_os = "macos")]
 mod macos_selection;
 #[cfg(target_os = "macos")]
+mod macos_selection_revalidation;
+#[cfg(target_os = "macos")]
 mod macos_text_marker;
+#[cfg(target_os = "macos")]
+mod macos_value_range;
 
 pub use clipboard::SystemClipboard;
 pub use note_result::NoteResultPayload;

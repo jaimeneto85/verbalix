@@ -8,6 +8,10 @@ pub(crate) enum AxStage {
     SelectedRange,
     SelectedRangeType,
     StringForRange,
+    Value,
+    ValueType,
+    ValueLength,
+    RangeStability,
     SelectedTextMarkerRange,
     StringForTextMarkerRange,
     BoundsForTextMarkerRange,
@@ -28,6 +32,10 @@ impl AxStage {
             Self::SelectedRange => "selected_range",
             Self::SelectedRangeType => "selected_range_type",
             Self::StringForRange => "string_for_range",
+            Self::Value => "value",
+            Self::ValueType => "value_type",
+            Self::ValueLength => "value_length",
+            Self::RangeStability => "range_stability",
             Self::SelectedTextMarkerRange => "selected_text_marker_range",
             Self::StringForTextMarkerRange => "string_for_text_marker_range",
             Self::BoundsForTextMarkerRange => "bounds_for_text_marker_range",
@@ -69,6 +77,9 @@ pub(crate) enum AxCategory {
     AxErrorValue,
     IllegalValueType,
     EmptyRange,
+    InvalidRange,
+    RangeChanged,
+    LimitExceeded,
     Settable,
     NotSettable,
     Unknown,
@@ -127,6 +138,9 @@ impl AxCategory {
             Self::AxErrorValue => "ax_error",
             Self::IllegalValueType => "illegal_value_type",
             Self::EmptyRange => "empty_range",
+            Self::InvalidRange => "invalid_range",
+            Self::RangeChanged => "range_changed",
+            Self::LimitExceeded => "limit_exceeded",
             Self::Settable => "settable",
             Self::NotSettable => "not_settable",
             Self::Unknown => "unknown",
@@ -149,6 +163,7 @@ impl AxCategory {
 pub(crate) enum ExtractionOrigin {
     SelectedText,
     CfRange,
+    ValueRange,
     TextMarker,
 }
 
@@ -157,6 +172,7 @@ impl ExtractionOrigin {
         match self {
             Self::SelectedText => "selected_text",
             Self::CfRange => "cf_range",
+            Self::ValueRange => "value_range",
             Self::TextMarker => "text_marker",
         }
     }

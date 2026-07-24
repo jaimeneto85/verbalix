@@ -25,7 +25,13 @@ extern "C" {
 }
 
 pub(super) fn selected_range(element: AXUIElementRef) -> Result<CFRange, AxFailure> {
-    let origin = ExtractionOrigin::CfRange;
+    selected_range_with_origin(element, ExtractionOrigin::CfRange)
+}
+
+pub(super) fn selected_range_with_origin(
+    element: AXUIElementRef,
+    origin: ExtractionOrigin,
+) -> Result<CFRange, AxFailure> {
     let stage = AxStage::SelectedRange;
     let value = macos_ax::attribute(element, "AXSelectedTextRange", stage, origin)?;
     match representation(&value, origin) {

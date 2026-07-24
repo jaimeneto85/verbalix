@@ -36,11 +36,6 @@ extern "C" {
         parameter: CFTypeRef,
         value: *mut CFTypeRef,
     ) -> AXError;
-    fn AXUIElementIsAttributeSettable(
-        element: AXUIElementRef,
-        attribute: CFStringRef,
-        settable: *mut Boolean,
-    ) -> AXError;
     fn AXUIElementSetAttributeValue(
         element: AXUIElementRef,
         attribute: CFStringRef,
@@ -259,26 +254,6 @@ pub(super) fn pid(element: AXUIElementRef) -> Result<i32, AxFailure> {
         };
         Err(AxFailure::new(AxStage::Pid, category))
     }
-}
-
-pub(super) fn writable(element: AXUIElementRef) -> bool {
-    let attribute = CFString::new("AXSelectedText");
-    let mut settable: Boolean = 0;
-    let writable = unsafe {
-        AXUIElementIsAttributeSettable(element, attribute.as_concrete_TypeRef(), &mut settable)
-            == AX_SUCCESS
-            && settable != 0
-    };
-    crate::diagnostics::ax_resolution(
-        AxStage::SelectedTextSettable,
-        ExtractionOrigin::SelectedText,
-        if writable {
-            AxCategory::Settable
-        } else {
-            AxCategory::NotSettable
-        },
-    );
-    writable
 }
 
 pub(super) fn set_selected_text(element: AXUIElementRef, text: &str) -> bool {
