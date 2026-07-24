@@ -67,6 +67,10 @@
 - Timeout total usa `Promise.race` além de `AbortController`, pois um adapter defeituoso pode ignorar o sinal de cancelamento.
 - O provider da Responses API usa `reasoning.effort: none` e orçamento de output calculado por caracteres Unicode: `ceil(chars * 2/3 + 128)`, limitado entre 500 e 8.000 tokens. Isso evita pagar o teto em seleções curtas sem quebrar o contrato de 12.000 caracteres.
 - Envelopes OpenAI só são aceitos com `status === "completed"` e `incomplete_details` ausente ou nulo. Status ausente, desconhecido ou incompleto, inclusive `max_output_tokens`, falha como `INVALID_RESPONSE` antes do parse e nunca chega a replace/history.
+- Readiness e qualquer await de transformação só podem ocorrer depois de `begin_transform` fixar snapshot/request; falhas pré e pós-pin publicam exclusivamente com guard da identidade original.
+- A toolbar usa uma guarda de apresentação reservada junto ao candidato, executada fora do mutex e confirmada condicionalmente; Candidate/Invalidated revogam comandos ainda enfileirados.
+- O undo possui lease próprio criado no commit `Applied`; restore faz revalidação antes do claim e o commit posterior preserva qualquer Candidate B que tenha supersedido A.
+- Persistência de histórico é best-effort, detached e limitada por timeout no cliente e na tarefa; falhas expõem somente evento e código sanitizado, sem bloquear nem alterar o resultado da transformação.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.
