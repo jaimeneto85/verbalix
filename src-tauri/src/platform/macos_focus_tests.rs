@@ -38,6 +38,8 @@ fn diagnostic_labels_are_stable_and_sanitized() {
         (AxStage::Role, "role"),
         (AxStage::SelectedText, "selected_text"),
         (AxStage::SelectedTextSettable, "selected_text_settable"),
+        (AxStage::SelectedRangeSettable, "selected_range_settable"),
+        (AxStage::Identifier, "identifier"),
         (AxStage::SelectedRange, "selected_range"),
         (AxStage::SelectedRangeType, "selected_range_type"),
         (AxStage::StringForRange, "string_for_range"),

@@ -25,6 +25,15 @@ pub(super) fn selected_text_writable(element: AXUIElementRef) -> Result<bool, Ax
     )
 }
 
+pub(super) fn diagnose_selected_range_writable(element: AXUIElementRef) {
+    let _ = attribute_settable(
+        element,
+        "AXSelectedTextRange",
+        AxStage::SelectedRangeSettable,
+        ExtractionOrigin::CfRange,
+    );
+}
+
 fn attribute_settable(
     element: AXUIElementRef,
     name: &str,

@@ -27,6 +27,9 @@ pub(super) fn capture(element: &OwnedAxElement) -> Result<SelectionSnapshot, Ver
         return Err(VerbalixError::ProtectedField);
     }
     let identity = element_identity(element.as_ref(), role.clone())?;
+    if crate::diagnostics::enabled() {
+        macos_attribute::diagnose_selected_range_writable(element.as_ref());
+    }
     let extracted = extract(element.as_ref(), &role)?;
     if validated_pid(element.as_ref(), strategy_origin(extracted.strategy))? != pid
         || element_identity(element.as_ref(), role)? != identity
@@ -47,6 +50,9 @@ pub(super) fn capture_with_strategy(
         return Err(VerbalixError::ProtectedField);
     }
     let identity = element_identity(element.as_ref(), role.clone())?;
+    if crate::diagnostics::enabled() {
+        macos_attribute::diagnose_selected_range_writable(element.as_ref());
+    }
     let extracted = extract_for_strategy(element.as_ref(), &role, strategy)?;
     if validated_pid(element.as_ref(), origin)? != pid
         || element_identity(element.as_ref(), role)? != identity
@@ -93,6 +99,18 @@ pub(super) fn element_identity(
     let identifier =
         macos_ax::optional_string_attribute(element, "AXIdentifier", AxStage::Role, origin)
             .map_err(|_| VerbalixError::StaleSelection)?;
+    crate::diagnostics::ax_resolution(
+        AxStage::Identifier,
+        origin,
+        if identifier
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            AxCategory::Success
+        } else {
+            AxCategory::NoValue
+        },
+    );
     let frame = macos_geometry::element_frame(element).ok_or(VerbalixError::StaleSelection)?;
     Ok(SelectionElementIdentity {
         role,

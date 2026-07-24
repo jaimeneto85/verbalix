@@ -41,6 +41,11 @@ pub(super) fn extract(element: AXUIElementRef) -> Result<ValueRangeSelection, Ax
         );
         return Err(failure);
     }
+    crate::diagnostics::ax_resolution(
+        AxStage::RangeStability,
+        ExtractionOrigin::ValueRange,
+        AxCategory::Success,
+    );
     let text = copy_selected_range(&value, first, value_length)?;
     Ok(ValueRangeSelection { text, range: first })
 }
@@ -71,12 +76,22 @@ fn validate_value(value: &OwnedCfValue, range: CFRange) -> Result<usize, AxFailu
     if unsafe { CFGetTypeID(value.as_ref()) != CFStringGetTypeID() } {
         return diagnostic_failure(AxStage::ValueType, AxCategory::UnexpectedType);
     }
+    crate::diagnostics::ax_resolution(
+        AxStage::ValueType,
+        ExtractionOrigin::ValueRange,
+        AxCategory::Success,
+    );
     let length = unsafe { CFStringGetLength(as_string(value)) };
     let length = usize::try_from(length)
         .map_err(|_| failure(AxStage::ValueLength, AxCategory::InvalidRange))?;
     if length > MAX_VALUE_UTF16_UNITS {
         return diagnostic_failure(AxStage::ValueLength, AxCategory::LimitExceeded);
     }
+    crate::diagnostics::ax_resolution(
+        AxStage::ValueLength,
+        ExtractionOrigin::ValueRange,
+        AxCategory::Success,
+    );
     validate_range(range, length)?;
     validate_scalar_boundaries(value, range, length)?;
     Ok(length)
