@@ -32,6 +32,7 @@
 - O dispatcher de overlay cria, configura, posiciona, mostra, oculta e confirma `is_visible` exclusivamente dentro de `run_on_main_thread`.
 - Depois de trocar a classe nativa de uma WebView para `NSPanel`, não chamar setters de janela do wrapper Tauri que dependam da classe/ivars originais; o painel não ativante deve ser configurado integralmente no boundary AppKit.
 - Durante o MVP diagnosticável, `ActivationPolicy::Regular`, fechamento da janela principal como hide e reabertura centralizada por Dock/tray mantêm o processo observável.
+- Configuração pública do backend usa pares completos na ordem processo `VITE_*`, processo legado `VERBALIX_*`, embedded `VITE_*`, embedded legado; o build gera constantes em `OUT_DIR` para não transportar valores por stdout.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.

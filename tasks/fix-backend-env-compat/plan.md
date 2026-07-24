@@ -27,7 +27,7 @@ Fluxo SDD simplificado: correção localizada de configuração/build, sem alter
 - R2: o nativo resolve primeiro os nomes canônicos e usa `VERBALIX_*` apenas quando o par canônico correspondente está ausente/vazio.
 - R3: URL e anon key devem vir da mesma fonte/par; não combinar URL canônica com key legada silenciosamente.
 - R4: variáveis do processo têm precedência sobre valores embutidos para desenvolvimento.
-- R5: `src-tauri/build.rs` deve observar as variáveis e o `.env` da raiz, disponibilizando valores públicos ao `option_env!` no build do bundle.
+- R5: `src-tauri/build.rs` deve observar as variáveis e o `.env` da raiz, disponibilizando valores públicos por arquivo Rust gerado em `OUT_DIR`.
 - R6: o build não registra URL, anon key ou conteúdo do `.env` em stdout/stderr, snapshots, docs ou commits.
 - R7: `.env` real permanece ignorado pelo Git.
 - R8: ausência/incompletude continua produzindo `provider_not_configured`; par válido produz o próximo estado de readiness sem revelar valores.
@@ -40,8 +40,8 @@ Fluxo SDD simplificado: correção localizada de configuração/build, sem alter
 `PublicBackendConfig` recebe pares completos nesta ordem:
 
 1. `VITE_SUPABASE_*` do processo;
-2. `VITE_SUPABASE_*` embutido pelo build;
-3. `VERBALIX_SUPABASE_*` do processo;
+2. `VERBALIX_SUPABASE_*` do processo;
+3. `VITE_SUPABASE_*` embutido pelo build;
 4. `VERBALIX_SUPABASE_*` embutido legado.
 
 Um par só é elegível quando URL e anon key estão ambos não vazios. URL inválida mantém `configured=false`. Essa resolução por par evita misturar ambientes/projetos.
@@ -52,8 +52,8 @@ O build script:
 
 - marca `cargo:rerun-if-env-changed` para os quatro aliases e `cargo:rerun-if-changed=../.env`;
 - lê o `.env` da raiz sem modificar o processo do usuário;
-- prefere variáveis canônicas já exportadas e, na ausência, os valores canônicos do arquivo;
-- publica apenas `cargo:rustc-env` para os nomes canônicos consumidos por `option_env!`;
+- captura separadamente os pares canônico e legado, preferindo para cada um variáveis já exportadas e depois o arquivo;
+- gera um arquivo Rust em `OUT_DIR`, incluído pelo runtime sem transportar valores por stdout;
 - nunca imprime valores em mensagens diagnósticas.
 
 O frontend continua obtendo `PublicBackendConfig` pelo comando nativo; não existe uma segunda resolução divergente na WebView.
@@ -67,10 +67,10 @@ O frontend continua obtendo `PublicBackendConfig` pelo comando nativo; não exis
 
 ## 3. TASKS
 
-- [ ] T1 Implementar resolução canônica por pares com fallback legado.
-- [ ] T2 Carregar `VITE_SUPABASE_*` do `.env` no build Rust/Tauri sem logar valores.
-- [ ] T3 Restaurar `.env.example` para somente os dois nomes `VITE_*`.
-- [ ] T4 Atualizar regressões Rust, bundle-smoke e documentação.
+- [x] T1 Implementar resolução canônica por pares com fallback legado.
+- [x] T2 Carregar `VITE_SUPABASE_*` do `.env` no build Rust/Tauri sem logar valores.
+- [x] T3 Restaurar `.env.example` para somente os dois nomes `VITE_*`.
+- [x] T4 Atualizar regressões Rust, bundle-smoke e documentação.
 - [ ] T5 Executar Rust, Clippy, Vitest, Playwright, Edge, build Tauri e analyzer.
 - [ ] T6 Smoke do bundle confirma readiness configurada sem expor URL/key.
 - [ ] T7 QA independente emite verdict.

@@ -1,6 +1,10 @@
 use crate::domain::VerbalixError;
 use serde::Serialize;
 
+mod embedded_backend_config {
+    include!(concat!(env!("OUT_DIR"), "/verbalix_backend_config.rs"));
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicBackendConfig {
@@ -11,24 +15,23 @@ pub struct PublicBackendConfig {
 
 impl PublicBackendConfig {
     pub fn resolve() -> Self {
-        Self::from_sources(
-            std::env::var("VERBALIX_SUPABASE_URL").ok(),
-            option_env!("VERBALIX_SUPABASE_URL"),
-            std::env::var("VERBALIX_SUPABASE_ANON_KEY").ok(),
-            option_env!("VERBALIX_SUPABASE_ANON_KEY"),
-        )
+        Self::from_pairs([
+            process_pair("VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"),
+            process_pair("VERBALIX_SUPABASE_URL", "VERBALIX_SUPABASE_ANON_KEY"),
+            complete_pair(
+                embedded_backend_config::VITE_URL,
+                embedded_backend_config::VITE_KEY,
+            ),
+            complete_pair(
+                embedded_backend_config::LEGACY_URL,
+                embedded_backend_config::LEGACY_KEY,
+            ),
+        ])
     }
 
-    fn from_sources(
-        runtime_url: Option<String>,
-        embedded_url: Option<&str>,
-        runtime_key: Option<String>,
-        embedded_key: Option<&str>,
-    ) -> Self {
-        let supabase_url = preferred(runtime_url, embedded_url)
-            .trim_end_matches('/')
-            .to_owned();
-        let anonymous_key = preferred(runtime_key, embedded_key);
+    fn from_pairs(pairs: [Option<(String, String)>; 4]) -> Self {
+        let (supabase_url, anonymous_key) = pairs.into_iter().flatten().next().unwrap_or_default();
+        let supabase_url = supabase_url.trim_end_matches('/').to_owned();
         let configured = valid_url(&supabase_url) && !anonymous_key.trim().is_empty();
         Self {
             supabase_url,
@@ -113,11 +116,17 @@ pub fn classify_refresh_failure(error: &VerbalixError) -> RefreshFailureRoute {
     }
 }
 
-fn preferred(runtime: Option<String>, embedded: Option<&str>) -> String {
-    runtime
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| embedded.map(str::to_owned))
-        .unwrap_or_default()
+fn process_pair(url_name: &str, key_name: &str) -> Option<(String, String)> {
+    complete_pair(
+        std::env::var(url_name).ok().as_deref(),
+        std::env::var(key_name).ok().as_deref(),
+    )
+}
+
+fn complete_pair(url: Option<&str>, key: Option<&str>) -> Option<(String, String)> {
+    let url = url?.trim();
+    let key = key?.trim();
+    (!url.is_empty() && !key.is_empty()).then(|| (url.to_owned(), key.to_owned()))
 }
 
 fn valid_url(value: &str) -> bool {
@@ -129,27 +138,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn runtime_values_override_embedded_build_values() {
-        let config = PublicBackendConfig::from_sources(
-            Some("http://localhost:54321/".to_owned()),
-            Some("https://embedded.supabase.co"),
-            Some("runtime-anon".to_owned()),
-            Some("embedded-anon"),
-        );
+    fn canonical_process_pair_has_highest_priority() {
+        let config = PublicBackendConfig::from_pairs([
+            complete_pair(Some("http://localhost:54321/"), Some("canonical-process")),
+            complete_pair(
+                Some("https://legacy-process.supabase.co"),
+                Some("legacy-process"),
+            ),
+            complete_pair(
+                Some("https://canonical-embedded.supabase.co"),
+                Some("canonical-embedded"),
+            ),
+            complete_pair(
+                Some("https://legacy-embedded.supabase.co"),
+                Some("legacy-embedded"),
+            ),
+        ]);
 
         assert_eq!(config.supabase_url, "http://localhost:54321");
-        assert_eq!(config.anonymous_key, "runtime-anon");
+        assert_eq!(config.anonymous_key, "canonical-process");
         assert!(config.configured);
     }
 
     #[test]
-    fn embedded_values_make_finder_launches_self_contained() {
-        let config = PublicBackendConfig::from_sources(
+    fn complete_legacy_process_pair_overrides_embedded_bundle_for_development() {
+        let config = PublicBackendConfig::from_pairs([
             None,
-            Some("https://project.supabase.co/"),
+            complete_pair(Some("http://localhost:54321"), Some("legacy-process")),
+            complete_pair(
+                Some("https://canonical-embedded.supabase.co"),
+                Some("canonical-embedded"),
+            ),
             None,
-            Some("public-anon"),
-        );
+        ]);
+
+        assert_eq!(config.supabase_url, "http://localhost:54321");
+        assert_eq!(config.anonymous_key, "legacy-process");
+        assert!(config.configured);
+    }
+
+    #[test]
+    fn canonical_embedded_pair_makes_finder_launches_self_contained() {
+        let config = PublicBackendConfig::from_pairs([
+            None,
+            None,
+            complete_pair(Some("https://project.supabase.co/"), Some("public-anon")),
+            complete_pair(
+                Some("https://legacy.supabase.co"),
+                Some("legacy-public-anon"),
+            ),
+        ]);
 
         assert_eq!(
             config.transform_endpoint(),
@@ -159,22 +197,54 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_canonical_pair_falls_back_without_mixing_sources() {
+        let config = PublicBackendConfig::from_pairs([
+            complete_pair(Some("https://canonical.supabase.co"), None),
+            complete_pair(Some("http://localhost:54321"), Some("legacy-pair")),
+            None,
+            None,
+        ]);
+
+        assert_eq!(config.supabase_url, "http://localhost:54321");
+        assert_eq!(config.anonymous_key, "legacy-pair");
+    }
+
+    #[test]
     fn incomplete_or_invalid_public_configuration_is_not_ready() {
-        let missing_key = PublicBackendConfig::from_sources(
+        let missing_key = PublicBackendConfig::from_pairs([None, None, None, None]);
+        let unsafe_url = PublicBackendConfig::from_pairs([
+            complete_pair(Some("file:///tmp/backend"), Some("public-anon")),
             None,
-            Some("https://project.supabase.co"),
             None,
             None,
-        );
-        let unsafe_url = PublicBackendConfig::from_sources(
-            Some("file:///tmp/backend".to_owned()),
-            None,
-            Some("public-anon".to_owned()),
-            None,
-        );
+        ]);
 
         assert!(!missing_key.configured);
         assert!(!unsafe_url.configured);
+    }
+
+    #[test]
+    fn safe_smoke_reports_only_readiness_without_configuration_values() {
+        let config = PublicBackendConfig::from_pairs([
+            complete_pair(
+                Some("https://configured.example.invalid"),
+                Some("fixture-anon-key"),
+            ),
+            None,
+            None,
+            None,
+        ]);
+        let readiness = evaluate_ai_readiness(config.configured, false);
+
+        assert_eq!(readiness.status, AiReadinessStatus::LoginRequired);
+        assert!(!readiness.message.contains(&config.supabase_url));
+        assert!(!readiness.message.contains(&config.anonymous_key));
+
+        let missing = PublicBackendConfig::from_pairs([None, None, None, None]);
+        assert_eq!(
+            evaluate_ai_readiness(missing.configured, false).status,
+            AiReadinessStatus::ProviderNotConfigured
+        );
     }
 
     #[test]

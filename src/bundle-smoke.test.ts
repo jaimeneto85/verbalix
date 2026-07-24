@@ -77,12 +77,15 @@ describe("macOS bundle smoke contract", () => {
       "src-tauri/src/application/ai_readiness.rs",
       "utf8"
     );
+    const buildScript = readFileSync("src-tauri/build.rs", "utf8");
     const commands = readFileSync("src-tauri/src/commands.rs", "utf8");
     const example = readFileSync(".env.example", "utf8");
+    const gitignore = readFileSync(".gitignore", "utf8");
     const publicRuntime = [
       dispatcher,
       overlay,
       config,
+      buildScript,
       commands,
       readFileSync("src/supabase.ts", "utf8")
     ].join("\n");
@@ -93,12 +96,26 @@ describe("macOS bundle smoke contract", () => {
     expect(commands).toContain('show_main_window(&app, "login_required")');
     expect(commands).toContain('ai_readiness("provider_unavailable")');
     expect(commands).toContain(".show_error(");
-    expect(config).toContain('option_env!("VERBALIX_SUPABASE_URL")');
-    expect(config).toContain('std::env::var("VERBALIX_SUPABASE_URL")');
+    expect(config).toContain('include!(concat!(env!("OUT_DIR")');
+    expect(config).toContain(
+      'process_pair("VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY")'
+    );
+    expect(config).toContain(
+      'process_pair("VERBALIX_SUPABASE_URL", "VERBALIX_SUPABASE_ANON_KEY")'
+    );
+    expect(config).toContain("std::env::var(url_name)");
+    expect(buildScript).toContain("dotenvy::from_path_iter");
+    expect(buildScript).toContain("cargo:rerun-if-changed=../.env");
+    expect(buildScript).toContain("cargo:rerun-if-env-changed={name}");
+    expect(buildScript).toContain("verbalix_backend_config.rs");
+    expect(buildScript).toContain("fs::write(output, contents)");
+    expect(buildScript).not.toContain("cargo:rustc-env");
+    expect(buildScript).not.toMatch(/cargo:warning|dbg!|eprintln!/);
     expect(example.trim().split("\n")).toEqual([
-      "VERBALIX_SUPABASE_URL=",
-      "VERBALIX_SUPABASE_ANON_KEY="
+      "VITE_SUPABASE_URL=",
+      "VITE_SUPABASE_ANON_KEY="
     ]);
+    expect(gitignore.split("\n")).toContain(".env");
     expect(publicRuntime).not.toMatch(/OPENAI_API_KEY|SERVICE_ROLE/i);
   });
 });

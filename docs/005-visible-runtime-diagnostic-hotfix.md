@@ -22,6 +22,8 @@ Traduzir e Aprimorar não falham mais silenciosamente. O runtime distingue login
 
 Configuração pública pode ser embutida no build do bundle, com override de runtime para desenvolvimento. Segredos OpenAI e service-role continuam exclusivos ao backend.
 
+Os nomes canônicos são `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. O build Tauri lê o par completo do `.env` ignorado na raiz e o embute no nativo; variáveis completas do processo prevalecem em desenvolvimento. `VERBALIX_SUPABASE_URL` e `VERBALIX_SUPABASE_ANON_KEY` permanecem apenas como aliases legados e nunca são combinados parcialmente com o par canônico.
+
 No smoke deste artefato, a interação exibiu corretamente a mensagem de backend ausente. A transformação real permanece bloqueada porque não existem URL/anon key configuradas, projeto Supabase/Edge Function implantado nem sessão autenticada. Portanto, este documento não declara tradução ou aprimoramento por IA funcionais.
 
 ## Evidências
