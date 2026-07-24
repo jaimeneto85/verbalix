@@ -35,6 +35,11 @@
 - Criação de overlay deve ser transacional: `begin_document → build → configure`. Falha de build invalida sem executar rollback de recurso inexistente; falha de configure invalida antes de tentar `destroy → hide`, e uma criação posterior recebe geração nova.
 - Invalidação deve ser compare-and-invalidate: callbacks e rollbacks carregam a geração esperada e só removem `current/ready` quando ela ainda coincide. Um rollback stale de G1 nunca pode apagar G2 já pronta.
 - Uma lifetime guard reutilizável precisa de `PublicationPermit` independente por comando: clones do mesmo permit compartilham um único claim, enquanto permits distintos da mesma ação podem publicar feedbacks sequenciais. Os testes de Preview/Undo/Toolbar seguidos de erro devem afirmar emissão e visibilidade, não apenas ordem dos comandos.
+- O fallback `ValueRange` é testado com CFString real, nunca por índices UTF-8: a matriz cobre BMP, emoji, combining marks, cortes de surrogate, ranges negativos/vazios/fora do valor/overflow, limite exato de 262.144 code units e limite +1.
+- A ordem transacional `range₁ → AXValue → range₂ → validação/cópia` possui contrato estático e helper puro para divergência de ranges; somente depois da estabilidade o teste autoriza `CFStringGetCharacters` sobre o trecho selecionado.
+- Estratégia de extração integra a identidade do alvo. Testes cruzam `SelectedText`, `StringForRange`, `ValueRange` e `TextMarker` em `same_target`, replace e restore para impedir revalidação entre estratégias.
+- Capacidade de leitura e setter são matrizes independentes: settable verdadeiro/falso, ausência/unsupported e falhas estruturais possuem resultados distintos; contrato estático impede setter de `AXValue` e exige `AXSelectedText` como único writer.
+- Privacidade do fallback combina testes nativos e contrato de source: valor não-CFString falha antes de length/copy, role não elegível bloqueia `value_range_selection`, protected field é verificado antes de extract e nenhum helper converte o documento completo para `String`.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -55,7 +60,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 145 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, permits visuais reutilizáveis por ação, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX e a matriz de fallback geométrico.
+- A suíte Rust possui 155 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, permits visuais reutilizáveis por ação, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX, fallback geométrico e a matriz UTF-16/ValueRange.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
