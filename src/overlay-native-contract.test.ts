@@ -52,6 +52,10 @@ describe("macOS overlay native contract", () => {
       "src-tauri/src/platform/overlay_publication.rs",
       "utf8"
     );
+    const overlay = readFileSync(
+      "src-tauri/src/platform/overlay.rs",
+      "utf8"
+    );
     const initialToolbar = execution.slice(
       execution.indexOf("OverlayCommand::ShowToolbar"),
       execution.indexOf("OverlayCommand::ShowResult")
@@ -69,7 +73,10 @@ describe("macOS overlay native contract", () => {
     expect(initialToolbar).toContain("show_if_ready");
     expect(initialToolbar).toContain("execute_if_publishable");
     expect(initialToolbar).not.toContain("show_and_confirm");
-    expect(publication).toContain("try_claim_publication");
+    expect(publication).toContain("permit.try_claim()");
+    expect(publication).not.toContain("try_claim_publication");
+    expect(overlay).toContain("guard.map(PublicationPermit::new)");
+    expect(overlay).toContain("Some(PublicationPermit::new(guard))");
     expect(dispatcher).toContain("execute_command(&app, command");
     expect(ready).toContain("tokio::sync::oneshot::channel");
     expect(ready).toContain("receiver.await");
