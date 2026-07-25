@@ -84,12 +84,9 @@ impl SelectionCoordinator {
             self.commit_preview_visible(&active, request.request_id, &response.result, &lease)?;
             return Ok(());
         }
-        let receipt = self
-            .selection
-            .replace_guarded(&active, &response.result, &lease)?;
+        let receipt = self.execute_replace(&active, &response.result, &lease)?;
         let mutation =
-            self.mutation_journal
-                .record(receipt, active.clone(), response.result.clone());
+            self.record_confirmed_mutation(receipt, active.clone(), response.result.clone())?;
         let Some(undo_lease) =
             self.promote_confirmed_mutation(&active, &response.result, &lease, &mutation)
         else {
@@ -129,10 +126,8 @@ impl SelectionCoordinator {
                 .ok_or(VerbalixError::StaleSelection)?;
             (snapshot, result, lease)
         };
-        let receipt = self.selection.replace_guarded(&snapshot, &result, &lease)?;
-        let mutation = self
-            .mutation_journal
-            .record(receipt, snapshot.clone(), result.clone());
+        let receipt = self.execute_replace(&snapshot, &result, &lease)?;
+        let mutation = self.record_confirmed_mutation(receipt, snapshot.clone(), result.clone())?;
         let Some(undo_lease) =
             self.promote_confirmed_mutation(&snapshot, &result, &lease, &mutation)
         else {

@@ -1,5 +1,5 @@
 use crate::{
-    application::{MutationReceipt, PublicationGuard},
+    application::{MutationProjection, MutationReceipt, PublicationGuard},
     domain::{Rect, SelectionSnapshot, VerbalixError},
 };
 
@@ -22,6 +22,15 @@ pub trait SelectionPort: Send + Sync {
             snapshot_id: expected.id,
             request_id: lease.request_id(),
         })
+    }
+    fn replace_guarded_with_id(
+        &self,
+        expected: &SelectionSnapshot,
+        text: &str,
+        lease: &PublicationGuard,
+        _mutation_id: uuid::Uuid,
+    ) -> Result<MutationReceipt, VerbalixError> {
+        self.replace_guarded(expected, text, lease)
     }
     fn restore_guarded(
         &self,
@@ -46,6 +55,13 @@ pub trait SelectionPort: Send + Sync {
     ) -> Result<(), VerbalixError>;
 
     fn discard_snapshot(&self, _snapshot_id: uuid::Uuid) {}
+
+    fn reconcile_mutation(
+        &self,
+        _mutation_id: uuid::Uuid,
+    ) -> Result<Option<MutationProjection>, VerbalixError> {
+        Ok(None)
+    }
 }
 
 pub trait OverlayPort: Send + Sync {

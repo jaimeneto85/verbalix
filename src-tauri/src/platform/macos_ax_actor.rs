@@ -1,6 +1,6 @@
 use super::{causal_epoch::CausalEpoch, macos_ax_actor_state::ActorState};
 use crate::{
-    application::{MutationReceipt, PublicationGuard},
+    application::{MutationProjection, MutationReceipt, PublicationGuard},
     domain::{SelectionSnapshot, VerbalixError},
 };
 use std::{
@@ -15,6 +15,7 @@ use uuid::Uuid;
 enum Command {
     Capture(mpsc::Sender<Result<SelectionSnapshot, VerbalixError>>),
     Replace {
+        receipt: MutationReceipt,
         expected: SelectionSnapshot,
         text: String,
         lease: Option<PublicationGuard>,
@@ -27,6 +28,10 @@ enum Command {
         response: mpsc::Sender<Result<MutationReceipt, VerbalixError>>,
     },
     Discard(Uuid),
+    Reconcile {
+        mutation_id: Uuid,
+        response: mpsc::Sender<Option<MutationProjection>>,
+    },
     #[cfg(test)]
     TestBoundary {
         observed_epoch: u64,
@@ -60,12 +65,13 @@ impl AxActor {
                         let _ = response.send(state.capture());
                     }
                     Command::Replace {
+                        receipt,
                         expected,
                         text,
                         lease,
                         response,
                     } => {
-                        let _ = response.send(state.replace(expected, text, lease));
+                        let _ = response.send(state.replace(receipt, expected, text, lease));
                     }
                     Command::Restore {
                         expected,
@@ -77,6 +83,12 @@ impl AxActor {
                     }
                     Command::Discard(id) => {
                         state.discard(id);
+                    }
+                    Command::Reconcile {
+                        mutation_id,
+                        response,
+                    } => {
+                        let _ = response.send(state.reconcile(mutation_id));
                     }
                     #[cfg(test)]
                     Command::TestBoundary {
@@ -132,8 +144,17 @@ impl AxActor {
         expected: &SelectionSnapshot,
         text: &str,
         lease: Option<PublicationGuard>,
+        mutation_id: Uuid,
     ) -> Result<MutationReceipt, VerbalixError> {
+        let receipt = MutationReceipt {
+            id: mutation_id,
+            snapshot_id: expected.id,
+            request_id: lease
+                .as_ref()
+                .map_or(Uuid::nil(), |lease| lease.request_id()),
+        };
         self.request(|response| Command::Replace {
+            receipt,
             expected: expected.clone(),
             text: text.to_owned(),
             lease,
@@ -157,6 +178,20 @@ impl AxActor {
 
     pub(super) fn discard(&self, id: Uuid) {
         let _ = self.sender.send(Command::Discard(id));
+    }
+
+    pub(super) fn reconcile(
+        &self,
+        mutation_id: Uuid,
+    ) -> Result<Option<MutationProjection>, VerbalixError> {
+        let (sender, receiver) = mpsc::channel();
+        self.sender
+            .send(Command::Reconcile {
+                mutation_id,
+                response: sender,
+            })
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        receiver.recv().map_err(|_| VerbalixError::LocalFailure)
     }
 
     fn request<T>(

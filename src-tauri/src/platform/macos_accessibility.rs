@@ -4,7 +4,7 @@ use super::{
     macos_focus::{AxCategory, AxStage, ExtractionOrigin},
 };
 use crate::{
-    application::{MutationReceipt, PublicationGuard, SelectionPort},
+    application::{MutationProjection, MutationReceipt, PublicationGuard, SelectionPort},
     domain::{SelectionSnapshot, VerbalixError},
 };
 use std::sync::Arc;
@@ -60,7 +60,9 @@ impl SelectionPort for MacAccessibility {
     }
 
     fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
-        self.actor.replace(expected, text, None).map(|_| ())
+        self.actor
+            .replace(expected, text, None, uuid::Uuid::new_v4())
+            .map(|_| ())
     }
 
     fn replace_guarded(
@@ -69,7 +71,19 @@ impl SelectionPort for MacAccessibility {
         text: &str,
         lease: &PublicationGuard,
     ) -> Result<MutationReceipt, VerbalixError> {
-        self.actor.replace(expected, text, Some(lease.clone()))
+        self.actor
+            .replace(expected, text, Some(lease.clone()), uuid::Uuid::new_v4())
+    }
+
+    fn replace_guarded_with_id(
+        &self,
+        expected: &SelectionSnapshot,
+        text: &str,
+        lease: &PublicationGuard,
+        mutation_id: uuid::Uuid,
+    ) -> Result<MutationReceipt, VerbalixError> {
+        self.actor
+            .replace(expected, text, Some(lease.clone()), mutation_id)
     }
 
     fn restore(
@@ -94,6 +108,13 @@ impl SelectionPort for MacAccessibility {
 
     fn discard_snapshot(&self, snapshot_id: uuid::Uuid) {
         self.actor.discard(snapshot_id);
+    }
+
+    fn reconcile_mutation(
+        &self,
+        mutation_id: uuid::Uuid,
+    ) -> Result<Option<MutationProjection>, VerbalixError> {
+        self.actor.reconcile(mutation_id)
     }
 }
 

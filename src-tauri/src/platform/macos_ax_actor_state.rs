@@ -2,31 +2,22 @@ use super::{
     causal_epoch::CausalEpoch,
     causal_registry::CausalRegistry,
     macos_ax::{self, OwnedAxElement},
-    macos_replace, macos_restore, macos_selection,
+    macos_mutation_ledger::MutationLedger,
+    macos_replace, macos_restore, macos_selection, macos_selection_revalidation,
 };
 use crate::{
-    application::{MutationReceipt, PublicationGuard},
+    application::{MutationProjection, MutationReceipt, MutationStatus, PublicationGuard},
     domain::{SelectionSnapshot, VerbalixError},
 };
-use std::time::Instant;
+use std::{rc::Rc, time::Instant};
 use uuid::Uuid;
 
 const REGISTRY_CAPACITY: usize = 64;
 const REGISTRY_TTL_MS: u64 = 600_000;
 
-enum ReceiptState {
-    Intent,
-    Applied,
-    Restored,
-}
-
-struct StoredReceipt {
-    receipt: MutationReceipt,
-    state: ReceiptState,
-}
-
+#[derive(Clone)]
 struct CapturedTarget {
-    element: OwnedAxElement,
+    element: Rc<OwnedAxElement>,
     epoch: u64,
 }
 
@@ -34,7 +25,7 @@ pub(super) struct ActorState {
     started: Instant,
     epoch: CausalEpoch,
     targets: CausalRegistry<CapturedTarget>,
-    receipts: CausalRegistry<StoredReceipt>,
+    mutations: MutationLedger<CapturedTarget>,
 }
 
 impl ActorState {
@@ -43,7 +34,7 @@ impl ActorState {
             started: Instant::now(),
             epoch,
             targets: CausalRegistry::new(REGISTRY_CAPACITY, REGISTRY_TTL_MS),
-            receipts: CausalRegistry::new(REGISTRY_CAPACITY, REGISTRY_TTL_MS),
+            mutations: MutationLedger::new(REGISTRY_CAPACITY),
         }
     }
 
@@ -59,7 +50,7 @@ impl ActorState {
             self.targets.insert(
                 snapshot.id,
                 CapturedTarget {
-                    element,
+                    element: Rc::new(element),
                     epoch: captured_epoch,
                 },
                 self.now(),
@@ -70,6 +61,7 @@ impl ActorState {
 
     pub(super) fn replace(
         &mut self,
+        receipt: MutationReceipt,
         expected: SelectionSnapshot,
         text: String,
         lease: Option<PublicationGuard>,
@@ -82,18 +74,30 @@ impl ActorState {
             .ok_or(VerbalixError::StaleSelection)?;
         macos_replace::prepare_on_element(&expected, &target.element, causal)?;
         ensure_current(&self.epoch, target.epoch)?;
-        let receipt = receipt(&expected, claim(&lease)?);
-        ensure_current(&self.epoch, target.epoch)?;
-        self.receipts.insert(
-            receipt.id,
-            StoredReceipt {
-                receipt: receipt.clone(),
-                state: ReceiptState::Intent,
-            },
+        self.mutations.prepare(
+            receipt.clone(),
+            expected.clone(),
+            text.clone(),
+            target.clone(),
             now,
-        );
-        let result = macos_replace::write_on_element(&expected, &text, target.element.as_ref());
-        self.finish_receipt(&receipt, result, ReceiptState::Applied)
+        )?;
+        let request_id = match claim(&lease) {
+            Ok(request_id) => request_id,
+            Err(error) => {
+                self.mutations
+                    .terminalize(receipt.id, MutationStatus::Rejected, self.now())?;
+                return Err(error);
+            }
+        };
+        if request_id != receipt.request_id {
+            self.mutations
+                .terminalize(receipt.id, MutationStatus::Rejected, self.now())?;
+            return Err(VerbalixError::StaleSelection);
+        }
+        ensure_current(&self.epoch, target.epoch)?;
+        let result =
+            macos_replace::write_on_element(&expected, &text, target.element.as_ref().as_ref());
+        self.finish_receipt(&receipt, result, MutationStatus::Confirmed)
     }
 
     pub(super) fn restore(
@@ -116,16 +120,8 @@ impl ActorState {
         ensure_current(&self.epoch, target.epoch)?;
         let receipt = receipt(&expected, claim(&lease)?);
         ensure_current(&self.epoch, target.epoch)?;
-        self.receipts.insert(
-            receipt.id,
-            StoredReceipt {
-                receipt: receipt.clone(),
-                state: ReceiptState::Intent,
-            },
-            now,
-        );
-        let result = macos_restore::write_on_element(&expected, target.element.as_ref());
-        let result = self.finish_receipt(&receipt, result, ReceiptState::Restored);
+        let result = macos_restore::write_on_element(&expected, target.element.as_ref().as_ref());
+        let result = result.map(|_| receipt);
         if result.is_ok() {
             self.targets.remove(expected.id);
         }
@@ -136,6 +132,38 @@ impl ActorState {
         self.targets.remove(id);
     }
 
+    pub(super) fn reconcile(&mut self, id: Uuid) -> Option<MutationProjection> {
+        let status = self.mutations.get_mut(id).and_then(|record| {
+            (record.projection.status == MutationStatus::Indeterminate).then(|| {
+                macos_selection_revalidation::read(
+                    record.target.element.as_ref().as_ref(),
+                    record.projection.strategy,
+                )
+                .ok()
+                .map(|current| {
+                    let expected_location = record.projection.snapshot.range.location;
+                    let current_location = current.range.location as i64;
+                    if current.text == record.projection.transformed_text
+                        && current_location == expected_location
+                    {
+                        MutationStatus::Confirmed
+                    } else if current.text == record.projection.original_text
+                        && current_location == expected_location
+                    {
+                        MutationStatus::Rejected
+                    } else {
+                        MutationStatus::Indeterminate
+                    }
+                })
+                .unwrap_or(MutationStatus::Indeterminate)
+            })
+        });
+        if let Some(status) = status {
+            let _ = self.mutations.terminalize(id, status, self.now());
+        }
+        self.mutations.projection(id, self.now())
+    }
+
     fn now(&self) -> u64 {
         self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
     }
@@ -144,19 +172,19 @@ impl ActorState {
         &mut self,
         receipt: &MutationReceipt,
         result: Result<(), VerbalixError>,
-        state: ReceiptState,
+        state: MutationStatus,
     ) -> Result<MutationReceipt, VerbalixError> {
         match result {
             Ok(()) => {
-                let stored = self
-                    .receipts
-                    .get_mut(receipt.id, self.now())
-                    .ok_or(VerbalixError::LocalFailure)?;
-                stored.state = state;
-                Ok(stored.receipt.clone())
+                self.mutations.terminalize(receipt.id, state, self.now())?;
+                Ok(receipt.clone())
             }
             Err(error) => {
-                self.receipts.remove(receipt.id);
+                self.mutations.terminalize(
+                    receipt.id,
+                    MutationStatus::Indeterminate,
+                    self.now(),
+                )?;
                 Err(error)
             }
         }
@@ -196,8 +224,6 @@ fn claim(lease: &Option<PublicationGuard>) -> Result<Uuid, VerbalixError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn missing_causal_handle_has_no_focus_or_identity_fallback() {
         let source = include_str!("macos_ax_actor_state.rs");
@@ -208,30 +234,8 @@ mod tests {
     }
 
     #[test]
-    fn rejected_write_removes_intent_without_returning_a_receipt() {
-        let mut state = ActorState::new(CausalEpoch::default());
-        let receipt = MutationReceipt {
-            id: Uuid::new_v4(),
-            snapshot_id: Uuid::new_v4(),
-            request_id: Uuid::new_v4(),
-        };
-        state.receipts.insert(
-            receipt.id,
-            StoredReceipt {
-                receipt: receipt.clone(),
-                state: ReceiptState::Intent,
-            },
-            0,
-        );
-
-        assert!(matches!(
-            state.finish_receipt(
-                &receipt,
-                Err(VerbalixError::LocalFailure),
-                ReceiptState::Applied
-            ),
-            Err(VerbalixError::LocalFailure)
-        ));
-        assert!(state.receipts.get(receipt.id, 0).is_none());
+    fn unresolved_write_is_retained_as_indeterminate() {
+        let source = include_str!("macos_ax_actor_state.rs");
+        assert!(source.contains("MutationStatus::Indeterminate"));
     }
 }

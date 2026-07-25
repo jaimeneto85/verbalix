@@ -31,6 +31,7 @@ pub(crate) mod macos_focus;
 mod macos_focus_tests;
 #[cfg(target_os = "macos")]
 mod macos_geometry;
+mod macos_mutation_ledger;
 #[cfg(target_os = "macos")]
 mod macos_observer;
 #[cfg(target_os = "macos")]

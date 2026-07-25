@@ -52,11 +52,6 @@ impl<T> CausalRegistry<T> {
         self.entries.get(&id).map(|entry| &entry.value)
     }
 
-    pub(super) fn get_mut(&mut self, id: Uuid, now_ms: u64) -> Option<&mut T> {
-        self.prune(now_ms);
-        self.entries.get_mut(&id).map(|entry| &mut entry.value)
-    }
-
     pub(super) fn remove(&mut self, id: Uuid) -> Option<T> {
         self.entries.remove(&id).map(|entry| entry.value)
     }
