@@ -60,6 +60,9 @@
 - [ ] RF17: Capacidade de leitura e de escrita são independentes: o fallback só é writable quando `AXSelectedText` é comprovadamente settable; `AXValue` completo não será sobrescrito neste escopo.
 - [ ] RF18: A estratégia de extração participa de `same_target`, replace e restore; não há revalidação cruzada entre `SelectedText`, `ValueRange` e `TextMarker`.
 - [ ] RF19: O fallback acessa no máximo 262.144 code units UTF-16 do valor, copia somente o range selecionado para memória Rust e nunca loga, persiste ou envia prefixo/sufixo ao provider.
+- [ ] RF20: Protected fields e roles fora da allowlist textual falham antes de qualquer leitura de `AXSelectedText`, `AXStringForRange` ou `AXValue`.
+- [ ] RF21: Quando `AXIdentifier` não existe, captura, replace e restore usam a mesma referência AX retida causalmente por snapshot, com TTL/capacidade e cleanup; `role + frame` nunca substitui identidade forte.
+- [ ] RF22: Toda mutação AX confirmada gera receipt lógico durável suficiente para `Applied + undo`; falha pós-setter não deixa alteração órfã nem reclassifica sucesso como ausência de write.
 
 ### Requisitos não funcionais
 
@@ -89,6 +92,9 @@
 - [ ] CA17: O smoke registra separadamente `identifier_present`, `AXSelectedText_settable`, `AXValue_cfstring` e `AXSelectedTextRange_settable`, sem conteúdo; a árvore real já evidencia o alvo `First Text View` e edição settable.
 - [ ] CA18: Campo protegido, role não textual, valor acima do limite ou `AXValue` não-CFString produz zero materialização de texto e zero escrita.
 - [ ] CA19: Falha pós-setter não reclassifica a mutação como inexistente; undo só restaura quando o mesmo alvo e o resultado transformado ainda ocupam o range esperado.
+- [ ] CA20: Trace prova zero APIs de conteúdo chamadas para secure/non-text roles, inclusive caminhos direct/CFRange/value/marker.
+- [ ] CA21: Snapshot sem identifier substitui/restaura somente pelo handle AX original retido; handle ausente, expirado ou divergente produz zero setter.
+- [ ] CA22: Setter bem-sucedido seguido de falha de commit/feedback mantém receipt, estado Applied recuperável e undo; setter rejeitado não cria receipt.
 
 ### Edge cases
 
@@ -148,6 +154,9 @@
 - A origem de captura deve acompanhar o snapshot/revalidação para que um snapshot obtido por `AXValue` não seja validado por uma estratégia incompatível ou promovido a writable sem setter comprovado.
 - Antes da implementação mutável, um probe sanitizado deve decidir a identidade do TextEdit: `AXIdentifier` forte quando presente; se ausente, usar retenção causal do `AXUIElementRef` original com lifecycle limitado, nunca `role + frame` como substituto.
 - A leitura deve obter `range₁ → AXValue → range₂`, exigir igualdade e usar APIs de CFString para validar comprimento e copiar somente o range; valor maior que 262.144 code units falha fechado.
+- O gate de role ocorre imediatamente após `AXRole` e antes de qualquer API que possa materializar conteúdo; a allowlist é explícita e coberta por trace.
+- O registry causal pertence à instância `MacAccessibility`, retém o `AXUIElementRef` sob `snapshot.id`, é limitado/expirável e só resolve após PID/role/estratégia/range/subtexto revalidados; entradas são removidas ao expirar/consumir e nunca serializadas.
+- O setter retorna resultado tipado e receipt. O receipt de mutação é registrado independentemente da apresentação/state machine antes de qualquer operação que possa falhar; `Applied`/undo podem ser reconciliados sem sobrescrever Candidate mais novo.
 - Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
@@ -183,6 +192,9 @@
 - [ ] T2.12 `[MEDIUM]` Reduzir invalidation spam somente se a captura equivalente pelo fallback comprovar o mesmo alvo/range/texto, preservando invalidação real.
 - [ ] T2.13 `[HIGH]` Executar probe sanitizado do TextEdit e implementar identidade forte por identifier ou retenção causal do elemento original, conforme evidência.
 - [ ] T2.14 `[MEDIUM]` Generalizar consulta de settable/setter por atributo, mantendo `AXSelectedText` como único writer do fallback e `AXValue` como leitura range-only.
+- [ ] T2.15 `[HIGH]` Mover a allowlist de role para antes de qualquer leitura de conteúdo e provar zero-read por adapter trace.
+- [ ] T2.16 `[HIGH]` Implementar registry causal bounded/TTL do `OwnedAxElement` por snapshot e integrá-lo a capture/replace/restore sem unsafe identidade fraca.
+- [ ] T2.17 `[HIGH]` Introduzir write receipt e reconciliação pós-setter para preservar Applied/undo fora do estado visual latest-wins.
 
 ### Fase 3 — Testes
 
@@ -200,6 +212,9 @@
 - [ ] T3.12 `[HIGH]` Cobrir UTF-16 BMP/emoji/combining, ranges inválidos, value read-only/settable, mutação concorrente, replace/restore e zero setter em staleness.
 - [ ] T3.13 `[MEDIUM]` Executar smoke macOS real no TextEdit para captura, toolbar, Traduzir, Aprimorar e Desfazer.
 - [ ] T3.14 `[HIGH]` Cobrir matriz independente de leitura/setter, `range₁/value/range₂`, limite, CFString inválida, protected field antes do value, identidade ausente/retida e falha pós-write.
+- [ ] T3.15 `[HIGH]` Cobrir trace zero-read para cada role bloqueada e ausência de regressão nos roles textuais suportados.
+- [ ] T3.16 `[HIGH]` Cobrir registry: identifier presente/ausente, handle exato, TTL, capacidade, cleanup, divergência e zero setter sem receipt causal.
+- [ ] T3.17 `[HIGH]` Cobrir setter success/failure/indeterminate, falha de commit/feedback, Candidate concorrente, receipt recuperável e undo sem sobrescrever seleção nova.
 
 ### Fase 4 — QA real
 
@@ -227,6 +242,7 @@
 - A nova evidência do TextEdit justifica leitura restrita de `AXValue`, mas não setter integral: somente o trecho selecionado é copiado e o writer continua sendo `AXSelectedText` quando settable.
 - O probe Swift externo falhou fechado por TCC (`-25204`) e não tentou mutação; a árvore real via Computer Use evidencia identidade `First Text View`, valor legível e edição settable, suficientes para a primeira implementação conservadora.
 - Capacidade deve ser diagnosticada uma vez por transição/categoria no build de smoke, sem texto, range concreto ou identificador.
+- O QA RF16 encontrou que a allowlist era aplicada tarde, que o handle causal não sobrevivia à captura e que o commit lógico ocorria depois do setter sem receipt independente; RF20–RF22 tornam esses pontos gates explícitos.
 
 ### 🟢 Oportunidades incorporadas
 
