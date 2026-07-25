@@ -256,14 +256,59 @@ pub(super) fn pid(element: AXUIElementRef) -> Result<i32, AxFailure> {
     }
 }
 
-pub(super) fn set_selected_text(element: AXUIElementRef, text: &str) -> bool {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum AxWriteResult {
+    Confirmed,
+    Rejected(AxCategory),
+    Indeterminate(AxCategory),
+}
+
+pub(super) fn set_selected_text(element: AXUIElementRef, text: &str) -> AxWriteResult {
     let attribute = CFString::new("AXSelectedText");
     let value = CFString::new(text);
-    unsafe {
+    let status = unsafe {
         AXUIElementSetAttributeValue(
             element,
             attribute.as_concrete_TypeRef(),
             value.as_CFTypeRef(),
-        ) == AX_SUCCESS
+        )
+    };
+    classify_write_status(status)
+}
+
+fn classify_write_status(status: AXError) -> AxWriteResult {
+    let category = AxCategory::from_status(status);
+    let result = if status == AX_SUCCESS {
+        AxWriteResult::Confirmed
+    } else if matches!(category, AxCategory::CannotComplete | AxCategory::Failure) {
+        AxWriteResult::Indeterminate(category)
+    } else {
+        AxWriteResult::Rejected(category)
+    };
+    crate::diagnostics::ax_resolution(
+        AxStage::SelectedTextWrite,
+        ExtractionOrigin::SelectedText,
+        category,
+    );
+    result
+}
+
+#[cfg(test)]
+mod write_tests {
+    use super::*;
+
+    #[test]
+    fn write_status_distinguishes_confirmed_rejected_and_indeterminate() {
+        assert_eq!(classify_write_status(AX_SUCCESS), AxWriteResult::Confirmed);
+        assert_eq!(
+            classify_write_status(-25205),
+            AxWriteResult::Rejected(AxCategory::AttributeUnsupported)
+        );
+        for status in [-25200, -25204] {
+            assert!(matches!(
+                classify_write_status(status),
+                AxWriteResult::Indeterminate(_)
+            ));
+        }
     }
 }

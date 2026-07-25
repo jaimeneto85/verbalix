@@ -1,19 +1,23 @@
 use super::{
     macos_ax::{self, OwnedAxElement},
+    macos_ax_actor::AxActor,
     macos_focus::{AxCategory, AxStage, ExtractionOrigin},
-    macos_selection,
 };
 use crate::{
-    application::{SelectionPort, TransformLease},
+    application::{MutationReceipt, PublicationGuard, SelectionPort},
     domain::{SelectionSnapshot, VerbalixError},
 };
 use std::sync::Arc;
 
-pub struct MacAccessibility;
+pub struct MacAccessibility {
+    actor: AxActor,
+}
 
 impl MacAccessibility {
     pub fn new() -> Self {
-        Self
+        Self {
+            actor: AxActor::new(),
+        }
     }
 
     pub fn start_observer(&self, callback: Arc<dyn Fn() + Send + Sync>) {
@@ -44,21 +48,20 @@ impl SelectionPort for MacAccessibility {
             ExtractionOrigin::SelectedText,
             AxCategory::Success,
         );
-        let element = Self::focused_element()?;
-        macos_selection::capture(&element)
+        self.actor.capture()
     }
 
     fn replace(&self, expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
-        super::macos_replace::replace(expected, text)
+        self.actor.replace(expected, text, None).map(|_| ())
     }
 
     fn replace_guarded(
         &self,
         expected: &SelectionSnapshot,
         text: &str,
-        lease: &TransformLease,
-    ) -> Result<(), VerbalixError> {
-        super::macos_replace::replace_guarded(expected, text, lease)
+        lease: &PublicationGuard,
+    ) -> Result<MutationReceipt, VerbalixError> {
+        self.actor.replace(expected, text, Some(lease.clone()))
     }
 
     fn restore(
@@ -66,16 +69,23 @@ impl SelectionPort for MacAccessibility {
         expected: &SelectionSnapshot,
         transformed_text: &str,
     ) -> Result<(), VerbalixError> {
-        super::macos_restore::restore(expected, transformed_text)
+        self.actor
+            .restore(expected, transformed_text, None)
+            .map(|_| ())
     }
 
     fn restore_guarded(
         &self,
         expected: &SelectionSnapshot,
         transformed_text: &str,
-        lease: &TransformLease,
-    ) -> Result<(), VerbalixError> {
-        super::macos_restore::restore_guarded(expected, transformed_text, lease)
+        lease: &PublicationGuard,
+    ) -> Result<MutationReceipt, VerbalixError> {
+        self.actor
+            .restore(expected, transformed_text, Some(lease.clone()))
+    }
+
+    fn discard_snapshot(&self, snapshot_id: uuid::Uuid) {
+        self.actor.discard(snapshot_id);
     }
 }
 

@@ -1,45 +1,52 @@
-use super::{macos_ax, macos_selection};
-use crate::{
-    application::TransformLease,
-    domain::{SelectionSnapshot, VerbalixError},
+use super::{
+    macos_ax::{self, AXUIElementRef, AxWriteResult, OwnedAxElement},
+    macos_selection, macos_selection_revalidation,
 };
+use crate::domain::{SelectionSnapshot, VerbalixError};
 
-pub fn replace(expected: &SelectionSnapshot, text: &str) -> Result<(), VerbalixError> {
-    replace_validated(expected, text, || true)
+pub(super) fn prepare_on_element(
+    expected: &SelectionSnapshot,
+    element: &OwnedAxElement,
+    causal: bool,
+) -> Result<(), VerbalixError> {
+    validate_expected(expected, causal)?;
+    let current = macos_selection::capture_with_strategy(element, expected.extraction_strategy)?;
+    validate_current(expected, &current)
 }
 
-pub fn replace_guarded(
+pub(super) fn write_on_element(
     expected: &SelectionSnapshot,
     text: &str,
-    lease: &TransformLease,
+    element: AXUIElementRef,
 ) -> Result<(), VerbalixError> {
-    replace_validated(expected, text, || lease.try_claim_write())
-}
-
-fn replace_validated(
-    expected: &SelectionSnapshot,
-    text: &str,
-    claim: impl FnOnce() -> bool,
-) -> Result<(), VerbalixError> {
-    validate_expected(expected)?;
-    let element = macos_ax::focused_element_for_pid(expected.pid)
-        .map_err(|_| VerbalixError::StaleSelection)?;
-    let current = macos_selection::capture_with_strategy(&element, expected.extraction_strategy)?;
-    validate_current(expected, &current)?;
-    if !claim() {
-        return Err(VerbalixError::StaleSelection);
+    match macos_ax::set_selected_text(element, text) {
+        AxWriteResult::Confirmed => Ok(()),
+        AxWriteResult::Rejected(_) => Err(VerbalixError::LocalFailure),
+        AxWriteResult::Indeterminate(_) => {
+            let current =
+                macos_selection_revalidation::read(element, expected.extraction_strategy)?;
+            let location = isize::try_from(expected.range.location)
+                .map_err(|_| VerbalixError::StaleSelection)?;
+            let length = isize::try_from(text.encode_utf16().count())
+                .map_err(|_| VerbalixError::StaleSelection)?;
+            if current.text == text
+                && current.range.location == location
+                && current.range.length == length
+            {
+                Ok(())
+            } else {
+                Err(VerbalixError::LocalFailure)
+            }
+        }
     }
-    macos_ax::set_selected_text(element.as_ref(), text)
-        .then_some(())
-        .ok_or(VerbalixError::LocalFailure)
 }
 
-fn validate_expected(expected: &SelectionSnapshot) -> Result<(), VerbalixError> {
+fn validate_expected(expected: &SelectionSnapshot, causal: bool) -> Result<(), VerbalixError> {
     let strong = expected
         .element_identity
         .as_ref()
         .and_then(|identity| identity.strong_identifier());
-    if !expected.writable || expected.pid <= 0 || strong.is_none() {
+    if !expected.writable || expected.pid <= 0 || (strong.is_none() && !causal) {
         return Err(VerbalixError::StaleSelection);
     }
     Ok(())
@@ -103,11 +110,12 @@ mod tests {
             invalid_pid,
         ] {
             assert!(matches!(
-                validate_expected(&invalid),
+                validate_expected(&invalid, false),
                 Err(VerbalixError::StaleSelection)
             ));
         }
-        assert!(validate_expected(&snapshot(Some("editor"), true)).is_ok());
+        assert!(validate_expected(&snapshot(Some("editor"), true), false).is_ok());
+        assert!(validate_expected(&snapshot(None, true), true).is_ok());
     }
 
     #[test]

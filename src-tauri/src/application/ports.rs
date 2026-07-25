@@ -1,5 +1,5 @@
 use crate::{
-    application::{PublicationGuard, TransformLease},
+    application::{MutationReceipt, PublicationGuard},
     domain::{Rect, SelectionSnapshot, VerbalixError},
 };
 
@@ -11,29 +11,41 @@ pub trait SelectionPort: Send + Sync {
         &self,
         expected: &SelectionSnapshot,
         text: &str,
-        lease: &TransformLease,
-    ) -> Result<(), VerbalixError> {
+        lease: &PublicationGuard,
+    ) -> Result<MutationReceipt, VerbalixError> {
         if !lease.try_claim_write() {
             return Err(VerbalixError::StaleSelection);
         }
-        self.replace(expected, text)
+        self.replace(expected, text)?;
+        Ok(MutationReceipt {
+            id: uuid::Uuid::new_v4(),
+            snapshot_id: expected.id,
+            request_id: lease.request_id(),
+        })
     }
     fn restore_guarded(
         &self,
         expected: &SelectionSnapshot,
         transformed_text: &str,
-        lease: &TransformLease,
-    ) -> Result<(), VerbalixError> {
+        lease: &PublicationGuard,
+    ) -> Result<MutationReceipt, VerbalixError> {
         if !lease.try_claim_write() {
             return Err(VerbalixError::StaleSelection);
         }
-        self.restore(expected, transformed_text)
+        self.restore(expected, transformed_text)?;
+        Ok(MutationReceipt {
+            id: uuid::Uuid::new_v4(),
+            snapshot_id: expected.id,
+            request_id: lease.request_id(),
+        })
     }
     fn restore(
         &self,
         expected: &SelectionSnapshot,
         transformed_text: &str,
     ) -> Result<(), VerbalixError>;
+
+    fn discard_snapshot(&self, _snapshot_id: uuid::Uuid) {}
 }
 
 pub trait OverlayPort: Send + Sync {

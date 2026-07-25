@@ -65,6 +65,10 @@ impl TransformLease {
         self.snapshot_id == snapshot_id && self.request_id == request_id
     }
 
+    pub(crate) fn request_id(&self) -> Uuid {
+        self.request_id
+    }
+
     pub(crate) fn cancel(&self) {
         let _ = self.write_phase.compare_exchange(
             ACTIVE,

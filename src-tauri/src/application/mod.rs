@@ -4,6 +4,7 @@ mod coordinator;
 mod coordinator_commit;
 mod coordinator_presentation;
 mod coordinator_transform;
+mod mutation;
 mod ports;
 mod runtime_pause;
 mod settings_file;
@@ -16,6 +17,7 @@ pub use ai_readiness::{
 };
 pub use auth_refresh::RemoteAuthRepository;
 pub use coordinator::SelectionCoordinator;
+pub use mutation::MutationReceipt;
 pub use ports::{ClipboardPort, OverlayPort, SelectionPort};
 pub use runtime_pause::RuntimePause;
 pub use settings_file::JsonSettingsRepository;

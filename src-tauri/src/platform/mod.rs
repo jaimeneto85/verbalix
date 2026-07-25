@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod causal_registry;
 mod clipboard;
 mod note_result;
 mod overlay;
@@ -16,6 +18,10 @@ mod macos_accessibility;
 mod macos_attribute;
 #[cfg(target_os = "macos")]
 mod macos_ax;
+#[cfg(target_os = "macos")]
+mod macos_ax_actor;
+#[cfg(target_os = "macos")]
+mod macos_ax_actor_state;
 #[cfg(target_os = "macos")]
 mod macos_classic_range;
 #[cfg(target_os = "macos")]

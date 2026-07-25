@@ -1,5 +1,5 @@
 use super::*;
-use crate::application::TransformLease;
+use crate::application::{MutationReceipt, PublicationGuard};
 use std::{
     sync::{Arc, Condvar},
     thread,
@@ -69,8 +69,8 @@ impl SelectionPort for BlockingRestoreSelection {
         &self,
         _expected: &SelectionSnapshot,
         transformed_text: &str,
-        lease: &TransformLease,
-    ) -> Result<(), VerbalixError> {
+        lease: &PublicationGuard,
+    ) -> Result<MutationReceipt, VerbalixError> {
         if matches!(self.point, RestoreGatePoint::BeforeClaim) {
             self.enter_and_wait();
         }
@@ -84,7 +84,11 @@ impl SelectionPort for BlockingRestoreSelection {
             .lock()
             .unwrap()
             .push(transformed_text.to_owned());
-        Ok(())
+        Ok(MutationReceipt {
+            id: Uuid::new_v4(),
+            snapshot_id: _expected.id,
+            request_id: lease.request_id(),
+        })
     }
 
     fn restore(

@@ -227,6 +227,7 @@ impl SelectionCoordinator {
             .current_snapshot()
             .filter(|current| current.same_target(&snapshot))
         {
+            self.selection.discard_snapshot(snapshot.id);
             diagnostics::coordinator("equivalent_target_reused", Some(&active));
             return Ok(Some(active));
         }
