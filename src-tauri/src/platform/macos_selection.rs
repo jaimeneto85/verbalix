@@ -3,7 +3,7 @@ use super::{
     macos_ax::{self, AXUIElementRef, OwnedAxElement},
     macos_classic_range::{self, CFRange},
     macos_focus::{marker_fallback, AxCategory, AxFailure, AxStage, ExtractionOrigin},
-    macos_geometry, macos_text_marker, macos_value_range,
+    macos_geometry, macos_text_marker, macos_text_role, macos_value_range,
 };
 use crate::domain::{
     GeometrySource, SelectionElementIdentity, SelectionExtractionStrategy, SelectionSnapshot,
@@ -23,14 +23,12 @@ pub(super) fn capture(element: &OwnedAxElement) -> Result<SelectionSnapshot, Ver
     let origin = ExtractionOrigin::SelectedText;
     let pid = validated_pid(element.as_ref(), origin)?;
     let role = role(element.as_ref())?;
-    if role == "AXSecureTextField" {
-        return Err(VerbalixError::ProtectedField);
-    }
+    let capability = macos_text_role::validate(&role)?;
     let identity = element_identity(element.as_ref(), role.clone())?;
     if crate::diagnostics::enabled() {
         macos_attribute::diagnose_selected_range_writable(element.as_ref());
     }
-    let extracted = extract(element.as_ref(), &role)?;
+    let extracted = extract(element.as_ref(), &role, capability)?;
     if validated_pid(element.as_ref(), strategy_origin(extracted.strategy))? != pid
         || element_identity(element.as_ref(), role)? != identity
     {
@@ -46,14 +44,15 @@ pub(super) fn capture_with_strategy(
     let origin = strategy_origin(strategy);
     let pid = validated_pid(element.as_ref(), origin)?;
     let role = role(element.as_ref())?;
-    if role == "AXSecureTextField" {
-        return Err(VerbalixError::ProtectedField);
-    }
+    let capability = macos_text_role::validate(&role).map_err(|error| match error {
+        VerbalixError::ProtectedField => error,
+        _ => VerbalixError::StaleSelection,
+    })?;
     let identity = element_identity(element.as_ref(), role.clone())?;
     if crate::diagnostics::enabled() {
         macos_attribute::diagnose_selected_range_writable(element.as_ref());
     }
-    let extracted = extract_for_strategy(element.as_ref(), &role, strategy)?;
+    let extracted = extract_for_strategy(element.as_ref(), &role, capability, strategy)?;
     if validated_pid(element.as_ref(), origin)? != pid
         || element_identity(element.as_ref(), role)? != identity
     {
@@ -130,7 +129,11 @@ pub(super) fn role(element: AXUIElementRef) -> Result<String, VerbalixError> {
     .map_err(|_| VerbalixError::SelectionUnavailable)
 }
 
-fn extract(element: AXUIElementRef, role: &str) -> Result<ExtractedSelection, VerbalixError> {
+fn extract(
+    element: AXUIElementRef,
+    role: &str,
+    _capability: macos_text_role::TextRoleCapability,
+) -> Result<ExtractedSelection, VerbalixError> {
     let direct = macos_ax::string_attribute(
         element,
         "AXSelectedText",
@@ -167,6 +170,7 @@ fn extract(element: AXUIElementRef, role: &str) -> Result<ExtractedSelection, Ve
 fn extract_for_strategy(
     element: AXUIElementRef,
     role: &str,
+    _capability: macos_text_role::TextRoleCapability,
     strategy: SelectionExtractionStrategy,
 ) -> Result<ExtractedSelection, VerbalixError> {
     match strategy {

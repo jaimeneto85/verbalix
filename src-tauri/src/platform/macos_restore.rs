@@ -1,5 +1,6 @@
 use super::{
-    macos_attribute, macos_ax, macos_selection, macos_selection_revalidation, macos_value_range,
+    macos_attribute, macos_ax, macos_selection, macos_selection_revalidation, macos_text_role,
+    macos_value_range,
 };
 use crate::{
     application::TransformLease,
@@ -28,9 +29,10 @@ fn restore_validated(
     let pid = macos_ax::pid(element.as_ref()).map_err(|_| VerbalixError::StaleSelection)?;
     let own_pid = i32::try_from(std::process::id()).map_err(|_| VerbalixError::StaleSelection)?;
     let role = macos_selection::role(element.as_ref())?;
-    if role == "AXSecureTextField" {
-        return Err(VerbalixError::ProtectedField);
-    }
+    let _capability = macos_text_role::validate(&role).map_err(|error| match error {
+        VerbalixError::ProtectedField => error,
+        _ => VerbalixError::StaleSelection,
+    })?;
     let current_identity = macos_selection::element_identity(element.as_ref(), role.clone())?;
     validate_restore_target(
         expected,

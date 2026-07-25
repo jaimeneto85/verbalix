@@ -39,6 +39,8 @@ mod macos_selection_revalidation;
 #[cfg(target_os = "macos")]
 mod macos_text_marker;
 #[cfg(target_os = "macos")]
+mod macos_text_role;
+#[cfg(target_os = "macos")]
 mod macos_value_range;
 
 pub use clipboard::SystemClipboard;
