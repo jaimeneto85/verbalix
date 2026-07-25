@@ -169,4 +169,22 @@ mod tests {
             ));
         }
     }
+
+    #[test]
+    fn indeterminate_write_reconciles_on_the_same_retained_handle() {
+        let source = include_str!("macos_replace.rs");
+        let write = &source[source
+            .find("pub(super) fn write_on_element")
+            .expect("write boundary")
+            ..source.find("fn validate_expected").expect("validation")];
+        let indeterminate = write
+            .find("AxWriteResult::Indeterminate")
+            .expect("typed indeterminate branch");
+        let reconciliation = write
+            .find("macos_selection_revalidation::read(element, expected.extraction_strategy)")
+            .expect("same-handle reconciliation");
+
+        assert!(reconciliation > indeterminate);
+        assert!(!write.contains(concat!("focused_element_for_", "pid")));
+    }
 }

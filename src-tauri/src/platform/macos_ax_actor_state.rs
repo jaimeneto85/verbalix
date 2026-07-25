@@ -166,6 +166,8 @@ fn claim(lease: &Option<PublicationGuard>) -> Result<Uuid, VerbalixError> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn missing_causal_handle_has_no_focus_or_identity_fallback() {
         let source = include_str!("macos_ax_actor_state.rs");
@@ -173,5 +175,33 @@ mod tests {
             !source.contains(concat!("focused_element_for_", "pid")),
             "an absent or expired causal handle must fail before re-resolving an AX element"
         );
+    }
+
+    #[test]
+    fn rejected_write_removes_intent_without_returning_a_receipt() {
+        let mut state = ActorState::new();
+        let receipt = MutationReceipt {
+            id: Uuid::new_v4(),
+            snapshot_id: Uuid::new_v4(),
+            request_id: Uuid::new_v4(),
+        };
+        state.receipts.insert(
+            receipt.id,
+            StoredReceipt {
+                receipt: receipt.clone(),
+                state: ReceiptState::Intent,
+            },
+            0,
+        );
+
+        assert!(matches!(
+            state.finish_receipt(
+                &receipt,
+                Err(VerbalixError::LocalFailure),
+                ReceiptState::Applied
+            ),
+            Err(VerbalixError::LocalFailure)
+        ));
+        assert!(state.receipts.get(receipt.id, 0).is_none());
     }
 }
