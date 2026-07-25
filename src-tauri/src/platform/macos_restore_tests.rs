@@ -4,11 +4,10 @@ use crate::{
     platform::macos_classic_range::CFRange,
 };
 
-fn identity(identifier: &str) -> SelectionElementIdentity {
+fn identity(_identifier: &str) -> SelectionElementIdentity {
     SelectionElementIdentity {
         role: "AXTextArea".to_owned(),
         subrole: None,
-        identifier: Some(identifier.to_owned()),
         frame: Rect {
             x: 1.0,
             y: 2.0,
@@ -36,6 +35,7 @@ fn snapshot(writable: bool) -> SelectionSnapshot {
         writable,
     )
     .with_element_identity(identity("editor"))
+    .with_native_element_identifier(Some("editor".to_owned()))
 }
 
 #[test]
@@ -50,6 +50,7 @@ fn marker_snapshot_never_reaches_restore_mutation() {
             "AXTextArea",
             true,
             expected.element_identity.as_ref().unwrap(),
+            Some("editor"),
         ),
         Err(VerbalixError::StaleSelection)
     ));
@@ -60,11 +61,18 @@ fn restore_rejects_self_wrong_pid_secure_read_only_and_changed_element() {
     let expected = snapshot(true);
     let expected_identity = expected.element_identity.as_ref().unwrap();
 
-    for (pid, own_pid, role, writable, current_identity) in [
-        (42, 42, "AXTextArea", true, identity("editor")),
-        (43, 7, "AXTextArea", true, identity("editor")),
-        (42, 7, "AXTextArea", false, identity("editor")),
-        (42, 7, "AXTextArea", true, identity("another-editor")),
+    for (pid, own_pid, role, writable, current_identity, current_identifier) in [
+        (42, 42, "AXTextArea", true, identity("editor"), "editor"),
+        (43, 7, "AXTextArea", true, identity("editor"), "editor"),
+        (42, 7, "AXTextArea", false, identity("editor"), "editor"),
+        (
+            42,
+            7,
+            "AXTextArea",
+            true,
+            identity("another-editor"),
+            "another-editor",
+        ),
     ] {
         assert!(matches!(
             validate_restore_target(
@@ -75,6 +83,7 @@ fn restore_rejects_self_wrong_pid_secure_read_only_and_changed_element() {
                 role,
                 writable,
                 &current_identity,
+                Some(current_identifier),
             ),
             Err(VerbalixError::StaleSelection)
         ));
@@ -88,6 +97,7 @@ fn restore_rejects_self_wrong_pid_secure_read_only_and_changed_element() {
             "AXSecureTextField",
             true,
             expected_identity,
+            Some("editor"),
         ),
         Err(VerbalixError::ProtectedField)
     ));
@@ -166,6 +176,7 @@ fn restore_rejects_another_field_in_the_same_pid_even_with_matching_selection() 
             "AXTextArea",
             true,
             &identity("another-editor"),
+            Some("another-editor"),
         ),
         Err(VerbalixError::StaleSelection)
     ));
@@ -176,8 +187,7 @@ fn restore_without_identifier_rejects_before_the_write_boundary() {
     let transformed = "A👩🏽‍💻";
 
     for identifier in [None, Some(String::new()), Some("  ".to_owned())] {
-        let mut expected = snapshot(true);
-        expected.element_identity.as_mut().unwrap().identifier = identifier;
+        let expected = snapshot(true).with_native_element_identifier(identifier);
         let weak_identity = expected.element_identity.as_ref().unwrap();
         let matching_selection = macos_selection_revalidation::CurrentSelection {
             text: transformed.to_owned(),
@@ -199,6 +209,7 @@ fn restore_without_identifier_rejects_before_the_write_boundary() {
                     "AXTextArea",
                     true,
                     weak_identity,
+                    expected.native_element_identifier(),
                 )
             })
             .and_then(|_| validate_restore_selection(&expected, transformed, &matching_selection));

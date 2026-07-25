@@ -25,6 +25,7 @@ pub(super) fn prepare_on_element(
         _ => VerbalixError::StaleSelection,
     })?;
     let current_identity = macos_selection::element_identity(element.as_ref(), &text_role)?;
+    let current_identifier = macos_selection::native_identifier(element.as_ref())?;
     validate_restore_target_with_causality(
         expected,
         RestoreTarget {
@@ -35,6 +36,8 @@ pub(super) fn prepare_on_element(
             writable: macos_attribute::selected_text_writable(element.as_ref())
                 .map_err(|_| VerbalixError::StaleSelection)?,
             current_identity: &current_identity,
+            expected_identifier: expected.native_element_identifier(),
+            current_identifier: current_identifier.as_deref(),
             causal,
         },
     )?;
@@ -86,6 +89,8 @@ struct RestoreTarget<'a> {
     role: &'a str,
     writable: bool,
     current_identity: &'a SelectionElementIdentity,
+    expected_identifier: Option<&'a str>,
+    current_identifier: Option<&'a str>,
     causal: bool,
 }
 
@@ -105,7 +110,9 @@ fn validate_restore_target_with_causality(
         || if target.causal {
             target.expected_identity != target.current_identity
         } else {
-            !same_strong_identity(target.expected_identity, target.current_identity)
+            target.expected_identifier != target.current_identifier
+                || target.expected_identifier.is_none()
+                || target.expected_identity != target.current_identity
         }
     {
         return Err(VerbalixError::StaleSelection);
@@ -122,6 +129,7 @@ fn validate_restore_target(
     role: &str,
     writable: bool,
     current_identity: &SelectionElementIdentity,
+    current_identifier: Option<&str>,
 ) -> Result<(), VerbalixError> {
     validate_restore_target_with_causality(
         expected,
@@ -132,6 +140,8 @@ fn validate_restore_target(
             role,
             writable,
             current_identity,
+            expected_identifier: expected.native_element_identifier(),
+            current_identifier,
             causal: false,
         },
     )
@@ -146,7 +156,7 @@ fn expected_identity(
         .then_some(expected.element_identity.as_ref())
         .flatten()
         .ok_or(VerbalixError::StaleSelection)?;
-    if causal || identity.strong_identifier().is_some() {
+    if causal || expected.native_element_identifier().is_some() {
         Ok(identity)
     } else {
         Err(VerbalixError::StaleSelection)
@@ -158,18 +168,6 @@ fn expected_strong_identity(
     expected: &SelectionSnapshot,
 ) -> Result<&SelectionElementIdentity, VerbalixError> {
     expected_identity(expected, false)
-}
-
-fn same_strong_identity(
-    expected: &SelectionElementIdentity,
-    current: &SelectionElementIdentity,
-) -> bool {
-    match (expected.strong_identifier(), current.strong_identifier()) {
-        (Some(expected_identifier), Some(current_identifier)) => {
-            expected_identifier == current_identifier && expected == current
-        }
-        _ => false,
-    }
 }
 
 fn validate_restore_selection(

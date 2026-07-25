@@ -64,15 +64,25 @@ pub struct TextRange {
 pub struct SelectionElementIdentity {
     pub role: String,
     pub subrole: Option<String>,
-    pub identifier: Option<String>,
     pub frame: Rect,
 }
 
-impl SelectionElementIdentity {
-    pub fn strong_identifier(&self) -> Option<&str> {
-        self.identifier
-            .as_deref()
-            .filter(|identifier| !identifier.trim().is_empty())
+#[derive(Clone, Eq, PartialEq)]
+pub(crate) struct NativeElementIdentifier(String);
+
+impl NativeElementIdentifier {
+    pub(crate) fn new(identifier: String) -> Option<Self> {
+        (!identifier.trim().is_empty()).then_some(Self(identifier))
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for NativeElementIdentifier {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("NativeElementIdentifier(<redacted>)")
     }
 }
 
@@ -90,6 +100,8 @@ pub struct SelectionSnapshot {
     pub extraction_strategy: SelectionExtractionStrategy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub element_identity: Option<SelectionElementIdentity>,
+    #[serde(skip)]
+    pub(crate) native_element_identifier: Option<NativeElementIdentifier>,
     pub writable: bool,
     pub captured_at_ms: u128,
 }
@@ -113,6 +125,7 @@ impl SelectionSnapshot {
             geometry_source: None,
             extraction_strategy: SelectionExtractionStrategy::SelectedText,
             element_identity: None,
+            native_element_identifier: None,
             writable,
             captured_at_ms: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -136,12 +149,24 @@ impl SelectionSnapshot {
         self
     }
 
+    pub(crate) fn with_native_element_identifier(mut self, identifier: Option<String>) -> Self {
+        self.native_element_identifier = identifier.and_then(NativeElementIdentifier::new);
+        self
+    }
+
+    pub(crate) fn native_element_identifier(&self) -> Option<&str> {
+        self.native_element_identifier
+            .as_ref()
+            .map(NativeElementIdentifier::as_str)
+    }
+
     pub fn same_target(&self, other: &Self) -> bool {
         self.pid == other.pid
             && self.bundle_id == other.bundle_id
             && self.text == other.text
             && self.range == other.range
             && self.element_identity == other.element_identity
+            && self.native_element_identifier == other.native_element_identifier
             && self.extraction_strategy == other.extraction_strategy
     }
 }
@@ -260,7 +285,6 @@ mod tests {
         changed.element_identity = Some(SelectionElementIdentity {
             role: "AXTextArea".to_owned(),
             subrole: None,
-            identifier: None,
             frame: Rect {
                 x: 2.0,
                 y: 3.0,
@@ -294,5 +318,31 @@ mod tests {
                 assert_eq!(first.same_target(&second), expected == current);
             }
         }
+    }
+
+    #[test]
+    fn native_identifier_is_private_from_serde_and_debug_but_keeps_target_identity() {
+        let sentinel = "private-ax-identifier";
+        let first = snapshot(
+            "same",
+            TextRange {
+                location: 0,
+                length: 4,
+            },
+        )
+        .with_native_element_identifier(Some(sentinel.to_owned()));
+        let second = first
+            .clone()
+            .with_native_element_identifier(Some("another-native-target".to_owned()));
+
+        let serialized = serde_json::to_string(&Some(first.clone())).unwrap();
+        let debug = format!("{:?}", SelectionState::Candidate(first.clone()));
+
+        assert!(!serialized.contains(sentinel));
+        assert!(!serialized.contains("nativeElementIdentifier"));
+        assert!(!serialized.contains("identifier"));
+        assert!(!debug.contains(sentinel));
+        assert!(debug.contains("<redacted>"));
+        assert!(!first.same_target(&second));
     }
 }

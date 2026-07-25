@@ -147,7 +147,6 @@ fn snapshot(pid: i32, identifier: &str) -> SelectionSnapshot {
     .with_element_identity(SelectionElementIdentity {
         role: "AXTextArea".to_owned(),
         subrole: None,
-        identifier: Some(identifier.to_owned()),
         frame: Rect {
             x: 1.0,
             y: 2.0,
@@ -155,6 +154,7 @@ fn snapshot(pid: i32, identifier: &str) -> SelectionSnapshot {
             height: 120.0,
         },
     })
+    .with_native_element_identifier(Some(identifier.to_owned()))
 }
 
 fn request() -> TransformRequest {

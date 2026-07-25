@@ -19,11 +19,17 @@ struct ExtractedSelection {
     strategy: SelectionExtractionStrategy,
 }
 
+#[derive(PartialEq)]
+struct CapturedElementIdentity {
+    metadata: SelectionElementIdentity,
+    native_identifier: Option<String>,
+}
+
 pub(super) fn capture(element: &OwnedAxElement) -> Result<SelectionSnapshot, VerbalixError> {
     let origin = ExtractionOrigin::SelectedText;
     let pid = validated_pid(element.as_ref(), origin)?;
     let validated_role = text_role(element.as_ref())?;
-    let identity = element_identity(element.as_ref(), &validated_role)?;
+    let identity = captured_element_identity(element.as_ref(), &validated_role)?;
     if crate::diagnostics::enabled() {
         macos_attribute::diagnose_selected_range_writable(element.as_ref());
     }
@@ -33,7 +39,7 @@ pub(super) fn capture(element: &OwnedAxElement) -> Result<SelectionSnapshot, Ver
         validated_role.capability,
     )?;
     if validated_pid(element.as_ref(), strategy_origin(extracted.strategy))? != pid
-        || element_identity(element.as_ref(), &text_role(element.as_ref())?)? != identity
+        || captured_element_identity(element.as_ref(), &text_role(element.as_ref())?)? != identity
     {
         return Err(VerbalixError::StaleSelection);
     }
@@ -50,7 +56,7 @@ pub(super) fn capture_with_strategy(
         VerbalixError::ProtectedField => error,
         _ => VerbalixError::StaleSelection,
     })?;
-    let identity = element_identity(element.as_ref(), &validated_role)?;
+    let identity = captured_element_identity(element.as_ref(), &validated_role)?;
     if crate::diagnostics::enabled() {
         macos_attribute::diagnose_selected_range_writable(element.as_ref());
     }
@@ -61,7 +67,7 @@ pub(super) fn capture_with_strategy(
         strategy,
     )?;
     if validated_pid(element.as_ref(), origin)? != pid
-        || element_identity(element.as_ref(), &text_role(element.as_ref())?)? != identity
+        || captured_element_identity(element.as_ref(), &text_role(element.as_ref())?)? != identity
     {
         return Err(VerbalixError::StaleSelection);
     }
@@ -70,7 +76,7 @@ pub(super) fn capture_with_strategy(
 
 fn snapshot(
     pid: i32,
-    identity: SelectionElementIdentity,
+    identity: CapturedElementIdentity,
     extracted: ExtractedSelection,
 ) -> Result<SelectionSnapshot, VerbalixError> {
     if extracted.text.trim().is_empty() {
@@ -92,13 +98,23 @@ fn snapshot(
     )
     .with_geometry_source(extracted.geometry_source)
     .with_extraction_strategy(extracted.strategy)
-    .with_element_identity(identity))
+    .with_element_identity(identity.metadata)
+    .with_native_element_identifier(identity.native_identifier))
 }
 
 pub(super) fn element_identity(
     element: AXUIElementRef,
     text_role: &macos_text_role::ValidatedTextRole,
 ) -> Result<SelectionElementIdentity, VerbalixError> {
+    let frame = macos_geometry::element_frame(element).ok_or(VerbalixError::StaleSelection)?;
+    Ok(SelectionElementIdentity {
+        role: text_role.role.clone(),
+        subrole: text_role.subrole.clone(),
+        frame,
+    })
+}
+
+pub(super) fn native_identifier(element: AXUIElementRef) -> Result<Option<String>, VerbalixError> {
     let origin = ExtractionOrigin::SelectedText;
     let identifier =
         macos_ax::optional_string_attribute(element, "AXIdentifier", AxStage::Role, origin)
@@ -115,12 +131,16 @@ pub(super) fn element_identity(
             AxCategory::NoValue
         },
     );
-    let frame = macos_geometry::element_frame(element).ok_or(VerbalixError::StaleSelection)?;
-    Ok(SelectionElementIdentity {
-        role: text_role.role.clone(),
-        subrole: text_role.subrole.clone(),
-        identifier,
-        frame,
+    Ok(identifier.filter(|value| !value.trim().is_empty()))
+}
+
+fn captured_element_identity(
+    element: AXUIElementRef,
+    text_role: &macos_text_role::ValidatedTextRole,
+) -> Result<CapturedElementIdentity, VerbalixError> {
+    Ok(CapturedElementIdentity {
+        metadata: element_identity(element, text_role)?,
+        native_identifier: native_identifier(element)?,
     })
 }
 

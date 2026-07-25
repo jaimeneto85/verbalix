@@ -27,13 +27,17 @@ impl MacAccessibility {
     pub fn start_observer(&self, callback: Arc<dyn Fn() + Send + Sync>) {
         let epoch = self.actor.causal_epoch();
         let actor = self.actor.clone();
-        super::macos_observer::start(Arc::new(move |event| {
-            if route_observer_event(event, &epoch, |target, generation| {
-                actor.observe_selection_change(target, generation)
-            }) {
-                callback();
-            }
-        }));
+        let pending_actor = actor.clone();
+        super::macos_observer::start(
+            Arc::new(move |event| {
+                if route_observer_event(event, &epoch, |target, generation| {
+                    actor.observe_selection_change(target, generation)
+                }) {
+                    callback();
+                }
+            }),
+            Arc::new(move || pending_actor.has_pending_self_notification()),
+        );
     }
 
     pub fn signal_causal_change(&self) {
@@ -173,12 +177,7 @@ mod observer_tests;
 
 #[cfg(test)]
 fn replacement_eligible(expected: &SelectionSnapshot) -> bool {
-    expected.writable
-        && expected
-            .element_identity
-            .as_ref()
-            .and_then(|identity| identity.strong_identifier())
-            .is_some()
+    expected.writable && expected.native_element_identifier().is_some()
 }
 
 #[cfg(test)]
@@ -204,17 +203,18 @@ mod tests {
             writable,
         );
         if identity {
-            snapshot.with_element_identity(SelectionElementIdentity {
-                role: "AXTextArea".to_owned(),
-                subrole: None,
-                identifier: Some("editor".to_owned()),
-                frame: Rect {
-                    x: 1.0,
-                    y: 2.0,
-                    width: 3.0,
-                    height: 4.0,
-                },
-            })
+            snapshot
+                .with_element_identity(SelectionElementIdentity {
+                    role: "AXTextArea".to_owned(),
+                    subrole: None,
+                    frame: Rect {
+                        x: 1.0,
+                        y: 2.0,
+                        width: 3.0,
+                        height: 4.0,
+                    },
+                })
+                .with_native_element_identifier(Some("editor".to_owned()))
         } else {
             snapshot
         }
@@ -222,16 +222,11 @@ mod tests {
 
     #[test]
     fn replacement_fails_before_ax_for_read_only_or_unidentified_snapshots() {
-        let mut weak_identity = snapshot(true, true);
-        weak_identity.element_identity.as_mut().unwrap().identifier = None;
-        let mut empty_identity = snapshot(true, true);
-        empty_identity.element_identity.as_mut().unwrap().identifier = Some(String::new());
-        let mut whitespace_identity = snapshot(true, true);
-        whitespace_identity
-            .element_identity
-            .as_mut()
-            .unwrap()
-            .identifier = Some("  ".to_owned());
+        let weak_identity = snapshot(true, true).with_native_element_identifier(None);
+        let empty_identity =
+            snapshot(true, true).with_native_element_identifier(Some(String::new()));
+        let whitespace_identity =
+            snapshot(true, true).with_native_element_identifier(Some("  ".to_owned()));
 
         assert!(!replacement_eligible(&snapshot(false, true)));
         assert!(!replacement_eligible(&snapshot(true, false)));

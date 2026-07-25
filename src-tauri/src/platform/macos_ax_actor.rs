@@ -164,6 +164,10 @@ impl AxActor {
         self.epoch.clone()
     }
 
+    pub(super) fn has_pending_self_notification(&self) -> bool {
+        self.self_notifications.has_pending()
+    }
+
     pub(super) fn observe_selection_change(
         &self,
         target: AxElementToken,

@@ -53,9 +53,7 @@ impl ActorState {
         }
         if snapshot.writable {
             let token = snapshot
-                .element_identity
-                .as_ref()
-                .and_then(|identity| identity.strong_identifier())
+                .native_element_identifier()
                 .and_then(|identifier| AxElementToken::new(snapshot.pid, identifier));
             self.targets.insert(
                 snapshot.id,
@@ -77,7 +75,6 @@ impl ActorState {
         text: String,
         lease: Option<PublicationGuard>,
     ) -> Result<MutationReceipt, VerbalixError> {
-        let causal = has_no_identifier(&expected);
         let now = self.now();
         if let Some(existing) = self.mutations.replay(&receipt, &expected, &text, now)? {
             return projection_result(existing);
@@ -87,7 +84,7 @@ impl ActorState {
             .get(expected.id, now)
             .cloned()
             .ok_or(VerbalixError::StaleSelection)?;
-        macos_replace::prepare_on_element(&expected, &target.element, causal)?;
+        macos_replace::prepare_on_element(&expected, &target.element, target.token.is_none())?;
         ensure_current(&self.epoch, target.epoch)?;
         self.mutations.prepare(
             receipt.clone(),
@@ -162,7 +159,7 @@ impl ActorState {
             &expected,
             &transformed,
             &target.element,
-            has_no_identifier(&expected),
+            target.token.is_none(),
         )?;
         self.mutations.begin_restore(mutation_id, self.now())?;
         if ensure_current(&self.epoch, boundary_epoch).is_err() {
@@ -249,14 +246,6 @@ fn ensure_current(epoch: &CausalEpoch, expected: u64) -> Result<(), VerbalixErro
         .is_current(expected)
         .then_some(())
         .ok_or(VerbalixError::StaleSelection)
-}
-
-fn has_no_identifier(snapshot: &SelectionSnapshot) -> bool {
-    snapshot
-        .element_identity
-        .as_ref()
-        .and_then(|identity| identity.strong_identifier())
-        .is_none()
 }
 
 fn claim(lease: &Option<PublicationGuard>) -> Result<Uuid, VerbalixError> {

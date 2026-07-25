@@ -58,11 +58,10 @@ pub(super) fn write_on_element(
 }
 
 fn validate_expected(expected: &SelectionSnapshot, causal: bool) -> Result<(), VerbalixError> {
-    let strong = expected
-        .element_identity
-        .as_ref()
-        .and_then(|identity| identity.strong_identifier());
-    if !expected.writable || expected.pid <= 0 || (strong.is_none() && !causal) {
+    if !expected.writable
+        || expected.pid <= 0
+        || (expected.native_element_identifier().is_none() && !causal)
+    {
         return Err(VerbalixError::StaleSelection);
     }
     Ok(())
@@ -104,7 +103,6 @@ mod tests {
         .with_element_identity(SelectionElementIdentity {
             role: "AXTextArea".to_owned(),
             subrole: None,
-            identifier: identifier.map(str::to_owned),
             frame: Rect {
                 x: 1.0,
                 y: 2.0,
@@ -112,6 +110,7 @@ mod tests {
                 height: 40.0,
             },
         })
+        .with_native_element_identifier(identifier.map(str::to_owned))
     }
 
     #[test]
@@ -172,11 +171,8 @@ mod tests {
         let mut changed_pid = expected.clone();
         changed_pid.pid += 1;
         let mut changed_identity = expected.clone();
-        changed_identity
-            .element_identity
-            .as_mut()
-            .unwrap()
-            .identifier = Some("another-editor".to_owned());
+        changed_identity =
+            changed_identity.with_native_element_identifier(Some("another-editor".to_owned()));
 
         for changed in [changed_text, changed_length, changed_pid, changed_identity] {
             assert!(matches!(

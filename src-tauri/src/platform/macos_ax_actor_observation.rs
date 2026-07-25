@@ -32,6 +32,10 @@ pub(super) struct SelfNotificationSignal {
 }
 
 impl SelfNotificationSignal {
+    pub(super) fn has_pending(&self) -> bool {
+        self.pending.lock().is_ok_and(|pending| pending.is_some())
+    }
+
     fn arm(&self, expected: ExpectedSelfNotification) {
         if let Ok(mut pending) = self.pending.lock() {
             *pending = Some(expected);
