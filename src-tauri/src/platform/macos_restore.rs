@@ -128,8 +128,7 @@ fn validate_restore_target(
     own_pid: i32,
     role: &str,
     writable: bool,
-    current_identity: &SelectionElementIdentity,
-    current_identifier: Option<&str>,
+    current: (&SelectionElementIdentity, Option<&str>),
 ) -> Result<(), VerbalixError> {
     validate_restore_target_with_causality(
         expected,
@@ -139,9 +138,9 @@ fn validate_restore_target(
             own_pid,
             role,
             writable,
-            current_identity,
+            current_identity: current.0,
             expected_identifier: expected.native_element_identifier(),
-            current_identifier,
+            current_identifier: current.1,
             causal: false,
         },
     )

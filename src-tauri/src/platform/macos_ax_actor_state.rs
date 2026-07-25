@@ -4,7 +4,7 @@ use super::{
     macos_ax::{self, OwnedAxElement},
     macos_ax_actor_observation::{self, SelfNotificationSignal},
     macos_element_token::AxElementToken,
-    macos_mutation_ledger::MutationLedger,
+    macos_mutation_ledger::{MutationLedger, ReplaceTerminalOutcome, RestoreTerminalOutcome},
     macos_replace, macos_restore, macos_selection,
 };
 use crate::{
@@ -96,33 +96,44 @@ impl ActorState {
         let request_id = match claim(&lease) {
             Ok(request_id) => request_id,
             Err(error) => {
-                self.mutations
-                    .terminalize(receipt.id, MutationStatus::Rejected, self.now())?;
+                self.mutations.finish_replace(
+                    receipt.id,
+                    ReplaceTerminalOutcome::Rejected,
+                    self.now(),
+                )?;
                 return Err(error);
             }
         };
         if request_id != receipt.request_id {
-            self.mutations
-                .terminalize(receipt.id, MutationStatus::Rejected, self.now())?;
+            self.mutations.finish_replace(
+                receipt.id,
+                ReplaceTerminalOutcome::Rejected,
+                self.now(),
+            )?;
             return Err(VerbalixError::StaleSelection);
         }
         if ensure_current(&self.epoch, target.epoch).is_err() {
-            self.mutations
-                .terminalize(receipt.id, MutationStatus::Rejected, self.now())?;
+            self.mutations.finish_replace(
+                receipt.id,
+                ReplaceTerminalOutcome::Rejected,
+                self.now(),
+            )?;
             return Err(VerbalixError::StaleSelection);
         }
         self.arm_self_notification(receipt.id, &expected, &target, target.epoch, text.clone());
         let outcome =
             macos_replace::write_on_element(&expected, &text, target.element.as_ref().as_ref());
-        let status = match outcome {
-            macos_replace::WriteOutcome::Confirmed => MutationStatus::Confirmed,
-            macos_replace::WriteOutcome::Rejected => MutationStatus::Rejected,
-            macos_replace::WriteOutcome::Indeterminate => MutationStatus::Indeterminate,
+        let terminal_outcome = match outcome {
+            macos_replace::WriteOutcome::Confirmed => ReplaceTerminalOutcome::Confirmed,
+            macos_replace::WriteOutcome::Rejected => ReplaceTerminalOutcome::Rejected,
+            macos_replace::WriteOutcome::Indeterminate => ReplaceTerminalOutcome::Indeterminate,
         };
-        if status == MutationStatus::Rejected {
+        if terminal_outcome == ReplaceTerminalOutcome::Rejected {
             self.clear_self_notification();
         }
-        let projection = self.mutations.terminalize(receipt.id, status, self.now())?;
+        let projection = self
+            .mutations
+            .finish_replace(receipt.id, terminal_outcome, self.now())?;
         projection_result(projection)
     }
 
@@ -165,7 +176,7 @@ impl ActorState {
         if ensure_current(&self.epoch, boundary_epoch).is_err() {
             self.mutations.finish_restore(
                 mutation_id,
-                MutationStatus::RestoreRejected,
+                RestoreTerminalOutcome::Rejected,
                 self.now(),
             )?;
             return Err(VerbalixError::StaleSelection);
@@ -175,7 +186,7 @@ impl ActorState {
             Err(error) => {
                 self.mutations.finish_restore(
                     mutation_id,
-                    MutationStatus::RestoreRejected,
+                    RestoreTerminalOutcome::Rejected,
                     self.now(),
                 )?;
                 return Err(error);
@@ -186,7 +197,7 @@ impl ActorState {
         {
             self.mutations.finish_restore(
                 mutation_id,
-                MutationStatus::RestoreRejected,
+                RestoreTerminalOutcome::Rejected,
                 self.now(),
             )?;
             return Err(VerbalixError::StaleSelection);
@@ -199,19 +210,19 @@ impl ActorState {
             expected.text.clone(),
         );
         let outcome = macos_restore::write_on_element(&expected, target.element.as_ref().as_ref());
-        let status = match outcome {
-            macos_restore::RestoreWriteOutcome::Confirmed => MutationStatus::Restored,
-            macos_restore::RestoreWriteOutcome::Rejected => MutationStatus::RestoreRejected,
+        let terminal_outcome = match outcome {
+            macos_restore::RestoreWriteOutcome::Confirmed => RestoreTerminalOutcome::Restored,
+            macos_restore::RestoreWriteOutcome::Rejected => RestoreTerminalOutcome::Rejected,
             macos_restore::RestoreWriteOutcome::Indeterminate => {
-                MutationStatus::RestoreIndeterminate
+                RestoreTerminalOutcome::Indeterminate
             }
         };
         self.mutations
-            .finish_restore(mutation_id, status, self.now())?;
-        if status == MutationStatus::RestoreRejected {
+            .finish_restore(mutation_id, terminal_outcome, self.now())?;
+        if terminal_outcome == RestoreTerminalOutcome::Rejected {
             self.clear_self_notification();
         }
-        if status == MutationStatus::Restored {
+        if terminal_outcome == RestoreTerminalOutcome::Restored {
             self.targets.remove(expected.id);
             Ok(projection.receipt)
         } else {

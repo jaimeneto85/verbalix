@@ -1,7 +1,7 @@
 use super::*;
 use crate::domain::{Rect, SelectionSnapshot, TextRange};
 use crate::{
-    application::{MutationReceipt, MutationStatus},
+    application::MutationReceipt,
     domain::SelectionExtractionStrategy,
     platform::{
         macos_classic_range::CFRange, macos_element_token::AxElementToken,
@@ -148,7 +148,11 @@ fn exact_expectation_matches_actor_ledger_and_current_selection_once() {
         )
         .unwrap();
     ledger
-        .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+        .finish_replace(
+            receipt.id,
+            crate::platform::macos_mutation_ledger::ReplaceTerminalOutcome::Confirmed,
+            1,
+        )
         .unwrap();
     let projection = ledger.projection(receipt.id, 1).unwrap();
     let signal = SelfNotificationSignal::default();

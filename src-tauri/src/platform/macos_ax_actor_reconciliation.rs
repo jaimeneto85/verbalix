@@ -1,4 +1,8 @@
-use super::{macos_ax_actor_state::ActorState, macos_selection_revalidation};
+use super::{
+    macos_ax_actor_state::ActorState,
+    macos_mutation_ledger::{ReplaceTerminalOutcome, RestoreTerminalOutcome},
+    macos_selection_revalidation,
+};
 use crate::application::{MutationProjection, MutationStatus};
 use uuid::Uuid;
 
@@ -61,9 +65,21 @@ impl ActorState {
         });
         if let Some((restoring, status)) = recovery {
             if restoring {
-                let _ = self.mutations.reconcile_restore(id, status, self.now());
+                let outcome = match status {
+                    MutationStatus::Restored => RestoreTerminalOutcome::Restored,
+                    MutationStatus::RestoreRejected => RestoreTerminalOutcome::Rejected,
+                    MutationStatus::RestoreIndeterminate => RestoreTerminalOutcome::Indeterminate,
+                    _ => return self.mutations.projection(id, self.now()),
+                };
+                let _ = self.mutations.reconcile_restore(id, outcome, self.now());
             } else {
-                let _ = self.mutations.terminalize(id, status, self.now());
+                let outcome = match status {
+                    MutationStatus::Confirmed => ReplaceTerminalOutcome::Confirmed,
+                    MutationStatus::Rejected => ReplaceTerminalOutcome::Rejected,
+                    MutationStatus::Indeterminate => ReplaceTerminalOutcome::Indeterminate,
+                    _ => return self.mutations.projection(id, self.now()),
+                };
+                let _ = self.mutations.reconcile_replace(id, outcome, self.now());
             }
         }
         self.mutations.projection(id, self.now())

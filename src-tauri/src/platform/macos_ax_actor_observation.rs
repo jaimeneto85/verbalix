@@ -2,6 +2,7 @@ use super::{
     macos_ax::OwnedAxElement,
     macos_ax_actor_state::{ActorState, CapturedTarget},
     macos_element_token::AxElementToken,
+    macos_mutation_ledger::{ReplaceTerminalOutcome, RestoreTerminalOutcome},
     macos_selection_revalidation,
 };
 use crate::{
@@ -140,25 +141,25 @@ impl ActorState {
 
     fn reject_unverifiable_notification(&mut self, id: Uuid, status: MutationStatus) {
         if status == MutationStatus::Indeterminate {
-            let _ = self
-                .mutations
-                .terminalize(id, MutationStatus::Rejected, self.now());
+            let _ =
+                self.mutations
+                    .reconcile_replace(id, ReplaceTerminalOutcome::Rejected, self.now());
         } else if status == MutationStatus::RestoreIndeterminate {
             let _ =
                 self.mutations
-                    .reconcile_restore(id, MutationStatus::RestoreRejected, self.now());
+                    .reconcile_restore(id, RestoreTerminalOutcome::Rejected, self.now());
         }
     }
 
     fn confirm_indeterminate_notification(&mut self, id: Uuid, status: MutationStatus) {
         if status == MutationStatus::Indeterminate {
-            let _ = self
-                .mutations
-                .terminalize(id, MutationStatus::Confirmed, self.now());
+            let _ =
+                self.mutations
+                    .reconcile_replace(id, ReplaceTerminalOutcome::Confirmed, self.now());
         } else if status == MutationStatus::RestoreIndeterminate {
-            let _ = self
-                .mutations
-                .reconcile_restore(id, MutationStatus::Restored, self.now());
+            let _ =
+                self.mutations
+                    .reconcile_restore(id, RestoreTerminalOutcome::Restored, self.now());
         }
     }
 }

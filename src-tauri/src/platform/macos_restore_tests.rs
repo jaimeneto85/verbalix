@@ -49,8 +49,7 @@ fn marker_snapshot_never_reaches_restore_mutation() {
             7,
             "AXTextArea",
             true,
-            expected.element_identity.as_ref().unwrap(),
-            Some("editor"),
+            (expected.element_identity.as_ref().unwrap(), Some("editor"),),
         ),
         Err(VerbalixError::StaleSelection)
     ));
@@ -82,8 +81,7 @@ fn restore_rejects_self_wrong_pid_secure_read_only_and_changed_element() {
                 own_pid,
                 role,
                 writable,
-                &current_identity,
-                Some(current_identifier),
+                (&current_identity, Some(current_identifier)),
             ),
             Err(VerbalixError::StaleSelection)
         ));
@@ -96,8 +94,7 @@ fn restore_rejects_self_wrong_pid_secure_read_only_and_changed_element() {
             7,
             "AXSecureTextField",
             true,
-            expected_identity,
-            Some("editor"),
+            (expected_identity, Some("editor")),
         ),
         Err(VerbalixError::ProtectedField)
     ));
@@ -175,8 +172,7 @@ fn restore_rejects_another_field_in_the_same_pid_even_with_matching_selection() 
             7,
             "AXTextArea",
             true,
-            &identity("another-editor"),
-            Some("another-editor"),
+            (&identity("another-editor"), Some("another-editor")),
         ),
         Err(VerbalixError::StaleSelection)
     ));
@@ -208,8 +204,7 @@ fn restore_without_identifier_rejects_before_the_write_boundary() {
                     7,
                     "AXTextArea",
                     true,
-                    weak_identity,
-                    expected.native_element_identifier(),
+                    (weak_identity, expected.native_element_identifier()),
                 )
             })
             .and_then(|_| validate_restore_selection(&expected, transformed, &matching_selection));

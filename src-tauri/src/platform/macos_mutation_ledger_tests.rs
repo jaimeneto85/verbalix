@@ -112,7 +112,7 @@ fn confirmed_response_loss_reconciles_same_projection_repeatedly() {
         .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
         .unwrap();
     let confirmed = ledger
-        .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
         .unwrap();
 
     for now in [1, 2, TERMINAL_TTL_MS] {
@@ -132,7 +132,7 @@ fn matching_replay_returns_terminal_outcome_and_divergent_replay_is_closed() {
         .prepare(receipt.clone(), selected.clone(), "after".to_owned(), (), 0)
         .unwrap();
     ledger
-        .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
         .unwrap();
 
     let replay = ledger
@@ -154,14 +154,14 @@ fn restore_indeterminate_reconciled_as_rejected_expires_after_terminal_ttl() {
         .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
         .unwrap();
     ledger
-        .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
         .unwrap();
     ledger.begin_restore(receipt.id, 2).unwrap();
     ledger
-        .finish_restore(receipt.id, MutationStatus::RestoreIndeterminate, 3)
+        .finish_restore(receipt.id, RestoreTerminalOutcome::Indeterminate, 3)
         .unwrap();
     ledger
-        .reconcile_restore(receipt.id, MutationStatus::RestoreRejected, 4)
+        .reconcile_restore(receipt.id, RestoreTerminalOutcome::Rejected, 4)
         .unwrap();
 
     assert!(ledger
@@ -179,19 +179,19 @@ fn restore_state_is_monotonic_and_one_setter_attempt_per_mutation() {
         .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
         .unwrap();
     ledger
-        .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
         .unwrap();
     ledger.begin_restore(receipt.id, 2).unwrap();
     ledger
-        .finish_restore(receipt.id, MutationStatus::RestoreRejected, 3)
+        .finish_restore(receipt.id, RestoreTerminalOutcome::Rejected, 3)
         .unwrap();
 
     assert!(ledger.begin_restore(receipt.id, 4).is_err());
     assert!(ledger
-        .finish_restore(receipt.id, MutationStatus::RestoreIndeterminate, 4)
+        .finish_restore(receipt.id, RestoreTerminalOutcome::Indeterminate, 4)
         .is_err());
     assert!(ledger
-        .reconcile_restore(receipt.id, MutationStatus::Restored, 4)
+        .reconcile_restore(receipt.id, RestoreTerminalOutcome::Restored, 4)
         .is_err());
     assert!(ledger.projection(receipt.id, 4).unwrap().status == MutationStatus::RestoreRejected);
 }
@@ -205,14 +205,14 @@ fn indeterminate_restore_reconcile_never_reopens_confirmed() {
         .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
         .unwrap();
     ledger
-        .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
         .unwrap();
     ledger.begin_restore(receipt.id, 2).unwrap();
     ledger
-        .finish_restore(receipt.id, MutationStatus::RestoreIndeterminate, 3)
+        .finish_restore(receipt.id, RestoreTerminalOutcome::Indeterminate, 3)
         .unwrap();
     ledger
-        .reconcile_restore(receipt.id, MutationStatus::RestoreRejected, 4)
+        .reconcile_restore(receipt.id, RestoreTerminalOutcome::Rejected, 4)
         .unwrap();
 
     assert!(ledger.begin_restore(receipt.id, 5).is_err());
@@ -222,9 +222,9 @@ fn indeterminate_restore_reconcile_never_reopens_confirmed() {
 #[test]
 fn every_restore_outcome_allows_at_most_one_setter_attempt_per_mutation_id() {
     for outcome in [
-        MutationStatus::Restored,
-        MutationStatus::RestoreRejected,
-        MutationStatus::RestoreIndeterminate,
+        RestoreTerminalOutcome::Restored,
+        RestoreTerminalOutcome::Rejected,
+        RestoreTerminalOutcome::Indeterminate,
     ] {
         let selected = snapshot();
         let receipt = receipt(&selected);
@@ -233,7 +233,7 @@ fn every_restore_outcome_allows_at_most_one_setter_attempt_per_mutation_id() {
             .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
             .unwrap();
         ledger
-            .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+            .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
             .unwrap();
         let mut setters = 0;
         if ledger.begin_restore(receipt.id, 2).is_ok() {
@@ -245,9 +245,9 @@ fn every_restore_outcome_allows_at_most_one_setter_attempt_per_mutation_id() {
         }
         assert_eq!(setters, 1);
 
-        if outcome == MutationStatus::RestoreIndeterminate {
+        if outcome == RestoreTerminalOutcome::Indeterminate {
             ledger
-                .reconcile_restore(receipt.id, MutationStatus::RestoreRejected, 5)
+                .reconcile_restore(receipt.id, RestoreTerminalOutcome::Rejected, 5)
                 .unwrap();
             assert!(ledger.begin_restore(receipt.id, 6).is_err());
             assert_eq!(setters, 1);
@@ -264,19 +264,68 @@ fn rejected_write_and_terminal_restore_states_never_reopen() {
         .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
         .unwrap();
     ledger
-        .terminalize(receipt.id, MutationStatus::Rejected, 1)
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Rejected, 1)
         .unwrap();
 
-    for status in [
-        MutationStatus::Indeterminate,
-        MutationStatus::Confirmed,
-        MutationStatus::RestoreIndeterminate,
-        MutationStatus::Restored,
+    for outcome in [
+        ReplaceTerminalOutcome::Indeterminate,
+        ReplaceTerminalOutcome::Confirmed,
     ] {
-        let projection = ledger.terminalize(receipt.id, status, 2).unwrap();
-        assert!(projection.status == MutationStatus::Rejected);
+        assert!(ledger.finish_replace(receipt.id, outcome, 2).is_err());
+        assert!(ledger.reconcile_replace(receipt.id, outcome, 2).is_err());
+        assert!(ledger.projection(receipt.id, 2).unwrap().status == MutationStatus::Rejected);
     }
     assert!(ledger.begin_restore(receipt.id, 3).is_err());
+}
+
+#[test]
+fn invalid_terminal_outcomes_preserve_status_ttl_and_restore_attempt() {
+    let selected = snapshot();
+    let receipt = receipt(&selected);
+    let mut ledger = MutationLedger::new(1);
+    ledger
+        .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
+        .unwrap();
+
+    let before = record_state(&ledger, receipt.id);
+    assert!(ledger
+        .reconcile_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
+        .is_err());
+    assert!(record_state(&ledger, receipt.id) == before);
+
+    ledger
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 2)
+        .unwrap();
+    let confirmed = record_state(&ledger, receipt.id);
+    ledger
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 99)
+        .unwrap();
+    assert!(record_state(&ledger, receipt.id) == confirmed);
+
+    ledger.begin_restore(receipt.id, 3).unwrap();
+    let restoring = record_state(&ledger, receipt.id);
+    assert!(ledger
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Rejected, 4)
+        .is_err());
+    assert!(record_state(&ledger, receipt.id) == restoring);
+
+    ledger
+        .finish_restore(receipt.id, RestoreTerminalOutcome::Rejected, 5)
+        .unwrap();
+    let rejected = record_state(&ledger, receipt.id);
+    ledger
+        .finish_restore(receipt.id, RestoreTerminalOutcome::Rejected, 100)
+        .unwrap();
+    assert!(record_state(&ledger, receipt.id) == rejected);
+}
+
+fn record_state(ledger: &MutationLedger<()>, id: Uuid) -> (MutationStatus, Option<u64>, bool) {
+    let record = ledger.records.get(&id).unwrap();
+    (
+        record.projection.status,
+        record.terminal_at,
+        record.restore_attempted,
+    )
 }
 
 #[test]
