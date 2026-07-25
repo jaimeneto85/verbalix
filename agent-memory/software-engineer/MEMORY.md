@@ -89,6 +89,7 @@
 - O `ActorState` opera sobre um boundary de alvo AX retido: a implementação nativa conserva o mesmo `OwnedAxElement`, enquanto o fake determinístico percorre os mesmos métodos de prepare/write/read. Isso permite provar secure-after-prepare em replace/restore sem mover handles entre threads ou depender de TCC.
 - Toda escrita confirmada retorna `MutationReceipt` e entra no journal antes da promoção visual falível. `Applied` referencia o receipt por UUID, Candidate mais novo não é sobrescrito e undo resolve o record exato mesmo quando mutações distintas produzem o mesmo texto.
 - Diagnósticos de capacidade registram apenas estágio/origem/categoria e presença de identifier, sem valor, identifier concreto ou range. A consulta de `AXSelectedTextRange` settable é somente um probe sanitizado quando diagnósticos estão habilitados.
+- Self-notification precisa de fase atômica compartilhada: evento exato que reivindica `Armed` cancela a expectativa e é externo; somente `InSetter/Committed` pode seguir para corroboração no actor. O payload CF do setter é construído antes da autorização final, cujo sucesso é seguido diretamente pela chamada ao seam FFI, sem lock, alocação ou operação falível intermediária.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.
