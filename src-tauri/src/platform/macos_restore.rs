@@ -1,7 +1,7 @@
 use super::{
     macos_attribute,
     macos_ax::{self, AXUIElementRef, AxWriteResult, OwnedAxElement},
-    macos_selection, macos_selection_revalidation, macos_text_role, macos_value_range,
+    macos_selection, macos_selection_revalidation, macos_value_range,
 };
 use crate::domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError};
 
@@ -14,19 +14,18 @@ pub(super) fn prepare_on_element(
     let expected_identity = expected_identity(expected, causal)?;
     let pid = macos_ax::pid(element.as_ref()).map_err(|_| VerbalixError::StaleSelection)?;
     let own_pid = i32::try_from(std::process::id()).map_err(|_| VerbalixError::StaleSelection)?;
-    let role = macos_selection::role(element.as_ref())?;
-    let _capability = macos_text_role::validate(&role).map_err(|error| match error {
+    let text_role = macos_selection::text_role(element.as_ref()).map_err(|error| match error {
         VerbalixError::ProtectedField => error,
         _ => VerbalixError::StaleSelection,
     })?;
-    let current_identity = macos_selection::element_identity(element.as_ref(), role.clone())?;
+    let current_identity = macos_selection::element_identity(element.as_ref(), &text_role)?;
     validate_restore_target_with_causality(
         expected,
         RestoreTarget {
             expected_identity,
             pid,
             own_pid,
-            role: &role,
+            role: &text_role.role,
             writable: macos_attribute::selected_text_writable(element.as_ref())
                 .map_err(|_| VerbalixError::StaleSelection)?,
             current_identity: &current_identity,
@@ -34,7 +33,7 @@ pub(super) fn prepare_on_element(
         },
     )?;
     if expected.extraction_strategy == crate::domain::SelectionExtractionStrategy::ValueRange
-        && !macos_value_range::role_eligible(&role)
+        && !macos_value_range::role_eligible(&text_role.role)
     {
         return Err(VerbalixError::StaleSelection);
     }

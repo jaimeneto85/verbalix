@@ -3,25 +3,42 @@ use crate::domain::VerbalixError;
 #[derive(Clone, Copy)]
 pub(super) struct TextRoleCapability(());
 
-pub(super) fn validate(role: &str) -> Result<TextRoleCapability, VerbalixError> {
-    if role == "AXSecureTextField" {
+pub(super) struct ValidatedTextRole {
+    pub(super) role: String,
+    pub(super) subrole: Option<String>,
+    pub(super) capability: TextRoleCapability,
+}
+
+pub(super) fn validate(
+    role: String,
+    subrole: Option<String>,
+) -> Result<ValidatedTextRole, VerbalixError> {
+    if role == "AXSecureTextField" || subrole.as_deref() == Some("AXSecureTextField") {
         return Err(VerbalixError::ProtectedField);
     }
-    matches!(
-        role,
+    let capability = matches!(
+        role.as_str(),
         "AXTextArea" | "AXTextField" | "AXStaticText" | "AXWebArea" | "AXComboBox"
     )
     .then_some(TextRoleCapability(()))
-    .ok_or(VerbalixError::SelectionUnavailable)
+    .ok_or(VerbalixError::SelectionUnavailable)?;
+    Ok(ValidatedTextRole {
+        role,
+        subrole,
+        capability,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn capture_trace(role: &str) -> (Result<(), VerbalixError>, Vec<&'static str>) {
-        let mut trace = vec!["role"];
-        let result = validate(role).map(|_| {
+    fn capture_trace(
+        role: &str,
+        subrole: Option<&str>,
+    ) -> (Result<(), VerbalixError>, Vec<&'static str>) {
+        let mut trace = vec!["role", "subrole"];
+        let result = validate(role.to_owned(), subrole.map(str::to_owned)).map(|_| {
             trace.extend([
                 "identifier",
                 "selected_text",
@@ -36,10 +53,17 @@ mod tests {
 
     #[test]
     fn blocked_roles_never_reach_the_content_reader() {
-        for role in ["AXSecureTextField", "AXButton", "AXGroup", "AXImage", ""] {
-            let (result, trace) = capture_trace(role);
+        for (role, subrole) in [
+            ("AXSecureTextField", None),
+            ("AXTextField", Some("AXSecureTextField")),
+            ("AXButton", None),
+            ("AXGroup", None),
+            ("AXImage", None),
+            ("", None),
+        ] {
+            let (result, trace) = capture_trace(role, subrole);
             assert!(result.is_err());
-            assert_eq!(trace, ["role"]);
+            assert_eq!(trace, ["role", "subrole"]);
         }
     }
 
@@ -52,12 +76,13 @@ mod tests {
             "AXWebArea",
             "AXComboBox",
         ] {
-            let (result, trace) = capture_trace(role);
+            let (result, trace) = capture_trace(role, None);
             result.unwrap();
             assert_eq!(
                 trace,
                 [
                     "role",
+                    "subrole",
                     "identifier",
                     "selected_text",
                     "selected_range",

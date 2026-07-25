@@ -22,15 +22,18 @@ struct ExtractedSelection {
 pub(super) fn capture(element: &OwnedAxElement) -> Result<SelectionSnapshot, VerbalixError> {
     let origin = ExtractionOrigin::SelectedText;
     let pid = validated_pid(element.as_ref(), origin)?;
-    let role = role(element.as_ref())?;
-    let capability = macos_text_role::validate(&role)?;
-    let identity = element_identity(element.as_ref(), role.clone())?;
+    let validated_role = text_role(element.as_ref())?;
+    let identity = element_identity(element.as_ref(), &validated_role)?;
     if crate::diagnostics::enabled() {
         macos_attribute::diagnose_selected_range_writable(element.as_ref());
     }
-    let extracted = extract(element.as_ref(), &role, capability)?;
+    let extracted = extract(
+        element.as_ref(),
+        &validated_role.role,
+        validated_role.capability,
+    )?;
     if validated_pid(element.as_ref(), strategy_origin(extracted.strategy))? != pid
-        || element_identity(element.as_ref(), role)? != identity
+        || element_identity(element.as_ref(), &text_role(element.as_ref())?)? != identity
     {
         return Err(VerbalixError::StaleSelection);
     }
@@ -43,18 +46,22 @@ pub(super) fn capture_with_strategy(
 ) -> Result<SelectionSnapshot, VerbalixError> {
     let origin = strategy_origin(strategy);
     let pid = validated_pid(element.as_ref(), origin)?;
-    let role = role(element.as_ref())?;
-    let capability = macos_text_role::validate(&role).map_err(|error| match error {
+    let validated_role = text_role(element.as_ref()).map_err(|error| match error {
         VerbalixError::ProtectedField => error,
         _ => VerbalixError::StaleSelection,
     })?;
-    let identity = element_identity(element.as_ref(), role.clone())?;
+    let identity = element_identity(element.as_ref(), &validated_role)?;
     if crate::diagnostics::enabled() {
         macos_attribute::diagnose_selected_range_writable(element.as_ref());
     }
-    let extracted = extract_for_strategy(element.as_ref(), &role, capability, strategy)?;
+    let extracted = extract_for_strategy(
+        element.as_ref(),
+        &validated_role.role,
+        validated_role.capability,
+        strategy,
+    )?;
     if validated_pid(element.as_ref(), origin)? != pid
-        || element_identity(element.as_ref(), role)? != identity
+        || element_identity(element.as_ref(), &text_role(element.as_ref())?)? != identity
     {
         return Err(VerbalixError::StaleSelection);
     }
@@ -90,11 +97,9 @@ fn snapshot(
 
 pub(super) fn element_identity(
     element: AXUIElementRef,
-    role: String,
+    text_role: &macos_text_role::ValidatedTextRole,
 ) -> Result<SelectionElementIdentity, VerbalixError> {
     let origin = ExtractionOrigin::SelectedText;
-    let subrole = macos_ax::optional_string_attribute(element, "AXSubrole", AxStage::Role, origin)
-        .map_err(|_| VerbalixError::StaleSelection)?;
     let identifier =
         macos_ax::optional_string_attribute(element, "AXIdentifier", AxStage::Role, origin)
             .map_err(|_| VerbalixError::StaleSelection)?;
@@ -112,21 +117,31 @@ pub(super) fn element_identity(
     );
     let frame = macos_geometry::element_frame(element).ok_or(VerbalixError::StaleSelection)?;
     Ok(SelectionElementIdentity {
-        role,
-        subrole,
+        role: text_role.role.clone(),
+        subrole: text_role.subrole.clone(),
         identifier,
         frame,
     })
 }
 
-pub(super) fn role(element: AXUIElementRef) -> Result<String, VerbalixError> {
-    macos_ax::string_attribute(
+pub(super) fn text_role(
+    element: AXUIElementRef,
+) -> Result<macos_text_role::ValidatedTextRole, VerbalixError> {
+    let role = macos_ax::string_attribute(
         element,
         "AXRole",
         AxStage::Role,
         ExtractionOrigin::SelectedText,
     )
-    .map_err(|_| VerbalixError::SelectionUnavailable)
+    .map_err(|_| VerbalixError::SelectionUnavailable)?;
+    let subrole = macos_ax::optional_string_attribute(
+        element,
+        "AXSubrole",
+        AxStage::Role,
+        ExtractionOrigin::SelectedText,
+    )
+    .map_err(|_| VerbalixError::SelectionUnavailable)?;
+    macos_text_role::validate(role, subrole)
 }
 
 fn extract(
