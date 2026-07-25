@@ -29,8 +29,21 @@ targets:
     deploymentTarget: "17.0"
     info:
       path: Verbalix/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.verbalix.ios
+            CFBundleURLSchemes:
+              - verbalix-ios
+        VerbalixSupabaseURL: $(VerbalixSupabaseURL)
+        VerbalixSupabaseAnonKey: $(VerbalixSupabaseAnonKey)
     entitlements:
       path: Verbalix/Verbalix.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.verbalix.shared
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.verbalix.shared
     sources:
       - path: Verbalix
         excludes:
@@ -56,8 +69,22 @@ targets:
     deploymentTarget: "17.0"
     info:
       path: VerbalixAction/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ui-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ActionViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+        VerbalixSupabaseURL: $(VerbalixSupabaseURL)
+        VerbalixSupabaseAnonKey: $(VerbalixSupabaseAnonKey)
     entitlements:
       path: VerbalixAction/VerbalixAction.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.verbalix.shared
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.verbalix.shared
     sources:
       - path: VerbalixAction
         excludes:
@@ -77,8 +104,24 @@ targets:
     deploymentTarget: "17.0"
     info:
       path: VerbalixKeyboard/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: en-US
+            RequestsOpenAccess: true
+        VerbalixSupabaseURL: $(VerbalixSupabaseURL)
+        VerbalixSupabaseAnonKey: $(VerbalixSupabaseAnonKey)
     entitlements:
       path: VerbalixKeyboard/VerbalixKeyboard.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.verbalix.shared
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.verbalix.shared
     sources:
       - path: VerbalixKeyboard
         excludes:

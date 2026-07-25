@@ -2,13 +2,19 @@ import SwiftUI
 import VerbalixKit
 
 struct RootView: View {
-    @State private var isAuthenticated = false
+    @Environment(AppSession.self) private var session
 
     var body: some View {
-        if isAuthenticated {
-            MainTabView()
-        } else {
-            AuthView(onAuthenticated: { isAuthenticated = true })
+        Group {
+            if session.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if session.accessToken != nil {
+                MainTabView()
+            } else {
+                AuthView()
+            }
         }
+        .animation(.easeInOut, value: session.accessToken)
     }
 }

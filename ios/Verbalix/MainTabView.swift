@@ -11,6 +11,9 @@ struct MainTabView: View {
 
             SettingsView()
                 .tabItem { Label("Ajustes", systemImage: "gear") }
+
+            OnboardingView()
+                .tabItem { Label("Teclado", systemImage: "keyboard") }
         }
     }
 }
