@@ -8,9 +8,6 @@ create table public.user_preferences (
   updated_at timestamptz not null default now()
 );
 
-create index user_preferences_owner_idx
-  on public.user_preferences (user_id);
-
 alter table public.user_preferences enable row level security;
 
 create policy "owners can read preferences"
@@ -32,6 +29,8 @@ create policy "owners can update preferences"
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
+security definer
+set search_path = ''
 as $$
 begin
   new.updated_at := now();
