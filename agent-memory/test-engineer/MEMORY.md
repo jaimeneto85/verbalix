@@ -53,6 +53,8 @@
 - Todo reader de reconciliação passa pelo gate central role+subrole; a matriz de estratégias exige zero leitor de conteúdo após transição para `AXSecureTextField`.
 - Secure-after-prepare atravessa `ActorState::replace/restore` com `AxMutationTarget` instrumentado no mesmo registry causal, epoch e `TransformLease` reais; o fake muda para secure depois de prepare e prova zero setter, terminal Rejected/RestoreRejected e self-notification limpa.
 - A matriz de terminalização registra `TerminalPhase`: retry idempotente exige mesma fase/API e outcome, enquanto `finish_* ↔ reconcile_*` cross-phase falha sem alterar status, TTL, restore-attempt ou provenance.
+- Restore causal exige harness no `AxActor` real: bloquear `prepare_restore`, avançar `CausalEpoch` por FocusChanged fora da FIFO, manter Capture pendente e provar `Confirmed`/provenance/lease intactos com zero setter.
+- Replays terminais de restore validam mutation ID, snapshot completo, texto transformado e ownership da lease antes de `Restored` early-return ou `RestoreIndeterminate` reconcile; divergências precisam provar zero read e metadados imutáveis.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.

@@ -22,7 +22,7 @@ pub(super) enum RestoreTerminalOutcome {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum TerminalPhase {
+pub(super) enum TerminalPhase {
     FinishReplace,
     ReconcileReplace,
     FinishRestore,
@@ -32,9 +32,9 @@ enum TerminalPhase {
 pub(super) struct ActorMutationRecord<T> {
     pub(super) projection: MutationProjection,
     pub(super) target: T,
-    restore_attempted: bool,
-    terminal_at: Option<u64>,
-    terminal_phase: Option<TerminalPhase>,
+    pub(super) restore_attempted: bool,
+    pub(super) terminal_at: Option<u64>,
+    pub(super) terminal_phase: Option<TerminalPhase>,
 }
 
 pub(super) struct MutationLedger<T> {

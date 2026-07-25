@@ -293,3 +293,7 @@ fn claim(lease: &Option<PublicationGuard>) -> Result<Uuid, VerbalixError> {
 #[cfg(test)]
 #[path = "macos_ax_actor_state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "macos_ax_actor_restore_tests.rs"]
+mod restore_tests;

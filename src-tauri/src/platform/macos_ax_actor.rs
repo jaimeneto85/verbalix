@@ -57,6 +57,8 @@ enum Command {
     },
     #[cfg(test)]
     TestPendingCapture(mpsc::Sender<()>),
+    #[cfg(test)]
+    TestActorState(Box<dyn FnOnce(&mut ActorState) + Send>),
     Shutdown,
 }
 
@@ -144,6 +146,8 @@ impl AxActor {
                     Command::TestPendingCapture(response) => {
                         let _ = response.send(());
                     }
+                    #[cfg(test)]
+                    Command::TestActorState(test) => test(&mut state),
                     Command::Shutdown => break,
                 }
             }
@@ -278,3 +282,7 @@ impl Drop for AxActor {
 #[cfg(test)]
 #[path = "macos_ax_actor_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "macos_ax_actor_restore_epoch_tests.rs"]
+mod restore_epoch_tests;
