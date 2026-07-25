@@ -57,6 +57,8 @@
 - Replays terminais de restore validam mutation ID, snapshot completo, texto transformado e ownership da lease antes de `Restored` early-return ou `RestoreIndeterminate` reconcile; divergências precisam provar zero read e metadados imutáveis.
 - O boundary causal final usa um `AxMutationTarget` instrumentado que observa self-notification pendente, incrementa `CausalEpoch` no início de `write_replace/write_restore` e só então consulta `AxWriteAuthorization`; isso prova deterministicamente claim+arm anteriores, zero setter, limpeza da expectativa e terminal rejeitado.
 - Expiração de replay terminal pode ser testada sem sleep pelo `ActorState`: capture `terminal_at`, ajuste `started` para o limite exato do TTL e invoque `restore`; o `get_mut` precisa podar antes do early-return, retornar `StaleSelection` e remover o record.
+- Evento Selected exato durante `Armed` precisa atravessar `route_observer_event → AxActor::observe_selection_change → take_exact` enquanto o worker está bloqueado. Uma `TestPendingCapture` prova a FIFO ocupada; retorno síncrono, bump imediato, zero setter e terminal tipado distinguem o teste real de um bump direto.
+- O setter final é testável sem AX real quando produção separa `PreparedSelectedTextWrite` do seam FFI: prepare o payload CF antes, consuma-o no mesmo helper que chama `begin_setter`, observe `InSetter` dentro do seam e exija exatamente uma chamada; epoch rejeitado precisa consumir zero setters.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -78,7 +80,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 213 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, revogação AX fora da FIFO, correlação one-shot forte, boundary causal pós-arm, replay terminal expirado, restore monotônico, secure-after-prepare no ActorState, histórico detached e receipt exato.
+- A suíte Rust possui 217 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, revogação AX fora da FIFO, router real em fase Armed, correlação one-shot forte, boundary causal pós-arm, seam FFI com payload preparado, replay terminal expirado, restore monotônico, secure-after-prepare no ActorState, histórico detached e receipt exato.
 - O frontend possui 55 testes Vitest com 100% de statements, branches, functions e lines no escopo instrumentado; os 6 testes Playwright continuam verdes.
 
 ## Observações

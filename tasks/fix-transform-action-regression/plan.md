@@ -117,8 +117,8 @@
 - [x] CA36: Restored/RestoreIndeterminate com snapshot, texto ou lease divergente retorna erro sem alterar status/terminal/provenance; replay idêntico permanece idempotente.
 - [x] CA37: Actor real incrementa epoch após claim/arm e antes do setter em replace+restore, exigindo zero setter e terminal Rejected.
 - [x] CA38: Replay Restored após TTL expira e retorna stale; antes do TTL permanece idempotente.
-- [ ] CA39: Router real recebe evento externo exato durante Armed com actor bloqueado em replace/restore e prova bump imediato, zero setter e terminal Rejected.
-- [ ] CA40: Teste atravessa o shared production boundary e prova nenhuma alocação/lock/fallible op entre autorização final e FFI setter.
+- [x] CA39: Router real recebe evento externo exato durante Armed com actor bloqueado em replace/restore e prova bump imediato, zero setter e terminal Rejected.
+- [x] CA40: Teste atravessa o shared production boundary e prova nenhuma alocação/lock/fallible op entre autorização final e FFI setter.
 
 ### Edge cases
 
@@ -265,7 +265,7 @@
 - [x] T3.24 `[HIGH]` Cobrir ActorState real replace+restore secure-after-prepare e matriz ledger cross-phase same-outcome.
 - [x] T3.25 `[CRITICAL]` Cobrir actor restore stale epoch com Capture B pendente e matriz replay divergente/sem mutação.
 - [x] T3.26 `[CRITICAL]` Cobrir bump pós-claim/arm pré-setter em replace+restore e replay terminal expirado.
-- [ ] T3.27 `[CRITICAL]` Cobrir router/actor externos em Armed e shared production write boundary com setter instrumentado.
+- [x] T3.27 `[CRITICAL]` Cobrir router/actor externos em Armed e shared production write boundary com setter instrumentado.
 
 ### Fase 4 — QA real
 
