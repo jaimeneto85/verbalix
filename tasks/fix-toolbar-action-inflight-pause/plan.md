@@ -170,8 +170,8 @@ fn error_bounds(runtime: &AppRuntime) -> Option<Rect> {
 - [x] T4.3: [MEDIUM] Unit/integração `commands`: fallback de erro só com `is_action_in_flight()`; snapshot `None` sem ação → sem nota (RF04); `dismiss_overlays`/pause/undo ainda invalidam (CA04/CA05).
 
 ### Fase 5: Gates & QA
-- [ ] T5.1: Rodar todos os gates.
-- [ ] T5.2: QA review.
+- [x] T5.1: Rodar todos os gates.
+- [x] T5.2: QA review.
 
 ## ✅ Verificação (gates obrigatórios antes do handoff)
 ```
