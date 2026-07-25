@@ -1,13 +1,14 @@
 use crate::{
     application::{
-        classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
-        HistoryItem, PublicBackendConfig, RefreshFailureRoute, SessionRepository, StoredSession,
+        classify_refresh_failure, epoch_secs_now, evaluate_ai_readiness, merge_preferences,
+        AiReadiness, AiReadinessStatus, HistoryItem, PublicBackendConfig, RefreshFailureRoute,
+        RemotePreferencesRepository, SessionRepository, StoredSession,
     },
     domain::{AppSettings, SelectionEvent, SettingsRepository, VerbalixError},
     AppRuntime,
 };
 use std::sync::Arc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 pub(crate) fn normalized_shortcut(shortcut: &str) -> String {
     shortcut.replace("Option", "Alt")
@@ -93,27 +94,82 @@ pub(crate) fn accessibility_status(
 }
 
 #[tauri::command]
-pub(crate) async fn load_settings(
+pub(crate) fn load_settings(
+    app: AppHandle,
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<AppSettings, VerbalixError> {
     let local = runtime.settings.load()?;
-    let Some(repo) = &runtime.remote_preferences else {
+
+    let Some(repo) = runtime.remote_preferences.as_ref().map(Arc::clone) else {
         return Ok(local);
     };
     let session = match runtime.session.load()? {
         Some(s) => s,
         None => return Ok(local),
     };
-    match repo.fetch(&session.access_token).await {
-        Ok(remote) => {
-            let merged = crate::application::merge_preferences(&local, remote);
-            if merged != local {
-                let _ = runtime.settings.save(&merged);
-            }
-            Ok(merged)
-        }
-        Err(_) => Ok(local),
+
+    let runtime_clone = Arc::clone(&*runtime);
+    tauri::async_runtime::spawn(background_sync(
+        app,
+        runtime_clone,
+        repo,
+        session,
+        local.clone(),
+    ));
+
+    Ok(local)
+}
+
+async fn background_sync(
+    app: AppHandle,
+    runtime: Arc<AppRuntime>,
+    repo: Arc<RemotePreferencesRepository>,
+    session: StoredSession,
+    local: AppSettings,
+) {
+    let sync_store = &runtime.preferences_sync;
+
+    let captured_seq = sync_store.load().map(|m| m.sequence).unwrap_or(0);
+
+    let remote = match repo.fetch(&session.access_token).await {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+
+    let current_meta = sync_store.load();
+    let current_seq = current_meta.as_ref().map(|m| m.sequence).unwrap_or(0);
+    if current_seq != captured_seq {
+        return;
     }
+
+    let outcome = merge_preferences(&local, current_meta.as_ref(), remote);
+
+    let now_secs = epoch_secs_now();
+    let _ = sync_store.record_synced(now_secs);
+
+    if outcome.settings != local {
+        let _ = runtime.settings.save(&outcome.settings);
+    }
+
+    if let Ok(mut guard) = runtime.synced_settings.lock() {
+        *guard = Some(outcome.settings.clone());
+    }
+    let _ = app.emit("preferences-synced", &outcome.settings);
+
+    if outcome.needs_push {
+        let _ = repo.upsert(&outcome.settings, &session.access_token).await;
+    }
+}
+
+#[tauri::command]
+pub(crate) fn current_synced_preferences(
+    runtime: State<'_, Arc<AppRuntime>>,
+) -> Result<Option<AppSettings>, VerbalixError> {
+    runtime
+        .synced_settings
+        .lock()
+        .map(|g| g.clone())
+        .map_err(|_| VerbalixError::LocalFailure)
 }
 
 #[tauri::command]
@@ -123,6 +179,10 @@ pub(crate) fn save_settings(
     settings: AppSettings,
 ) -> Result<(), VerbalixError> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    let now_secs = epoch_secs_now();
+    let _ = runtime.preferences_sync.record_change(now_secs);
+
     runtime.settings.save(&settings)?;
     let shortcut = normalized_shortcut(&settings.shortcut);
     app.global_shortcut()
