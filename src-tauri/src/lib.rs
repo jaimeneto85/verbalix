@@ -227,7 +227,9 @@ pub fn run() {
                     match observer_runtime.coordinator.refresh_selection() {
                         Ok(Some(snapshot)) => {
                             thread::sleep(Duration::from_millis(150));
-                            if !observer_runtime.pause.is_paused() {
+                            if !observer_runtime.pause.is_paused()
+                                && !observer_runtime.pause.is_action_in_flight()
+                            {
                                 let _ = observer_runtime
                                     .coordinator
                                     .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
