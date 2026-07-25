@@ -84,10 +84,14 @@ impl SelectionCoordinator {
             self.commit_preview_visible(&active, request.request_id, &response.result, &lease)?;
             return Ok(());
         }
-        self.selection
+        let receipt = self
+            .selection
             .replace_guarded(&active, &response.result, &lease)?;
+        let mutation =
+            self.mutation_journal
+                .record(receipt, active.clone(), response.result.clone());
         let Some(undo_lease) =
-            self.commit_applied(&active, request.request_id, &response.result, &lease)?
+            self.promote_confirmed_mutation(&active, &response.result, &lease, &mutation)
         else {
             return Ok(());
         };
@@ -125,8 +129,13 @@ impl SelectionCoordinator {
                 .ok_or(VerbalixError::StaleSelection)?;
             (snapshot, result, lease)
         };
-        self.selection.replace_guarded(&snapshot, &result, &lease)?;
-        let Some(undo_lease) = self.commit_applied(&snapshot, request_id, &result, &lease)? else {
+        let receipt = self.selection.replace_guarded(&snapshot, &result, &lease)?;
+        let mutation = self
+            .mutation_journal
+            .record(receipt, snapshot.clone(), result.clone());
+        let Some(undo_lease) =
+            self.promote_confirmed_mutation(&snapshot, &result, &lease, &mutation)
+        else {
             return Ok(result);
         };
         if self
@@ -140,29 +149,31 @@ impl SelectionCoordinator {
     }
 
     pub fn undo(&self, transformed_text: &str) -> Result<(), VerbalixError> {
-        let (snapshot, lease) = {
+        let (snapshot, mutation_id) = {
             let state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
             let snapshot = match &*state {
                 SelectionState::Applied {
                     snapshot,
                     transformed_text: active,
-                } if active == transformed_text => snapshot.clone(),
+                    mutation_id,
+                } if active == transformed_text => (snapshot.clone(), *mutation_id),
                 _ => return Err(VerbalixError::StaleSelection),
             };
-            let active = self
-                .active_transform
-                .lock()
-                .map_err(|_| VerbalixError::LocalFailure)?;
-            let lease = active
-                .as_ref()
-                .filter(|active| active.snapshot.same_target(&snapshot))
-                .map(|active| active.lease.clone())
-                .ok_or(VerbalixError::StaleSelection)?;
-            (snapshot, lease)
+            (snapshot.0, snapshot.1)
         };
+        let mutation = self
+            .mutation_journal
+            .get(mutation_id)
+            .filter(|record| {
+                !record.restored
+                    && record.snapshot.same_target(&snapshot)
+                    && record.transformed_text == transformed_text
+            })
+            .ok_or(VerbalixError::StaleSelection)?;
         self.selection
-            .restore_guarded(&snapshot, transformed_text, &lease)?;
-        if self.commit_undo(&snapshot, transformed_text, &lease)?
+            .restore_guarded(&snapshot, transformed_text, &mutation.undo_lease)?;
+        self.mutation_journal.mark_restored(mutation_id);
+        if self.commit_undo(&snapshot, transformed_text, &mutation.undo_lease)?
             && self.overlay.hide_all().is_err()
         {
             diagnostics::coordinator("undo_hide_failed_after_restore", Some(&snapshot));
@@ -194,6 +205,22 @@ impl SelectionCoordinator {
             .map(|active| (snapshot.bounds, active.lease.clone())))
     }
 
+    fn promote_confirmed_mutation(
+        &self,
+        snapshot: &SelectionSnapshot,
+        result: &str,
+        lease: &crate::application::PublicationGuard,
+        mutation: &super::mutation_journal::MutationRecord,
+    ) -> Option<crate::application::PublicationGuard> {
+        match self.commit_applied(snapshot, result, lease, mutation) {
+            Ok(undo) => undo,
+            Err(_) => {
+                diagnostics::coordinator("applied_commit_failed_receipt_retained", Some(snapshot));
+                None
+            }
+        }
+    }
+
     pub(crate) fn undo_feedback(
         &self,
         transformed_text: &str,
@@ -204,6 +231,7 @@ impl SelectionCoordinator {
             SelectionState::Applied {
                 snapshot,
                 transformed_text: active,
+                ..
             } if active == transformed_text => snapshot,
             _ => return Ok(None),
         };

@@ -12,6 +12,7 @@ pub struct SelectionCoordinator {
     pub(super) state: Mutex<SelectionState>,
     pub(super) presentation: Mutex<Option<SelectionPresentation>>,
     pub(super) active_transform: Mutex<Option<ActiveTransform>>,
+    pub(super) mutation_journal: super::mutation_journal::MutationJournal,
 }
 
 pub(super) struct SelectionPresentation {
@@ -38,6 +39,7 @@ impl SelectionCoordinator {
             state: Mutex::new(SelectionState::Idle),
             presentation: Mutex::new(None),
             active_transform: Mutex::new(None),
+            mutation_journal: super::mutation_journal::MutationJournal::default(),
         }
     }
 

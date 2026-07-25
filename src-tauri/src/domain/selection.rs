@@ -163,6 +163,7 @@ pub enum SelectionState {
     Applied {
         snapshot: SelectionSnapshot,
         transformed_text: String,
+        mutation_id: Uuid,
     },
     ResultVisible(SelectionSnapshot),
 }

@@ -5,6 +5,7 @@ mod coordinator_commit;
 mod coordinator_presentation;
 mod coordinator_transform;
 mod mutation;
+mod mutation_journal;
 mod ports;
 mod runtime_pause;
 mod settings_file;

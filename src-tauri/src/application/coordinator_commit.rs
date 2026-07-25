@@ -62,10 +62,11 @@ impl SelectionCoordinator {
     pub(super) fn commit_applied(
         &self,
         snapshot: &SelectionSnapshot,
-        request_id: Uuid,
         result: &str,
         lease: &PublicationGuard,
+        mutation: &super::mutation_journal::MutationRecord,
     ) -> Result<Option<PublicationGuard>, VerbalixError> {
+        let request_id = mutation.receipt.request_id;
         let mut state = self.state.lock().map_err(|_| VerbalixError::LocalFailure)?;
         let state_matches = matches!(
             &*state,
@@ -91,10 +92,7 @@ impl SelectionCoordinator {
             return Ok(None);
         }
         lease.cancel();
-        let undo_lease = std::sync::Arc::new(crate::application::TransformLease::new(
-            snapshot.id,
-            request_id,
-        ));
+        let undo_lease = mutation.undo_lease.clone();
         *active = Some(super::coordinator::ActiveTransform {
             snapshot: snapshot.clone(),
             request_id,
@@ -103,6 +101,7 @@ impl SelectionCoordinator {
         *state = SelectionState::Applied {
             snapshot: snapshot.clone(),
             transformed_text: result.to_owned(),
+            mutation_id: mutation.receipt.id,
         };
         Ok(Some(undo_lease))
     }
@@ -119,6 +118,7 @@ impl SelectionCoordinator {
             SelectionState::Applied {
                 snapshot: current,
                 transformed_text: active,
+                ..
             } if active == transformed_text && current.same_target(snapshot)
         );
         let mut active = self

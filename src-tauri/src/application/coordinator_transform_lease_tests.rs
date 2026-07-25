@@ -20,6 +20,7 @@ struct GateState {
 struct BlockingClaimSelection {
     current: Mutex<SelectionSnapshot>,
     writes: Mutex<Vec<(Uuid, String)>>,
+    receipts: Mutex<Vec<MutationReceipt>>,
     gate: (Mutex<GateState>, Condvar),
     point: GatePoint,
 }
@@ -29,6 +30,7 @@ impl BlockingClaimSelection {
         Self {
             current: Mutex::new(current),
             writes: Mutex::new(Vec::new()),
+            receipts: Mutex::new(Vec::new()),
             gate: (Mutex::new(GateState::default()), Condvar::new()),
             point,
         }
@@ -92,11 +94,13 @@ impl SelectionPort for BlockingClaimSelection {
             .lock()
             .unwrap()
             .push((expected.id, text.to_owned()));
-        Ok(MutationReceipt {
+        let receipt = MutationReceipt {
             id: Uuid::new_v4(),
             snapshot_id: expected.id,
             request_id: lease.request_id(),
-        })
+        };
+        self.receipts.lock().unwrap().push(receipt.clone());
+        Ok(receipt)
     }
 
     fn restore(
@@ -261,4 +265,6 @@ fn candidate_after_write_claim_cannot_be_overwritten_by_applied_or_undo() {
     assert_eq!(selection.writes.lock().unwrap().len(), 1);
     assert_eq!(coordinator.current_snapshot().unwrap().id, next_id);
     assert!(!overlay.events.lock().unwrap().contains(&"undo"));
+    let receipt_id = selection.receipts.lock().unwrap()[0].id;
+    assert!(coordinator.mutation_journal.contains(receipt_id));
 }
