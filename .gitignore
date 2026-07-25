@@ -10,3 +10,9 @@ coverage/
 test-results/
 playwright-report/
 supabase/.temp/
+
+# iOS build artifacts
+ios/Verbalix.xcodeproj/
+ios/Local.xcconfig
+ios/Config/Supabase.xcconfig
+ios/**/DerivedData/

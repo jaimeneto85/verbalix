@@ -1,0 +1,5 @@
+// Copy this file to Local.xcconfig (gitignored) and fill in your team ID.
+// Required only for device builds and App Store distribution.
+// Simulator builds work without this file (CODE_SIGNING_ALLOWED=NO in Debug.xcconfig).
+
+// DEVELOPMENT_TEAM = XXXXXXXXXX
