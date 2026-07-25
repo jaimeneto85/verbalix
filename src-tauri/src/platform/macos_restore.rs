@@ -5,6 +5,12 @@ use super::{
 };
 use crate::domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError};
 
+pub(super) enum RestoreWriteOutcome {
+    Confirmed,
+    Rejected,
+    Indeterminate,
+}
+
 pub(super) fn prepare_on_element(
     expected: &SelectionSnapshot,
     transformed_text: &str,
@@ -45,24 +51,29 @@ pub(super) fn prepare_on_element(
 pub(super) fn write_on_element(
     expected: &SelectionSnapshot,
     element: AXUIElementRef,
-) -> Result<(), VerbalixError> {
+) -> RestoreWriteOutcome {
     match macos_ax::set_selected_text(element, &expected.text) {
-        AxWriteResult::Confirmed => Ok(()),
-        AxWriteResult::Rejected(_) => Err(VerbalixError::LocalFailure),
+        AxWriteResult::Confirmed => RestoreWriteOutcome::Confirmed,
+        AxWriteResult::Rejected(_) => RestoreWriteOutcome::Rejected,
         AxWriteResult::Indeterminate(_) => {
-            let current =
-                macos_selection_revalidation::read(element, expected.extraction_strategy)?;
-            let location = isize::try_from(expected.range.location)
-                .map_err(|_| VerbalixError::StaleSelection)?;
-            let length = isize::try_from(expected.text.encode_utf16().count())
-                .map_err(|_| VerbalixError::StaleSelection)?;
+            let Ok(current) =
+                macos_selection_revalidation::read(element, expected.extraction_strategy)
+            else {
+                return RestoreWriteOutcome::Indeterminate;
+            };
+            let Ok(location) = isize::try_from(expected.range.location) else {
+                return RestoreWriteOutcome::Indeterminate;
+            };
+            let Ok(length) = isize::try_from(expected.text.encode_utf16().count()) else {
+                return RestoreWriteOutcome::Indeterminate;
+            };
             if current.text == expected.text
                 && current.range.location == location
                 && current.range.length == length
             {
-                Ok(())
+                RestoreWriteOutcome::Confirmed
             } else {
-                Err(VerbalixError::LocalFailure)
+                RestoreWriteOutcome::Indeterminate
             }
         }
     }

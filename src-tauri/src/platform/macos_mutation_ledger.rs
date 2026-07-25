@@ -10,6 +10,7 @@ const TERMINAL_TTL_MS: u64 = 600_000;
 pub(super) struct ActorMutationRecord<T> {
     pub(super) projection: MutationProjection,
     pub(super) target: T,
+    restore_attempted: bool,
     terminal_at: Option<u64>,
 }
 
@@ -57,6 +58,7 @@ impl<T> MutationLedger<T> {
             ActorMutationRecord {
                 projection: projection.clone(),
                 target,
+                restore_attempted: false,
                 terminal_at: None,
             },
         );
@@ -106,7 +108,26 @@ impl<T> MutationLedger<T> {
         Ok(record.projection.clone())
     }
 
-    pub(super) fn set_status(
+    pub(super) fn begin_restore(
+        &mut self,
+        id: Uuid,
+        now_ms: u64,
+    ) -> Result<MutationProjection, VerbalixError> {
+        self.prune(now_ms);
+        let record = self
+            .records
+            .get_mut(&id)
+            .ok_or(VerbalixError::StaleSelection)?;
+        if record.projection.status != MutationStatus::Confirmed || record.restore_attempted {
+            return Err(VerbalixError::StaleSelection);
+        }
+        record.restore_attempted = true;
+        record.projection.status = MutationStatus::RestorePrepared;
+        record.terminal_at = None;
+        Ok(record.projection.clone())
+    }
+
+    pub(super) fn finish_restore(
         &mut self,
         id: Uuid,
         status: MutationStatus,
@@ -116,15 +137,41 @@ impl<T> MutationLedger<T> {
             .records
             .get_mut(&id)
             .ok_or(VerbalixError::StaleSelection)?;
-        record.projection.status = status;
-        record.terminal_at = matches!(
-            status,
-            MutationStatus::Confirmed
-                | MutationStatus::Rejected
-                | MutationStatus::Restored
-                | MutationStatus::RestoreRejected
-        )
-        .then_some(now_ms);
+        if record.projection.status != MutationStatus::RestorePrepared
+            || !matches!(
+                status,
+                MutationStatus::Restored
+                    | MutationStatus::RestoreRejected
+                    | MutationStatus::RestoreIndeterminate
+            )
+        {
+            return Err(VerbalixError::StaleSelection);
+        }
+        apply_restore_status(record, status, now_ms);
+        Ok(record.projection.clone())
+    }
+
+    pub(super) fn reconcile_restore(
+        &mut self,
+        id: Uuid,
+        status: MutationStatus,
+        now_ms: u64,
+    ) -> Result<MutationProjection, VerbalixError> {
+        let record = self
+            .records
+            .get_mut(&id)
+            .ok_or(VerbalixError::StaleSelection)?;
+        if record.projection.status != MutationStatus::RestoreIndeterminate
+            || !matches!(
+                status,
+                MutationStatus::Restored
+                    | MutationStatus::RestoreRejected
+                    | MutationStatus::RestoreIndeterminate
+            )
+        {
+            return Err(VerbalixError::StaleSelection);
+        }
+        apply_restore_status(record, status, now_ms);
         Ok(record.projection.clone())
     }
 
@@ -142,6 +189,19 @@ impl<T> MutationLedger<T> {
                 .is_none_or(|terminal| now_ms.saturating_sub(terminal) < TERMINAL_TTL_MS)
         });
     }
+}
+
+fn apply_restore_status<T>(
+    record: &mut ActorMutationRecord<T>,
+    status: MutationStatus,
+    now_ms: u64,
+) {
+    record.projection.status = status;
+    record.terminal_at = matches!(
+        status,
+        MutationStatus::Restored | MutationStatus::RestoreRejected
+    )
+    .then_some(now_ms);
 }
 
 fn matching<T>(

@@ -2,7 +2,7 @@ use super::{
     macos_ax::{self, AXUIElementRef},
     macos_classic_range::{self, CFRange},
     macos_focus::{AxStage, ExtractionOrigin},
-    macos_value_range,
+    macos_selection, macos_text_role, macos_value_range,
 };
 use crate::domain::{SelectionExtractionStrategy, VerbalixError};
 
@@ -16,12 +16,24 @@ pub(super) fn read(
     element: AXUIElementRef,
     strategy: SelectionExtractionStrategy,
 ) -> Result<CurrentSelection, VerbalixError> {
-    match strategy {
+    let role = macos_selection::text_role(element).map_err(|error| match error {
+        VerbalixError::ProtectedField => error,
+        _ => VerbalixError::StaleSelection,
+    })?;
+    read_authorized(role, || match strategy {
         SelectionExtractionStrategy::SelectedText => selected_text(element, strategy),
         SelectionExtractionStrategy::StringForRange => string_for_range(element, strategy),
         SelectionExtractionStrategy::ValueRange => value_range(element, strategy),
         SelectionExtractionStrategy::TextMarker => Err(VerbalixError::StaleSelection),
-    }
+    })
+}
+
+fn read_authorized<T>(
+    role: macos_text_role::ValidatedTextRole,
+    reader: impl FnOnce() -> Result<T, VerbalixError>,
+) -> Result<T, VerbalixError> {
+    let _ = role.capability;
+    reader()
 }
 
 fn selected_text(
@@ -70,4 +82,43 @@ fn value_range(
         range: selection.range,
         strategy,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn secure_transition_rejects_before_the_content_reader() {
+        let reads = Cell::new(0);
+        let secure = macos_text_role::validate(
+            "AXTextField".to_owned(),
+            Some("AXSecureTextField".to_owned()),
+        );
+
+        let result = secure.and_then(|role| {
+            read_authorized(role, || {
+                reads.set(reads.get() + 1);
+                Ok(())
+            })
+        });
+
+        assert!(matches!(result, Err(VerbalixError::ProtectedField)));
+        assert_eq!(reads.get(), 0);
+    }
+
+    #[test]
+    fn authorized_text_role_reaches_the_reader_once() {
+        let reads = Cell::new(0);
+        let role = macos_text_role::validate("AXTextArea".to_owned(), None).unwrap();
+
+        read_authorized(role, || {
+            reads.set(reads.get() + 1);
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(reads.get(), 1);
+    }
 }

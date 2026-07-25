@@ -148,17 +148,19 @@ impl ActorState {
             &target.element,
             has_no_identifier(&expected),
         )?;
-        self.mutations
-            .set_status(mutation_id, MutationStatus::RestorePrepared, self.now())?;
+        self.mutations.begin_restore(mutation_id, self.now())?;
         if ensure_current(&self.epoch, boundary_epoch).is_err() {
-            self.mutations
-                .set_status(mutation_id, MutationStatus::RestoreRejected, self.now())?;
+            self.mutations.finish_restore(
+                mutation_id,
+                MutationStatus::RestoreRejected,
+                self.now(),
+            )?;
             return Err(VerbalixError::StaleSelection);
         }
         let request_id = match claim(&lease) {
             Ok(request_id) => request_id,
             Err(error) => {
-                self.mutations.set_status(
+                self.mutations.finish_restore(
                     mutation_id,
                     MutationStatus::RestoreRejected,
                     self.now(),
@@ -169,21 +171,29 @@ impl ActorState {
         if request_id != projection.receipt.request_id
             || ensure_current(&self.epoch, boundary_epoch).is_err()
         {
-            self.mutations
-                .set_status(mutation_id, MutationStatus::RestoreRejected, self.now())?;
+            self.mutations.finish_restore(
+                mutation_id,
+                MutationStatus::RestoreRejected,
+                self.now(),
+            )?;
             return Err(VerbalixError::StaleSelection);
         }
-        let result = macos_restore::write_on_element(&expected, target.element.as_ref().as_ref());
-        let status = if result.is_ok() {
-            MutationStatus::Restored
-        } else {
-            MutationStatus::RestoreIndeterminate
+        let outcome = macos_restore::write_on_element(&expected, target.element.as_ref().as_ref());
+        let status = match outcome {
+            macos_restore::RestoreWriteOutcome::Confirmed => MutationStatus::Restored,
+            macos_restore::RestoreWriteOutcome::Rejected => MutationStatus::RestoreRejected,
+            macos_restore::RestoreWriteOutcome::Indeterminate => {
+                MutationStatus::RestoreIndeterminate
+            }
         };
-        self.mutations.set_status(mutation_id, status, self.now())?;
-        if result.is_ok() {
+        self.mutations
+            .finish_restore(mutation_id, status, self.now())?;
+        if status == MutationStatus::Restored {
             self.targets.remove(expected.id);
+            Ok(projection.receipt)
+        } else {
+            Err(VerbalixError::LocalFailure)
         }
-        result.map(|_| projection.receipt)
     }
 
     pub(super) fn discard(&mut self, id: Uuid) {
@@ -198,42 +208,58 @@ impl ActorState {
             )
             .then(|| {
                 let restoring = record.projection.status == MutationStatus::RestoreIndeterminate;
-                macos_selection_revalidation::read(
+                let current = macos_selection_revalidation::read(
                     record.target.element.as_ref().as_ref(),
                     record.projection.strategy,
-                )
-                .ok()
-                .map(|current| {
-                    let expected_location = record.projection.snapshot.range.location;
-                    let current_location = current.range.location as i64;
-                    let status = if restoring
-                        && current.text == record.projection.original_text
-                        && current_location == expected_location
-                        && current.range.length as i64 == record.projection.snapshot.range.length
-                    {
-                        MutationStatus::Restored
-                    } else if current.text == record.projection.transformed_text
-                        && current_location == expected_location
-                        && current.range.length as usize
-                            == record.projection.transformed_text.encode_utf16().count()
-                    {
-                        MutationStatus::Confirmed
-                    } else if current.text == record.projection.original_text
-                        && current_location == expected_location
-                        && current.range.length as i64 == record.projection.snapshot.range.length
-                    {
-                        MutationStatus::Rejected
-                    } else {
-                        MutationStatus::Indeterminate
-                    };
-                    (restoring, status)
-                })
-                .unwrap_or((restoring, MutationStatus::Indeterminate))
+                );
+                current
+                    .map(|current| {
+                        let expected_location = record.projection.snapshot.range.location;
+                        let current_location = current.range.location as i64;
+                        let status = if restoring
+                            && current.text == record.projection.original_text
+                            && current_location == expected_location
+                            && current.range.length as i64
+                                == record.projection.snapshot.range.length
+                        {
+                            MutationStatus::Restored
+                        } else if restoring
+                            && current.text == record.projection.transformed_text
+                            && current_location == expected_location
+                            && current.range.length as usize
+                                == record.projection.transformed_text.encode_utf16().count()
+                        {
+                            MutationStatus::RestoreRejected
+                        } else if current.text == record.projection.transformed_text
+                            && current_location == expected_location
+                            && current.range.length as usize
+                                == record.projection.transformed_text.encode_utf16().count()
+                        {
+                            MutationStatus::Confirmed
+                        } else if current.text == record.projection.original_text
+                            && current_location == expected_location
+                            && current.range.length as i64
+                                == record.projection.snapshot.range.length
+                        {
+                            MutationStatus::Rejected
+                        } else {
+                            MutationStatus::Indeterminate
+                        };
+                        (restoring, status)
+                    })
+                    .unwrap_or((
+                        restoring,
+                        if restoring {
+                            MutationStatus::RestoreRejected
+                        } else {
+                            MutationStatus::Rejected
+                        },
+                    ))
             })
         });
         if let Some((restoring, status)) = recovery {
             if restoring {
-                let _ = self.mutations.set_status(id, status, self.now());
+                let _ = self.mutations.reconcile_restore(id, status, self.now());
             } else {
                 let _ = self.mutations.terminalize(id, status, self.now());
             }
