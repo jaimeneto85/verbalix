@@ -159,7 +159,28 @@ fn error_bounds_with_returns_none_when_no_snapshot_and_no_in_flight() {
 }
 
 #[test]
-fn error_bounds_with_returns_last_known_bounds_when_in_flight_and_snapshot_cleared() {
+fn error_bounds_with_returns_current_snapshot_bounds_when_in_flight_and_candidate_state() {
+    set_test_clock_ms(0);
+    let snap = cmd_snapshot();
+    let expected_bounds = snap.bounds;
+    let coordinator = make_coordinator_with_snapshot(snap.clone());
+    coordinator
+        .dispatch(SelectionEvent::Candidate(Box::new(snap)))
+        .unwrap();
+
+    assert!(coordinator.current_snapshot().is_some());
+
+    let pause = RuntimePause::with_clock(test_clock_ms);
+    let _guard = pause.begin_action();
+
+    assert_eq!(
+        error_bounds_with(&coordinator, &pause),
+        Some(expected_bounds)
+    );
+}
+
+#[test]
+fn error_bounds_with_returns_last_known_bounds_fallback_when_idle_in_flight_and_bounds_present() {
     set_test_clock_ms(0);
     let snap = cmd_snapshot();
     let expected_bounds = snap.bounds;
@@ -173,18 +194,34 @@ fn error_bounds_with_returns_last_known_bounds_when_in_flight_and_snapshot_clear
     assert!(coordinator.current_snapshot().is_none());
     assert!(coordinator.last_known_bounds().is_none());
 
-    let coordinator2 = make_coordinator_with_snapshot(cmd_snapshot());
-    coordinator2
-        .dispatch(SelectionEvent::Candidate(Box::new(cmd_snapshot())))
-        .unwrap();
+    coordinator.force_last_bounds_for_test(Some(expected_bounds));
+    assert_eq!(coordinator.last_known_bounds(), Some(expected_bounds));
 
     let pause = RuntimePause::with_clock(test_clock_ms);
     let _guard = pause.begin_action();
 
     assert_eq!(
-        error_bounds_with(&coordinator2, &pause),
+        error_bounds_with(&coordinator, &pause),
         Some(expected_bounds)
     );
+}
+
+#[test]
+fn error_bounds_with_returns_none_when_idle_not_in_flight_even_with_last_bounds() {
+    set_test_clock_ms(0);
+    let snap = cmd_snapshot();
+    let coordinator = make_coordinator_with_snapshot(snap.clone());
+
+    coordinator
+        .dispatch(SelectionEvent::Candidate(Box::new(snap.clone())))
+        .unwrap();
+    coordinator.dispatch(SelectionEvent::Invalidated).unwrap();
+
+    coordinator.force_last_bounds_for_test(Some(snap.bounds));
+
+    let pause = RuntimePause::with_clock(test_clock_ms);
+
+    assert!(error_bounds_with(&coordinator, &pause).is_none());
 }
 
 #[test]

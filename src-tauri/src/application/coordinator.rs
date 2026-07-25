@@ -61,6 +61,13 @@ impl SelectionCoordinator {
         }
     }
 
+    #[cfg(test)]
+    pub fn force_last_bounds_for_test(&self, bounds: Option<Rect>) {
+        if let Ok(mut guard) = self.last_bounds.lock() {
+            *guard = bounds;
+        }
+    }
+
     pub fn current_snapshot(&self) -> Option<SelectionSnapshot> {
         let state = self.state.lock().ok()?;
         match &*state {
