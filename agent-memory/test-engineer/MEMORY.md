@@ -51,6 +51,8 @@
 - Supressão de self-notification é one-shot por mutation ID, alvo forte, geração, ledger e seleção atual. O token usa PID + `AXIdentifier` completo após role+subrole; sem identifier, a supressão não é armada e o evento falha seguro como externo.
 - Restore exige matriz de estados do ledger: cada outcome permite no máximo um `begin_restore`, estados terminais nunca reabrem e reconcile de `RestoreIndeterminate` permanece somente leitura.
 - Todo reader de reconciliação passa pelo gate central role+subrole; a matriz de estratégias exige zero leitor de conteúdo após transição para `AXSecureTextField`.
+- Testes de secure-after-prepare precisam atravessar `ActorState::replace/restore` com um boundary de handle retido injetável; compor `set_after_role_validation` e `MutationLedger` manualmente não prova o wiring, a ordem claim/epoch/gate/setter nem a terminalização real.
+- A matriz de terminalização deve separar retry idempotente da API correta de chamadas cross-phase: checar `status == outcome` antes de validar o estado predecessor faz `reconcile_*` aceitar records já terminais e precisa de decisão/cobertura explícita.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.

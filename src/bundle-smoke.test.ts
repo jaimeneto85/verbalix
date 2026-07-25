@@ -102,6 +102,10 @@ describe("macOS bundle smoke contract", () => {
       "src-tauri/src/platform/macos_replace.rs",
       "utf8"
     );
+    const writeBoundary = readFileSync(
+      "src-tauri/src/platform/macos_write_boundary.rs",
+      "utf8"
+    );
     const selection = readFileSync(
       "src-tauri/src/platform/macos_selection.rs",
       "utf8"
@@ -133,14 +137,20 @@ describe("macOS bundle smoke contract", () => {
       "macos_selection::capture_with_strategy(element, expected.extraction_strategy)?"
     );
     const setter = replacement.indexOf(
-      "macos_ax::set_selected_text(element, text)",
+      "macos_write_boundary::set_selected_text(expected, text, element)",
       recapture
+    );
+    const roleGate = writeBoundary.indexOf("macos_selection::text_role(element)");
+    const nativeSetter = writeBoundary.indexOf(
+      "macos_ax::set_selected_text(element, text)"
     );
     expect(exactTargetLookup).toBeGreaterThan(-1);
     expect(retainedHandleLookup).toBeGreaterThan(exactTargetLookup);
     expect(actorState).not.toContain("focused_element_for_pid");
     expect(recapture).toBeGreaterThan(-1);
     expect(setter).toBeGreaterThan(recapture);
+    expect(roleGate).toBeGreaterThan(-1);
+    expect(nativeSetter).toBeGreaterThan(roleGate);
 
     const rectDecoder = geometry.slice(
       geometry.indexOf("pub(super) fn rect_from_value"),
