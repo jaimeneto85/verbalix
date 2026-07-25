@@ -51,8 +51,8 @@
 - Supressão de self-notification é one-shot por mutation ID, alvo forte, geração, ledger e seleção atual. O token usa PID + `AXIdentifier` completo após role+subrole; sem identifier, a supressão não é armada e o evento falha seguro como externo.
 - Restore exige matriz de estados do ledger: cada outcome permite no máximo um `begin_restore`, estados terminais nunca reabrem e reconcile de `RestoreIndeterminate` permanece somente leitura.
 - Todo reader de reconciliação passa pelo gate central role+subrole; a matriz de estratégias exige zero leitor de conteúdo após transição para `AXSecureTextField`.
-- Testes de secure-after-prepare precisam atravessar `ActorState::replace/restore` com um boundary de handle retido injetável; compor `set_after_role_validation` e `MutationLedger` manualmente não prova o wiring, a ordem claim/epoch/gate/setter nem a terminalização real.
-- A matriz de terminalização deve separar retry idempotente da API correta de chamadas cross-phase: checar `status == outcome` antes de validar o estado predecessor faz `reconcile_*` aceitar records já terminais e precisa de decisão/cobertura explícita.
+- Secure-after-prepare atravessa `ActorState::replace/restore` com `AxMutationTarget` instrumentado no mesmo registry causal, epoch e `TransformLease` reais; o fake muda para secure depois de prepare e prova zero setter, terminal Rejected/RestoreRejected e self-notification limpa.
+- A matriz de terminalização registra `TerminalPhase`: retry idempotente exige mesma fase/API e outcome, enquanto `finish_* ↔ reconcile_*` cross-phase falha sem alterar status, TTL, restore-attempt ou provenance.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -73,7 +73,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 199 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, revogação AX fora da FIFO, correlação one-shot forte, restore monotônico, secure zero-read, histórico detached e receipt exato.
+- A suíte Rust possui 206 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, revogação AX fora da FIFO, correlação one-shot forte, restore monotônico, secure-after-prepare no ActorState, histórico detached e receipt exato.
 - O frontend possui 55 testes Vitest com 100% de statements, branches, functions e lines no escopo instrumentado; os 6 testes Playwright continuam verdes.
 
 ## Observações

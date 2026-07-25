@@ -80,18 +80,19 @@ fn same_outcome_is_idempotent_only_for_the_api_phase_that_committed_it() {
         assert!(record_state(&ledger, receipt.id) == committed);
     }
 
-    let (mut replace_ledger, replace_receipt) = prepared_ledger();
-    replace_ledger
-        .finish_replace(replace_receipt.id, ReplaceTerminalOutcome::Indeterminate, 1)
-        .unwrap();
-    replace_ledger
-        .reconcile_replace(replace_receipt.id, ReplaceTerminalOutcome::Indeterminate, 2)
-        .unwrap();
-    let reconciled = record_state(&replace_ledger, replace_receipt.id);
-    assert!(replace_ledger
-        .finish_replace(replace_receipt.id, ReplaceTerminalOutcome::Indeterminate, 3,)
-        .is_err());
-    assert!(record_state(&replace_ledger, replace_receipt.id) == reconciled);
+    for outcome in [
+        ReplaceTerminalOutcome::Confirmed,
+        ReplaceTerminalOutcome::Rejected,
+        ReplaceTerminalOutcome::Indeterminate,
+    ] {
+        let (mut ledger, receipt) = indeterminate_replace_ledger();
+        ledger.reconcile_replace(receipt.id, outcome, 2).unwrap();
+        let reconciled = record_state(&ledger, receipt.id);
+        ledger.reconcile_replace(receipt.id, outcome, 99).unwrap();
+        assert!(record_state(&ledger, receipt.id) == reconciled);
+        assert!(ledger.finish_replace(receipt.id, outcome, 99).is_err());
+        assert!(record_state(&ledger, receipt.id) == reconciled);
+    }
 
     for outcome in [
         RestoreTerminalOutcome::Restored,
@@ -106,18 +107,19 @@ fn same_outcome_is_idempotent_only_for_the_api_phase_that_committed_it() {
         assert!(record_state(&ledger, receipt.id) == committed);
     }
 
-    let (mut restore_ledger, restore_receipt) = restoring_ledger();
-    restore_ledger
-        .finish_restore(restore_receipt.id, RestoreTerminalOutcome::Indeterminate, 3)
-        .unwrap();
-    restore_ledger
-        .reconcile_restore(restore_receipt.id, RestoreTerminalOutcome::Indeterminate, 4)
-        .unwrap();
-    let restore_reconciled = record_state(&restore_ledger, restore_receipt.id);
-    assert!(restore_ledger
-        .finish_restore(restore_receipt.id, RestoreTerminalOutcome::Indeterminate, 5,)
-        .is_err());
-    assert!(record_state(&restore_ledger, restore_receipt.id) == restore_reconciled);
+    for outcome in [
+        RestoreTerminalOutcome::Restored,
+        RestoreTerminalOutcome::Rejected,
+        RestoreTerminalOutcome::Indeterminate,
+    ] {
+        let (mut ledger, receipt) = indeterminate_restore_ledger();
+        ledger.reconcile_restore(receipt.id, outcome, 4).unwrap();
+        let reconciled = record_state(&ledger, receipt.id);
+        ledger.reconcile_restore(receipt.id, outcome, 99).unwrap();
+        assert!(record_state(&ledger, receipt.id) == reconciled);
+        assert!(ledger.finish_restore(receipt.id, outcome, 99).is_err());
+        assert!(record_state(&ledger, receipt.id) == reconciled);
+    }
 }
 
 fn prepared_ledger() -> (MutationLedger<()>, MutationReceipt) {
@@ -140,6 +142,22 @@ fn restoring_ledger() -> (MutationLedger<()>, MutationReceipt) {
         .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
         .unwrap();
     ledger.begin_restore(receipt.id, 2).unwrap();
+    (ledger, receipt)
+}
+
+fn indeterminate_replace_ledger() -> (MutationLedger<()>, MutationReceipt) {
+    let (mut ledger, receipt) = prepared_ledger();
+    ledger
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Indeterminate, 1)
+        .unwrap();
+    (ledger, receipt)
+}
+
+fn indeterminate_restore_ledger() -> (MutationLedger<()>, MutationReceipt) {
+    let (mut ledger, receipt) = restoring_ledger();
+    ledger
+        .finish_restore(receipt.id, RestoreTerminalOutcome::Indeterminate, 3)
+        .unwrap();
     (ledger, receipt)
 }
 

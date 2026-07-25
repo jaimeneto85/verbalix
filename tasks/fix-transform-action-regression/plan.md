@@ -70,11 +70,11 @@
 - [ ] RF27: Notificação `AXSelectedTextChanged` causada pelo próprio mutation ID é correlacionada/suprimida sem esconder mudanças externas reais.
 - [ ] RF28: Estados de restore são monotônicos e tipados; `Rejected` nunca vira `Indeterminate/Confirmed` e o mesmo mutation ID executa no máximo um restore setter.
 - [ ] RF29: Toda leitura de reconciliação revalida `AXRole + AXSubrole` antes de conteúdo, inclusive em handles retidos que mudaram para secure.
-- [ ] RF30: `AXIdentifier` permanece identidade nativa interna e nunca aparece em serde/IPC, Debug ou logs de `SelectionSnapshot`/`SelectionElementIdentity`.
-- [ ] RF31: FocusChanged/Destroyed incrementam epoch antes de qualquer token/AX metadata I/O; somente SelectedTextChanged candidato pode construir token.
-- [ ] RF32: Replace/Restore revalidam `AXRole + AXSubrole` no handle retido imediatamente no boundary do setter, depois de ledger/claim/epoch.
-- [ ] RF33: A API de terminalização aceita outcome tipado exclusivo de replace; estados restore/Prepared semanticamente inválidos são rejeitados sem mutar status/TTL.
-- [ ] RF34: Idempotência é específica da fase/API; `finish_*` e `reconcile_*` não aceitam o mesmo outcome quando o predecessor exigido não corresponde.
+- [x] RF30: `AXIdentifier` permanece identidade nativa interna e nunca aparece em serde/IPC, Debug ou logs de `SelectionSnapshot`/`SelectionElementIdentity`.
+- [x] RF31: FocusChanged/Destroyed incrementam epoch antes de qualquer token/AX metadata I/O; somente SelectedTextChanged candidato pode construir token.
+- [x] RF32: Replace/Restore revalidam `AXRole + AXSubrole` no handle retido imediatamente no boundary do setter, depois de ledger/claim/epoch.
+- [x] RF33: A API de terminalização aceita outcome tipado exclusivo de replace; estados restore/Prepared semanticamente inválidos são rejeitados sem mutar status/TTL.
+- [x] RF34: Idempotência é específica da fase/API; `finish_*` e `reconcile_*` não aceitam o mesmo outcome quando o predecessor exigido não corresponde.
 
 ### Requisitos não funcionais
 
@@ -114,11 +114,11 @@
 - [ ] CA27: Self-notification exata mantém Applied/undo/feedback; notificação externa subsequente cancela normalmente.
 - [ ] CA28: Restore Rejected/Indeterminate/Confirmed e retry/reconcile provam setter count máximo 1 por mutation ID.
 - [ ] CA29: Handle que muda para secure antes de reconcile produz trace zero-read e terminal Rejected.
-- [ ] CA30: Teste comportamental serde/IPC e Debug prova ausência de AXIdentifier, mantendo comparação nativa interna.
-- [ ] CA31: Callback FFI-classifier instrumentado prova Focus/Destroyed zero token reads e bump anterior ao callback; Selected sem expectativa também bumpa sem metadata.
-- [ ] CA32: Teste actor/retained-handle muda subrole para secure depois de prepare e antes de setter, exigindo zero setter e terminal Rejected.
-- [ ] CA33: Matriz de terminalização inválida mantém status e TTL byte-for-byte; outcomes válidos continuam idempotentes.
-- [ ] CA34: Matriz cross-phase cobre mesmo outcome em API errada para replace/restore e preserva status, terminal_at e restore_attempted.
+- [x] CA30: Teste comportamental serde/IPC e Debug prova ausência de AXIdentifier, mantendo comparação nativa interna.
+- [x] CA31: Callback FFI-classifier instrumentado prova Focus/Destroyed zero token reads e bump anterior ao callback; Selected sem expectativa também bumpa sem metadata.
+- [x] CA32: Teste actor/retained-handle muda subrole para secure depois de prepare e antes de setter, exigindo zero setter e terminal Rejected.
+- [x] CA33: Matriz de terminalização inválida mantém status e TTL byte-for-byte; outcomes válidos continuam idempotentes.
+- [x] CA34: Matriz cross-phase cobre mesmo outcome em API errada para replace/restore e preserva status, terminal_at e restore_attempted.
 
 ### Edge cases
 
@@ -236,9 +236,9 @@
 - [ ] T2.21 `[HIGH]` Observar focus-changed fora da FIFO e integrar ao CausalEpoch sem depender do polling.
 - [ ] T2.22 `[HIGH]` Correlacionar self-notification ao mutation record e consumir exatamente uma notificação esperada.
 - [ ] T2.23 `[HIGH]` Tornar restore terminal monotônico/idempotente e compartilhar secure-gated revalidation no reconcile.
-- [ ] T2.24 `[HIGH]` Remover AXIdentifier de serde/IPC/Debug mantendo-o no registry/token nativo interno.
-- [ ] T2.25 `[HIGH]` Refatorar callback observer para fast-path Focus/Destroyed/Selected-sem-expectativa antes de token reads.
-- [ ] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
+- [x] T2.24 `[HIGH]` Remover AXIdentifier de serde/IPC/Debug mantendo-o no registry/token nativo interno.
+- [x] T2.25 `[HIGH]` Refatorar callback observer para fast-path Focus/Destroyed/Selected-sem-expectativa antes de token reads.
+- [x] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
 - [x] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
 
 ### Fase 3 — Testes
@@ -265,8 +265,8 @@
 - [x] T3.20 `[HIGH]` Cobrir mutation recovery completo em perda de response, expiry durante setter, commit failure, reconcile repetido e Candidate B preservado.
 - [x] T3.21 `[HIGH]` Cobrir behavioralmente focus keyboard, self-notification versus external notification e zero setter stale.
 - [x] T3.22 `[HIGH]` Cobrir restore setter count, estados monotônicos e secure transition zero-read com fakes instrumentados; `include_str!` não satisfaz.
-- [ ] T3.23 `[HIGH]` Cobrir behavioralmente serde/IPC redaction, callback pre-I/O ordering, secure-after-prepare actor path e invalid terminal outcomes/status/TTL.
-- [ ] T3.24 `[HIGH]` Cobrir ActorState real replace+restore secure-after-prepare e matriz ledger cross-phase same-outcome.
+- [x] T3.23 `[HIGH]` Cobrir behavioralmente serde/IPC redaction, callback pre-I/O ordering, secure-after-prepare actor path e invalid terminal outcomes/status/TTL.
+- [x] T3.24 `[HIGH]` Cobrir ActorState real replace+restore secure-after-prepare e matriz ledger cross-phase same-outcome.
 
 ### Fase 4 — QA real
 

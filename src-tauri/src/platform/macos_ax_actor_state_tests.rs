@@ -1,11 +1,12 @@
 use super::*;
 use crate::{
-    application::{MutationReceipt, MutationStatus},
+    application::{MutationReceipt, MutationStatus, TransformLease},
     domain::{Rect, SelectionElementIdentity, TextRange},
     platform::{
         macos_ax_target::tests::InstrumentedAxTarget, macos_mutation_ledger::ReplaceTerminalOutcome,
     },
 };
+use std::sync::Arc;
 
 fn snapshot() -> SelectionSnapshot {
     SelectionSnapshot::new(
@@ -52,19 +53,28 @@ fn state_with_target() -> (ActorState, SelectionSnapshot, Rc<InstrumentedAxTarge
     (state, selected, instrumented)
 }
 
-fn receipt(selected: &SelectionSnapshot) -> MutationReceipt {
-    MutationReceipt {
-        id: Uuid::new_v4(),
-        snapshot_id: selected.id,
-        request_id: Uuid::nil(),
-    }
+fn receipt_and_lease(selected: &SelectionSnapshot) -> (MutationReceipt, Arc<TransformLease>) {
+    let request_id = Uuid::new_v4();
+    (
+        MutationReceipt {
+            id: Uuid::new_v4(),
+            snapshot_id: selected.id,
+            request_id,
+        },
+        Arc::new(TransformLease::new(selected.id, request_id)),
+    )
 }
 
 #[test]
 fn actor_replace_rejects_secure_after_prepare_on_the_exact_retained_target() {
     let (mut state, selected, instrumented) = state_with_target();
-    let mutation = receipt(&selected);
-    let result = state.replace(mutation.clone(), selected, "after".to_owned(), None);
+    let (mutation, lease) = receipt_and_lease(&selected);
+    let result = state.replace(
+        mutation.clone(),
+        selected,
+        "after".to_owned(),
+        Some(lease.clone()),
+    );
     let projection = state
         .mutations
         .projection(mutation.id, state.now())
@@ -73,13 +83,15 @@ fn actor_replace_rejects_secure_after_prepare_on_the_exact_retained_target() {
     assert!(projection.status == MutationStatus::Rejected);
     assert_eq!(instrumented.prepares(), 1);
     assert_eq!(instrumented.setters(), 0);
+    assert!(lease.may_publish());
+    assert!(!lease.try_claim_write());
     assert!(!state.self_notifications.has_pending());
 }
 
 #[test]
 fn actor_restore_rejects_secure_after_prepare_on_the_exact_retained_target() {
     let (mut state, selected, instrumented) = state_with_target();
-    let mutation = receipt(&selected);
+    let (mutation, lease) = receipt_and_lease(&selected);
     let now = state.now();
     let target = state.targets.get(selected.id, now).unwrap().clone();
     state
@@ -96,7 +108,12 @@ fn actor_restore_rejects_secure_after_prepare_on_the_exact_retained_target() {
         .mutations
         .finish_replace(mutation.id, ReplaceTerminalOutcome::Confirmed, state.now())
         .unwrap();
-    let result = state.restore(mutation.id, selected, "after".to_owned(), None);
+    let result = state.restore(
+        mutation.id,
+        selected,
+        "after".to_owned(),
+        Some(lease.clone()),
+    );
     let projection = state
         .mutations
         .projection(mutation.id, state.now())
@@ -105,5 +122,7 @@ fn actor_restore_rejects_secure_after_prepare_on_the_exact_retained_target() {
     assert!(projection.status == MutationStatus::RestoreRejected);
     assert_eq!(instrumented.prepares(), 1);
     assert_eq!(instrumented.setters(), 0);
+    assert!(lease.may_publish());
+    assert!(!lease.try_claim_write());
     assert!(!state.self_notifications.has_pending());
 }

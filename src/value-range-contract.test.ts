@@ -38,6 +38,7 @@ describe("macOS value-range privacy and write contract", () => {
 
   it("checks protected roles before extraction and keeps strategy-bound writes", () => {
     const selection = source("macos_selection.rs");
+    const selectionIdentity = source("macos_selection_identity.rs");
     const textRole = source("macos_text_role.rs");
     const replace = source("macos_replace.rs");
     const restore = source("macos_restore.rs");
@@ -67,9 +68,8 @@ describe("macOS value-range privacy and write contract", () => {
       'subrole.as_deref() == Some("AXSecureTextField")'
     );
     expect(textRole).toContain('"AXButton"');
-    const roleBoundary = selection.slice(
-      selection.indexOf("pub(super) fn text_role("),
-      selection.indexOf("fn extract(")
+    const roleBoundary = selectionIdentity.slice(
+      selectionIdentity.indexOf("pub(super) fn text_role(")
     );
     expect(roleBoundary.indexOf('"AXRole"')).toBeLessThan(
       roleBoundary.indexOf('"AXSubrole"')
