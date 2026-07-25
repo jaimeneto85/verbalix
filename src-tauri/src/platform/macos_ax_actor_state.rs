@@ -278,4 +278,29 @@ mod tests {
             "text and location alone cannot confirm the exact selected range"
         );
     }
+
+    #[test]
+    fn restore_is_idempotent_under_a_caller_preallocated_mutation_id() {
+        let actor = include_str!("macos_ax_actor.rs");
+        let restore_command = &actor[actor
+            .find("Restore {")
+            .expect("restore command")..actor
+            .find("Discard(")
+            .expect("discard command")];
+        let state = include_str!("macos_ax_actor_state.rs");
+        let restore = &state[state
+            .find("pub(super) fn restore(")
+            .expect("restore boundary")..state
+            .find("pub(super) fn discard(")
+            .expect("discard boundary")];
+
+        assert!(
+            restore_command.contains("mutation_id"),
+            "restore retries need the caller's stable mutation ID"
+        );
+        assert!(
+            restore.contains("self.mutations"),
+            "restore must reconcile an existing terminal outcome before repeating a setter"
+        );
+    }
 }
