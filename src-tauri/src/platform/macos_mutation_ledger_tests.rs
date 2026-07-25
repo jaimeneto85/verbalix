@@ -146,6 +146,32 @@ fn matching_replay_returns_terminal_outcome_and_divergent_replay_is_closed() {
 }
 
 #[test]
+fn restore_indeterminate_reconciled_as_confirmed_expires_after_terminal_ttl() {
+    let selected = snapshot();
+    let receipt = receipt(&selected);
+    let mut ledger = MutationLedger::new(1);
+    ledger
+        .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
+        .unwrap();
+    ledger
+        .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+        .unwrap();
+    ledger
+        .set_status(receipt.id, MutationStatus::RestoreIndeterminate, 2)
+        .unwrap();
+    ledger
+        .set_status(receipt.id, MutationStatus::Confirmed, 3)
+        .unwrap();
+
+    assert!(ledger
+        .projection(receipt.id, 3 + TERMINAL_TTL_MS - 1)
+        .is_some());
+    assert!(ledger
+        .projection(receipt.id, 3 + TERMINAL_TTL_MS)
+        .is_none());
+}
+
+#[test]
 fn mutation_record_source_stays_actor_private_and_non_serializable() {
     let source = include_str!("macos_mutation_ledger.rs");
     let record = &source[source
