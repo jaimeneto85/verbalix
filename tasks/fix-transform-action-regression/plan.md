@@ -286,10 +286,10 @@
 - Escrita, undo e erro precisam de receipts e roteamento tipado; `confirm_before_replace`, falhas pós-setter e múltiplos feedbacks da mesma ação fazem parte da matriz.
 - O fallback TextEdit é UTF-16 transacional e lê somente o range de `AXValue`; `AXSelectedText` continua o único writer quando settable, com diagnóstico sanitizado e probe real fechado por TCC.
 - As rodadas QA RF16–RF30 originaram RF20–RF34: allowlist precoce, handle/ledger completos, secure subrole, epoch fora da FIFO, focus/self-notification, restore/reconcile monotônicos, identifier privado, write gate tardio e provenance por fase.
-- QA RF41 validou Selected, mas Focus/Destroyed ainda não cancelavam Authorizing; RF42 unifica todos os bump paths.
+- QA RF42 aprovou: Focus/Destroyed/Selected externo/mouse cancelam pré-setter antes do bump; writer-wins preserva self one-shot.
 
 ### 🟢 Oportunidades incorporadas
-- Reuso de operação/request, state machine, ports/fakes, note state, diagnósticos e harnesses paramétricos mantém uma única arquitetura.
+- O protocolo cancel-before-bump e o harness actor/router parametrizado são reutilizáveis; QA dual final `APPROVED`.
 - Readiness/timeline usam `request_id + snapshot_id`; TextEdit/Slack, `CFRange`, geometria, identity, lease, setter e `same_target` cobrem a matriz.
 
 ### Síntese

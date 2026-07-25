@@ -24,15 +24,17 @@ O executor segue `prepare → claim → emit/show`:
 - se o claim vencer, o supersede posterior preserva `publish → hide` e termina oculto;
 - ACK tardio não ressuscita uma superfície cancelada.
 
+No boundary Accessibility, Focus, Destroyed, Selected externo e mouse convergem em um protocolo: expectativas `Armed|Authorizing` são canceladas e removidas antes do incremento causal. Se o writer já venceu em `InSetter|Committed`, a expectation permanece válida para uma única self-notification.
+
 ## Evidências
 
-- Rust: 145/145
-- Vitest: 52/52, cobertura 100%
+- Rust: 229/229
+- Vitest: 55/55, cobertura 100%
 - Deno: 38/38
 - Playwright: 6/6
 - `cargo fmt`, `cargo check`, `cargo clippy -D warnings`, build e `git diff --check`: aprovados
 - limite de 300 linhas efetivas por arquivo modificado: aprovado
-- QA dual v4: `APPROVED`
+- QA dual RF42: `APPROVED`
 
 ## Gate operacional restante
 
