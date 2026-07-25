@@ -24,24 +24,35 @@ use std::{
         mpsc, Arc,
     },
 };
-
 #[derive(Clone, Copy)]
 enum MutationKind {
     Replace,
     Restore,
 }
-
+#[derive(Clone, Copy)]
+enum Interruption {
+    ExactEvent,
+    StaleEpoch,
+}
 struct ArmedBlockingTarget {
     entered: mpsc::Sender<()>,
     release: RefCell<Option<mpsc::Receiver<()>>>,
     setters: Arc<AtomicUsize>,
+    after_authorizing: bool,
 }
-
 impl ArmedBlockingTarget {
     fn authorize(&self, authorization: &AxWriteAuthorization) -> bool {
-        let _ = self.entered.send(());
-        let _ = self.release.borrow_mut().take().unwrap().recv();
-        if authorization.begin_setter() {
+        let wait = || {
+            let _ = self.entered.send(());
+            let _ = self.release.borrow_mut().take().unwrap().recv();
+        };
+        let authorized = if self.after_authorizing {
+            authorization.begin_setter_after_authorizing(wait)
+        } else {
+            wait();
+            authorization.begin_setter()
+        };
+        if authorized {
             self.setters.fetch_add(1, Ordering::SeqCst);
             authorization.commit();
             true
@@ -50,7 +61,6 @@ impl ArmedBlockingTarget {
         }
     }
 }
-
 impl AxMutationTarget for ArmedBlockingTarget {
     fn prepare_replace(
         &self,
@@ -72,7 +82,6 @@ impl AxMutationTarget for ArmedBlockingTarget {
             WriteOutcome::Rejected
         }
     }
-
     fn prepare_restore(
         &self,
         _expected: &SelectionSnapshot,
@@ -81,7 +90,6 @@ impl AxMutationTarget for ArmedBlockingTarget {
     ) -> Result<(), VerbalixError> {
         Ok(())
     }
-
     fn write_restore(
         &self,
         _expected: &SelectionSnapshot,
@@ -93,7 +101,6 @@ impl AxMutationTarget for ArmedBlockingTarget {
             RestoreWriteOutcome::Rejected
         }
     }
-
     fn read(
         &self,
         _strategy: SelectionExtractionStrategy,
@@ -101,7 +108,6 @@ impl AxMutationTarget for ArmedBlockingTarget {
         Err(VerbalixError::LocalFailure)
     }
 }
-
 fn snapshot() -> SelectionSnapshot {
     SelectionSnapshot::new(
         42,
@@ -132,7 +138,11 @@ fn snapshot() -> SelectionSnapshot {
     .with_native_element_identifier(Some("editor".to_owned()))
 }
 
-fn assert_exact_external_event_revokes_armed_write(kind: MutationKind) {
+fn assert_interruption_revokes_write(
+    kind: MutationKind,
+    interruption: Interruption,
+    after_authorizing: bool,
+) {
     let actor = AxActor::new();
     let selected = snapshot();
     let epoch = actor.epoch.current();
@@ -159,6 +169,7 @@ fn assert_exact_external_event_revokes_armed_write(kind: MutationKind) {
                     entered: entered_tx,
                     release: RefCell::new(Some(release_rx)),
                     setters: setters_worker,
+                    after_authorizing,
                 }),
                 epoch,
                 token: AxElementToken::new(selected_worker.pid, "editor"),
@@ -223,18 +234,21 @@ fn assert_exact_external_event_revokes_armed_write(kind: MutationKind) {
         Err(mpsc::TryRecvError::Empty)
     ));
     let generation = actor.epoch.current();
-    let routed = route_observer_event(
-        AccessibilityEvent {
-            kind: AccessibilityEventKind::SelectedTextChanged,
-            target: Some(AxElementToken::new(selected.pid, "editor").unwrap()),
-        },
-        &actor.causal_epoch(),
-        |target, generation| actor.observe_selection_change(target, generation),
-    );
-
-    assert!(routed);
+    if matches!(interruption, Interruption::ExactEvent) {
+        assert!(route_observer_event(
+            AccessibilityEvent {
+                kind: AccessibilityEventKind::SelectedTextChanged,
+                target: Some(AxElementToken::new(selected.pid, "editor").unwrap()),
+            },
+            &actor.causal_epoch(),
+            |target, generation| actor.observe_selection_change(target, generation),
+        ));
+        assert!(!actor.has_pending_self_notification());
+    } else {
+        actor.epoch.bump();
+        assert!(actor.has_pending_self_notification());
+    }
     assert!(!actor.epoch.is_current(generation));
-    assert!(!actor.has_pending_self_notification());
     release_tx.send(()).unwrap();
     let (result, status, phase, pending) = result_rx.recv().unwrap();
     assert!(matches!(result, Err(VerbalixError::LocalFailure)));
@@ -253,13 +267,27 @@ fn assert_exact_external_event_revokes_armed_write(kind: MutationKind) {
     }
     capture_rx.recv().unwrap();
 }
-
 #[test]
 fn exact_external_selection_revokes_armed_replace_outside_actor_fifo() {
-    assert_exact_external_event_revokes_armed_write(MutationKind::Replace);
+    assert_interruption_revokes_write(MutationKind::Replace, Interruption::ExactEvent, false);
 }
-
 #[test]
 fn exact_external_selection_revokes_armed_restore_outside_actor_fifo() {
-    assert_exact_external_event_revokes_armed_write(MutationKind::Restore);
+    assert_interruption_revokes_write(MutationKind::Restore, Interruption::ExactEvent, false);
+}
+#[test]
+fn exact_external_selection_cancels_authorizing_replace_outside_actor_fifo() {
+    assert_interruption_revokes_write(MutationKind::Replace, Interruption::ExactEvent, true);
+}
+#[test]
+fn exact_external_selection_cancels_authorizing_restore_outside_actor_fifo() {
+    assert_interruption_revokes_write(MutationKind::Restore, Interruption::ExactEvent, true);
+}
+#[test]
+fn stale_epoch_cancels_authorizing_replace_before_setter() {
+    assert_interruption_revokes_write(MutationKind::Replace, Interruption::StaleEpoch, true);
+}
+#[test]
+fn stale_epoch_cancels_authorizing_restore_before_setter() {
+    assert_interruption_revokes_write(MutationKind::Restore, Interruption::StaleEpoch, true);
 }
