@@ -21,7 +21,15 @@ impl MacAccessibility {
     }
 
     pub fn start_observer(&self, callback: Arc<dyn Fn() + Send + Sync>) {
-        super::macos_observer::start(callback);
+        let epoch = self.actor.causal_epoch();
+        super::macos_observer::start(Arc::new(move || {
+            epoch.bump();
+            callback();
+        }));
+    }
+
+    pub fn signal_causal_change(&self) {
+        self.actor.signal_causal_change();
     }
 
     pub(super) fn focused_element() -> Result<OwnedAxElement, VerbalixError> {

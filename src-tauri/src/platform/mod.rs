@@ -1,3 +1,4 @@
+mod causal_epoch;
 #[cfg(target_os = "macos")]
 mod causal_registry;
 mod clipboard;

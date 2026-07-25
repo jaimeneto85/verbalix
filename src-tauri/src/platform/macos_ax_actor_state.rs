@@ -1,4 +1,5 @@
 use super::{
+    causal_epoch::CausalEpoch,
     causal_registry::CausalRegistry,
     macos_ax::{self, OwnedAxElement},
     macos_replace, macos_restore, macos_selection,
@@ -24,27 +25,45 @@ struct StoredReceipt {
     state: ReceiptState,
 }
 
+struct CapturedTarget {
+    element: OwnedAxElement,
+    epoch: u64,
+}
+
 pub(super) struct ActorState {
     started: Instant,
-    targets: CausalRegistry<OwnedAxElement>,
+    epoch: CausalEpoch,
+    targets: CausalRegistry<CapturedTarget>,
     receipts: CausalRegistry<StoredReceipt>,
 }
 
 impl ActorState {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(epoch: CausalEpoch) -> Self {
         Self {
             started: Instant::now(),
+            epoch,
             targets: CausalRegistry::new(REGISTRY_CAPACITY, REGISTRY_TTL_MS),
             receipts: CausalRegistry::new(REGISTRY_CAPACITY, REGISTRY_TTL_MS),
         }
     }
 
     pub(super) fn capture(&mut self) -> Result<SelectionSnapshot, VerbalixError> {
+        let captured_epoch = self.epoch.current();
         let element =
             macos_ax::focused_element().map_err(|_| VerbalixError::SelectionUnavailable)?;
         let snapshot = macos_selection::capture(&element)?;
+        if !self.epoch.is_current(captured_epoch) {
+            return Err(VerbalixError::StaleSelection);
+        }
         if snapshot.writable {
-            self.targets.insert(snapshot.id, element, self.now());
+            self.targets.insert(
+                snapshot.id,
+                CapturedTarget {
+                    element,
+                    epoch: captured_epoch,
+                },
+                self.now(),
+            );
         }
         Ok(snapshot)
     }
@@ -61,8 +80,10 @@ impl ActorState {
             .targets
             .get(expected.id, now)
             .ok_or(VerbalixError::StaleSelection)?;
-        macos_replace::prepare_on_element(&expected, target, causal)?;
+        macos_replace::prepare_on_element(&expected, &target.element, causal)?;
+        ensure_current(&self.epoch, target.epoch)?;
         let receipt = receipt(&expected, claim(&lease)?);
+        ensure_current(&self.epoch, target.epoch)?;
         self.receipts.insert(
             receipt.id,
             StoredReceipt {
@@ -71,7 +92,7 @@ impl ActorState {
             },
             now,
         );
-        let result = macos_replace::write_on_element(&expected, &text, target.as_ref());
+        let result = macos_replace::write_on_element(&expected, &text, target.element.as_ref());
         self.finish_receipt(&receipt, result, ReceiptState::Applied)
     }
 
@@ -89,10 +110,12 @@ impl ActorState {
         macos_restore::prepare_on_element(
             &expected,
             &transformed,
-            target,
+            &target.element,
             has_no_identifier(&expected),
         )?;
+        ensure_current(&self.epoch, target.epoch)?;
         let receipt = receipt(&expected, claim(&lease)?);
+        ensure_current(&self.epoch, target.epoch)?;
         self.receipts.insert(
             receipt.id,
             StoredReceipt {
@@ -101,7 +124,7 @@ impl ActorState {
             },
             now,
         );
-        let result = macos_restore::write_on_element(&expected, target.as_ref());
+        let result = macos_restore::write_on_element(&expected, target.element.as_ref());
         let result = self.finish_receipt(&receipt, result, ReceiptState::Restored);
         if result.is_ok() {
             self.targets.remove(expected.id);
@@ -138,6 +161,13 @@ impl ActorState {
             }
         }
     }
+}
+
+fn ensure_current(epoch: &CausalEpoch, expected: u64) -> Result<(), VerbalixError> {
+    epoch
+        .is_current(expected)
+        .then_some(())
+        .ok_or(VerbalixError::StaleSelection)
 }
 
 fn has_no_identifier(snapshot: &SelectionSnapshot) -> bool {
@@ -179,7 +209,7 @@ mod tests {
 
     #[test]
     fn rejected_write_removes_intent_without_returning_a_receipt() {
-        let mut state = ActorState::new();
+        let mut state = ActorState::new(CausalEpoch::default());
         let receipt = MutationReceipt {
             id: Uuid::new_v4(),
             snapshot_id: Uuid::new_v4(),

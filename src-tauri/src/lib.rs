@@ -219,6 +219,7 @@ pub fn run() {
             let dismiss_runtime = runtime.clone();
             install_mouse_dismiss_monitor(Arc::new(move || {
                 diagnostics::detection("mouse_dismiss");
+                dismiss_runtime.selection.signal_causal_change();
                 let _ = dismiss_runtime
                     .coordinator
                     .dispatch(SelectionEvent::TransientInvalidated);

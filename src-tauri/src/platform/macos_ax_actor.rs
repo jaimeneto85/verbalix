@@ -1,4 +1,4 @@
-use super::macos_ax_actor_state::ActorState;
+use super::{causal_epoch::CausalEpoch, macos_ax_actor_state::ActorState};
 use crate::{
     application::{MutationReceipt, PublicationGuard},
     domain::{SelectionSnapshot, VerbalixError},
@@ -27,19 +27,33 @@ enum Command {
         response: mpsc::Sender<Result<MutationReceipt, VerbalixError>>,
     },
     Discard(Uuid),
+    #[cfg(test)]
+    TestBoundary {
+        observed_epoch: u64,
+        lease: PublicationGuard,
+        entered: mpsc::Sender<()>,
+        release: mpsc::Receiver<()>,
+        setters: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        response: mpsc::Sender<Result<(), VerbalixError>>,
+    },
+    #[cfg(test)]
+    TestPendingCapture(mpsc::Sender<()>),
     Shutdown,
 }
 
 pub(super) struct AxActor {
     sender: SyncSender<Command>,
     worker: Mutex<Option<JoinHandle<()>>>,
+    epoch: CausalEpoch,
 }
 
 impl AxActor {
     pub(super) fn new() -> Self {
+        let epoch = CausalEpoch::default();
+        let worker_epoch = epoch.clone();
         let (sender, receiver) = mpsc::sync_channel(64);
         let worker = std::thread::spawn(move || {
-            let mut state = ActorState::new();
+            let mut state = ActorState::new(worker_epoch.clone());
             while let Ok(command) = receiver.recv() {
                 match command {
                     Command::Capture(response) => {
@@ -64,6 +78,32 @@ impl AxActor {
                     Command::Discard(id) => {
                         state.discard(id);
                     }
+                    #[cfg(test)]
+                    Command::TestBoundary {
+                        observed_epoch,
+                        lease,
+                        entered,
+                        release,
+                        setters,
+                        response,
+                    } => {
+                        let _ = entered.send(());
+                        let _ = release.recv();
+                        let result = if worker_epoch.is_current(observed_epoch)
+                            && lease.try_claim_write()
+                            && worker_epoch.is_current(observed_epoch)
+                        {
+                            setters.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            Ok(())
+                        } else {
+                            Err(VerbalixError::StaleSelection)
+                        };
+                        let _ = response.send(result);
+                    }
+                    #[cfg(test)]
+                    Command::TestPendingCapture(response) => {
+                        let _ = response.send(());
+                    }
                     Command::Shutdown => break,
                 }
             }
@@ -71,7 +111,16 @@ impl AxActor {
         Self {
             sender,
             worker: Mutex::new(Some(worker)),
+            epoch,
         }
+    }
+
+    pub(super) fn signal_causal_change(&self) {
+        self.epoch.bump();
+    }
+
+    pub(super) fn causal_epoch(&self) -> CausalEpoch {
+        self.epoch.clone()
     }
 
     pub(super) fn capture(&self) -> Result<SelectionSnapshot, VerbalixError> {
@@ -136,10 +185,50 @@ impl Drop for AxActor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::TransformLease;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn actor_is_send_sync_without_sending_ax_handles() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<AxActor>();
+    }
+
+    #[test]
+    fn external_epoch_revokes_blocked_write_before_pending_capture_runs() {
+        let actor = AxActor::new();
+        let observed_epoch = actor.epoch.current();
+        let lease = std::sync::Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
+        let setters = std::sync::Arc::new(AtomicUsize::new(0));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let (result_tx, result_rx) = mpsc::channel();
+        actor
+            .sender
+            .send(Command::TestBoundary {
+                observed_epoch,
+                lease,
+                entered: entered_tx,
+                release: release_rx,
+                setters: setters.clone(),
+                response: result_tx,
+            })
+            .unwrap();
+        entered_rx.recv().unwrap();
+
+        actor.signal_causal_change();
+        let (capture_tx, capture_rx) = mpsc::channel();
+        actor
+            .sender
+            .send(Command::TestPendingCapture(capture_tx))
+            .unwrap();
+        release_tx.send(()).unwrap();
+
+        assert!(matches!(
+            result_rx.recv().unwrap(),
+            Err(VerbalixError::StaleSelection)
+        ));
+        capture_rx.recv().unwrap();
+        assert_eq!(setters.load(Ordering::SeqCst), 0);
     }
 }
