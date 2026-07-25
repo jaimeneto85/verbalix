@@ -70,7 +70,7 @@
 - [x] RF39: Expectativa self tem fase atômica `ArmedBeforeWrite → InSetter`; evento Selected em Armed é sempre externo e bumpa epoch fora da FIFO.
 - [x] RF40: Attribute/value CF são pré-alocados antes do boundary; CAS/check causal é a última operação antes de `AXUIElementSetAttributeValue`.
 - [x] RF41: Autorização usa `Armed → Authorizing → InSetter`; evento exato pode cancelar Authorizing, e epoch stale termina Cancelled sem fase self-candidate (`begin_setter_after_authorizing` + matriz actor).
-- [ ] RF42: Todo sinal causal Focus/Destroyed/mouse/selection cancela `Armed|Authorizing` pelo mesmo protocolo antes de incrementar epoch.
+- [x] RF42: Todo sinal causal Focus/Destroyed/mouse/selection cancela `Armed|Authorizing` pelo mesmo protocolo antes de incrementar epoch (`AxActor::signal_causal_change`).
 
 ### Requisitos não funcionais
 
@@ -122,7 +122,7 @@
 - [x] CA39: Router real recebe evento externo exato durante Armed com actor bloqueado em replace/restore e prova bump imediato, zero setter e terminal Rejected.
 - [x] CA40: Teste atravessa o shared production boundary e prova nenhuma alocação/lock/fallible op entre autorização final e FFI setter.
 - [x] CA41: Matriz real replace/restore prova stale epoch e evento exato em Authorizing com zero setter, bump síncrono, expectation removida e terminal tipado.
-- [ ] CA42: Barreira após epoch-valid e antes do CAS recebe Focus/Destroyed em replace+restore, exigindo CAS perdido, zero setter e terminal Rejected.
+- [x] CA42: Matriz actor/router pós-epoch/pré-CAS cobre Focus/Destroyed em replace+restore e mouse direto com CAS perdido, zero setter e terminal tipado.
 
 ### Edge cases
 
@@ -241,7 +241,7 @@
 - [x] T2.29 `[CRITICAL]` Integrar epoch check ao write boundary pós-arm e aplicar TTL antes do replay lookup.
 - [x] T2.30 `[CRITICAL]` Fasear expectation e pré-alocar CF payload, movendo CAS/check final ao FFI setter.
 - [x] T2.31 `[CRITICAL]` Introduzir Authorizing cancelável e promover a InSetter somente após epoch válido (`SelfNotificationPhase` + `AxWriteAuthorization`).
-- [ ] T2.32 `[CRITICAL]` Integrar cancelamento pré-write a todos os bump paths antes do incremento causal.
+- [x] T2.32 `[CRITICAL]` Integrar cancelamento pré-write a todos os bump paths antes do incremento causal (único entrypoint produtivo no actor).
 
 ### Fase 3 — Testes
 
@@ -273,10 +273,8 @@
 - [x] T3.26 `[CRITICAL]` Cobrir bump pós-claim/arm pré-setter em replace+restore e replay terminal expirado.
 - [x] T3.27 `[CRITICAL]` Cobrir router/actor externos em Armed e shared production write boundary com setter instrumentado.
 - [x] T3.28 `[CRITICAL]` Cobrir exact event versus stale authorization em Authorizing, incluindo phase/expectation cleanup (6 testes actor/router).
-- [ ] T3.29 `[CRITICAL]` Cobrir focus/destroy/mouse post-epoch-check pre-CAS no boundary real replace+restore.
-
+- [x] T3.29 `[CRITICAL]` Cobrir focus/destroy/mouse post-epoch-check pre-CAS no boundary real replace+restore (11 testes actor/router + ownership).
 ### Fase 4 — QA real
-
 - [ ] T4.1 `[MEDIUM]` Validar Traduzir no TextEdit e Slack com confirmação desligada.
 - [ ] T4.2 `[MEDIUM]` Validar Aprimorar no TextEdit e Slack com confirmação desligada.
 - [ ] T4.3 `[MEDIUM]` Validar preview + Aplicar com confirmação ligada e zero write antes de Aplicar.
@@ -298,6 +296,5 @@
 A transação permanece ligada a `snapshot.id + request_id`. Para RF16, o adapter adiciona `ValueRange` como estratégia explícita apenas quando as falhas anteriores forem de capacidade. O valor completo não é convertido nem escrito: CFString valida o limite e fornece somente os code units selecionados. Writability é consultada separadamente e o único writer continua `AXSelectedText`; sem setter, o resultado é nota. Identidade forte, range duplo, substring, lease e setter são revalidados no mesmo boundary já aprovado. Nenhum sleep, debounce preventivo ou relaxamento de identidade será aceito.
 
 ## 🔄 Parallelization Synthesis
-
 - RF16 permanece serial por um agente porque captura/replace/restore compartilham revalidação; helper UTF-16 e auditoria independente podem seguir depois.
 - Risco de conflito: baixo.
