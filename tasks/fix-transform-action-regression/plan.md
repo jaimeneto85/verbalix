@@ -212,9 +212,9 @@
 - [ ] T3.12 `[HIGH]` Cobrir UTF-16 BMP/emoji/combining, ranges inválidos, value read-only/settable, mutação concorrente, replace/restore e zero setter em staleness.
 - [ ] T3.13 `[MEDIUM]` Executar smoke macOS real no TextEdit para captura, toolbar, Traduzir, Aprimorar e Desfazer.
 - [ ] T3.14 `[HIGH]` Cobrir matriz independente de leitura/setter, `range₁/value/range₂`, limite, CFString inválida, protected field antes do value, identidade ausente/retida e falha pós-write.
-- [ ] T3.15 `[HIGH]` Cobrir trace zero-read para cada role bloqueada e ausência de regressão nos roles textuais suportados.
-- [ ] T3.16 `[HIGH]` Cobrir registry: identifier presente/ausente, handle exato, TTL, capacidade, cleanup, divergência e zero setter sem receipt causal.
-- [ ] T3.17 `[HIGH]` Cobrir setter success/failure/indeterminate, falha de commit/feedback, Candidate concorrente, receipt recuperável e undo sem sobrescrever seleção nova.
+- [x] T3.15 `[HIGH]` Cobrir trace zero-read para cada role bloqueada e ausência de regressão nos roles textuais suportados.
+- [x] T3.16 `[HIGH]` Cobrir registry: identifier presente/ausente, handle exato, TTL, capacidade, cleanup, divergência e zero setter sem receipt causal.
+- [x] T3.17 `[HIGH]` Cobrir setter success/failure/indeterminate, falha de commit/feedback, Candidate concorrente, receipt recuperável e undo sem sobrescrever seleção nova.
 
 ### Fase 4 — QA real
 

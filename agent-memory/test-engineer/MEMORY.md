@@ -40,6 +40,9 @@
 - Estratégia de extração integra a identidade do alvo. Testes cruzam `SelectedText`, `StringForRange`, `ValueRange` e `TextMarker` em `same_target`, replace e restore para impedir revalidação entre estratégias.
 - Capacidade de leitura e setter são matrizes independentes: settable verdadeiro/falso, ausência/unsupported e falhas estruturais possuem resultados distintos; contrato estático impede setter de `AXValue` e exige `AXSelectedText` como único writer.
 - Privacidade do fallback combina testes nativos e contrato de source: valor não-CFString falha antes de length/copy, role não elegível bloqueia `value_range_selection`, protected field é verificado antes de extract e nenhum helper converte o documento completo para `String`.
+- O gate global de role é testado em duas camadas: trace parametrizado exige somente `role` para secure/non-text e o contrato de source exige `validate` antes de identifier, conteúdo, range e bounds; roles textuais percorrem o trace completo.
+- Registry causal de handles precisa de relógio lógico injetado pelos próprios argumentos, sem sleeps: o boundary exato de TTL, eviction por inserção, substituição, remoção e `Drop` são observáveis. Um contrato separado proíbe qualquer re-resolução por PID quando o handle exato está ausente.
+- Receipt de mutação é a identidade do undo, não o texto transformado. Testes mantêm dois records com resultado idêntico e exigem que somente o `mutation_id` de `Applied` seja restaurado; falha de feedback após setter deve preservar o record no journal.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -60,7 +63,8 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 155 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, permits visuais reutilizáveis por ação, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX, fallback geométrico e a matriz UTF-16/ValueRange.
+- A suíte Rust possui 168 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, permits visuais reutilizáveis por ação, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX, fallback geométrico, matriz UTF-16/ValueRange, role gate, registry causal e receipt exato.
+- O frontend possui 55 testes Vitest com 100% de statements, branches, functions e lines no escopo instrumentado; os 6 testes Playwright continuam verdes.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
