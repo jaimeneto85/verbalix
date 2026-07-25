@@ -72,8 +72,8 @@
 - [x] RF34: Idempotência é específica da fase/API; `finish_*` e `reconcile_*` não aceitam o mesmo outcome quando o predecessor exigido não corresponde.
 - [x] RF35: Restore permanece ancorado ao `target.epoch` original; qualquer epoch divergente antes de begin/claim/setter rejeita sem consumir lease ou escrever.
 - [x] RF36: Replay/reconcile de restore valida mutation ID, snapshot, texto e lease antes de qualquer early return idempotente ou transição.
-- [ ] RF37: Replace/Restore armam self-notification antes do check causal final; epoch é revalidado dentro do boundary imediatamente anterior ao setter.
-- [ ] RF38: Lookup/replay terminal aplica prune/TTL antes de qualquer early return idempotente.
+- [x] RF37: Replace/Restore armam self-notification antes do check causal final; epoch é revalidado dentro do boundary imediatamente anterior ao setter.
+- [x] RF38: Lookup/replay terminal aplica prune/TTL antes de qualquer early return idempotente.
 
 ### Requisitos não funcionais
 
@@ -120,8 +120,8 @@
 - [x] CA34: Matriz cross-phase cobre mesmo outcome em API errada para replace/restore e preserva status, terminal_at e restore_attempted.
 - [x] CA35: Actor real E0→E1 com Focus B/Capture B pendente rejeita Restore A, zero setter e lease não consumida.
 - [x] CA36: Restored/RestoreIndeterminate com snapshot, texto ou lease divergente retorna erro sem alterar status/terminal/provenance; replay idêntico permanece idempotente.
-- [ ] CA37: Actor real incrementa epoch após claim/arm e antes do setter em replace+restore, exigindo zero setter e terminal Rejected.
-- [ ] CA38: Replay Restored após TTL expira e retorna stale; antes do TTL permanece idempotente.
+- [x] CA37: Actor real incrementa epoch após claim/arm e antes do setter em replace+restore, exigindo zero setter e terminal Rejected.
+- [x] CA38: Replay Restored após TTL expira e retorna stale; antes do TTL permanece idempotente.
 
 ### Edge cases
 
@@ -266,7 +266,7 @@
 - [x] T3.23 `[HIGH]` Cobrir behavioralmente serde/IPC redaction, callback pre-I/O ordering, secure-after-prepare actor path e invalid terminal outcomes/status/TTL.
 - [x] T3.24 `[HIGH]` Cobrir ActorState real replace+restore secure-after-prepare e matriz ledger cross-phase same-outcome.
 - [x] T3.25 `[CRITICAL]` Cobrir actor restore stale epoch com Capture B pendente e matriz replay divergente/sem mutação.
-- [ ] T3.26 `[CRITICAL]` Cobrir bump pós-claim/arm pré-setter em replace+restore e replay terminal expirado.
+- [x] T3.26 `[CRITICAL]` Cobrir bump pós-claim/arm pré-setter em replace+restore e replay terminal expirado.
 
 ### Fase 4 — QA real
 
