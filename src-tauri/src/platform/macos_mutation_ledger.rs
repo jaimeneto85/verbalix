@@ -21,11 +21,20 @@ pub(super) enum RestoreTerminalOutcome {
     Indeterminate,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalPhase {
+    FinishReplace,
+    ReconcileReplace,
+    FinishRestore,
+    ReconcileRestore,
+}
+
 pub(super) struct ActorMutationRecord<T> {
     pub(super) projection: MutationProjection,
     pub(super) target: T,
     restore_attempted: bool,
     terminal_at: Option<u64>,
+    terminal_phase: Option<TerminalPhase>,
 }
 
 pub(super) struct MutationLedger<T> {
@@ -74,6 +83,7 @@ impl<T> MutationLedger<T> {
                 target,
                 restore_attempted: false,
                 terminal_at: None,
+                terminal_phase: None,
             },
         );
         Ok(projection)
@@ -111,7 +121,13 @@ impl<T> MutationLedger<T> {
             .records
             .get_mut(&id)
             .ok_or(VerbalixError::LocalFailure)?;
-        apply_replace_outcome(record, MutationStatus::Prepared, outcome, now_ms)
+        apply_replace_outcome(
+            record,
+            MutationStatus::Prepared,
+            TerminalPhase::FinishReplace,
+            outcome,
+            now_ms,
+        )
     }
 
     pub(super) fn reconcile_replace(
@@ -124,7 +140,13 @@ impl<T> MutationLedger<T> {
             .records
             .get_mut(&id)
             .ok_or(VerbalixError::LocalFailure)?;
-        apply_replace_outcome(record, MutationStatus::Indeterminate, outcome, now_ms)
+        apply_replace_outcome(
+            record,
+            MutationStatus::Indeterminate,
+            TerminalPhase::ReconcileReplace,
+            outcome,
+            now_ms,
+        )
     }
 
     pub(super) fn begin_restore(
@@ -143,6 +165,7 @@ impl<T> MutationLedger<T> {
         record.restore_attempted = true;
         record.projection.status = MutationStatus::RestorePrepared;
         record.terminal_at = None;
+        record.terminal_phase = None;
         Ok(record.projection.clone())
     }
 
@@ -156,7 +179,13 @@ impl<T> MutationLedger<T> {
             .records
             .get_mut(&id)
             .ok_or(VerbalixError::StaleSelection)?;
-        apply_restore_outcome(record, MutationStatus::RestorePrepared, outcome, now_ms)
+        apply_restore_outcome(
+            record,
+            MutationStatus::RestorePrepared,
+            TerminalPhase::FinishRestore,
+            outcome,
+            now_ms,
+        )
     }
 
     pub(super) fn reconcile_restore(
@@ -172,6 +201,7 @@ impl<T> MutationLedger<T> {
         apply_restore_outcome(
             record,
             MutationStatus::RestoreIndeterminate,
+            TerminalPhase::ReconcileRestore,
             outcome,
             now_ms,
         )
@@ -196,6 +226,7 @@ impl<T> MutationLedger<T> {
 fn apply_replace_outcome<T>(
     record: &mut ActorMutationRecord<T>,
     expected: MutationStatus,
+    phase: TerminalPhase,
     outcome: ReplaceTerminalOutcome,
     now_ms: u64,
 ) -> Result<MutationProjection, VerbalixError> {
@@ -204,13 +235,14 @@ fn apply_replace_outcome<T>(
         ReplaceTerminalOutcome::Rejected => MutationStatus::Rejected,
         ReplaceTerminalOutcome::Indeterminate => MutationStatus::Indeterminate,
     };
-    if record.projection.status == status {
+    if record.projection.status == status && record.terminal_phase == Some(phase) {
         return Ok(record.projection.clone());
     }
     if record.projection.status != expected {
         return Err(VerbalixError::StaleSelection);
     }
     record.projection.status = status;
+    record.terminal_phase = Some(phase);
     record.terminal_at =
         matches!(status, MutationStatus::Confirmed | MutationStatus::Rejected).then_some(now_ms);
     Ok(record.projection.clone())
@@ -219,6 +251,7 @@ fn apply_replace_outcome<T>(
 fn apply_restore_outcome<T>(
     record: &mut ActorMutationRecord<T>,
     expected: MutationStatus,
+    phase: TerminalPhase,
     outcome: RestoreTerminalOutcome,
     now_ms: u64,
 ) -> Result<MutationProjection, VerbalixError> {
@@ -227,13 +260,14 @@ fn apply_restore_outcome<T>(
         RestoreTerminalOutcome::Rejected => MutationStatus::RestoreRejected,
         RestoreTerminalOutcome::Indeterminate => MutationStatus::RestoreIndeterminate,
     };
-    if record.projection.status == status {
+    if record.projection.status == status && record.terminal_phase == Some(phase) {
         return Ok(record.projection.clone());
     }
     if record.projection.status != expected {
         return Err(VerbalixError::StaleSelection);
     }
     record.projection.status = status;
+    record.terminal_phase = Some(phase);
     record.terminal_at = matches!(
         status,
         MutationStatus::Restored | MutationStatus::RestoreRejected

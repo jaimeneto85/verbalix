@@ -65,11 +65,93 @@ fn invalid_terminal_outcomes_preserve_status_ttl_and_restore_attempt() {
     assert!(record_state(&ledger, receipt.id) == rejected);
 }
 
-fn record_state(ledger: &MutationLedger<()>, id: Uuid) -> (MutationStatus, Option<u64>, bool) {
+#[test]
+fn same_outcome_is_idempotent_only_for_the_api_phase_that_committed_it() {
+    for outcome in [
+        ReplaceTerminalOutcome::Confirmed,
+        ReplaceTerminalOutcome::Rejected,
+    ] {
+        let (mut ledger, receipt) = prepared_ledger();
+        ledger.finish_replace(receipt.id, outcome, 1).unwrap();
+        let committed = record_state(&ledger, receipt.id);
+        ledger.finish_replace(receipt.id, outcome, 99).unwrap();
+        assert!(record_state(&ledger, receipt.id) == committed);
+        assert!(ledger.reconcile_replace(receipt.id, outcome, 99).is_err());
+        assert!(record_state(&ledger, receipt.id) == committed);
+    }
+
+    let (mut replace_ledger, replace_receipt) = prepared_ledger();
+    replace_ledger
+        .finish_replace(replace_receipt.id, ReplaceTerminalOutcome::Indeterminate, 1)
+        .unwrap();
+    replace_ledger
+        .reconcile_replace(replace_receipt.id, ReplaceTerminalOutcome::Indeterminate, 2)
+        .unwrap();
+    let reconciled = record_state(&replace_ledger, replace_receipt.id);
+    assert!(replace_ledger
+        .finish_replace(replace_receipt.id, ReplaceTerminalOutcome::Indeterminate, 3,)
+        .is_err());
+    assert!(record_state(&replace_ledger, replace_receipt.id) == reconciled);
+
+    for outcome in [
+        RestoreTerminalOutcome::Restored,
+        RestoreTerminalOutcome::Rejected,
+    ] {
+        let (mut ledger, receipt) = restoring_ledger();
+        ledger.finish_restore(receipt.id, outcome, 2).unwrap();
+        let committed = record_state(&ledger, receipt.id);
+        ledger.finish_restore(receipt.id, outcome, 99).unwrap();
+        assert!(record_state(&ledger, receipt.id) == committed);
+        assert!(ledger.reconcile_restore(receipt.id, outcome, 99).is_err());
+        assert!(record_state(&ledger, receipt.id) == committed);
+    }
+
+    let (mut restore_ledger, restore_receipt) = restoring_ledger();
+    restore_ledger
+        .finish_restore(restore_receipt.id, RestoreTerminalOutcome::Indeterminate, 3)
+        .unwrap();
+    restore_ledger
+        .reconcile_restore(restore_receipt.id, RestoreTerminalOutcome::Indeterminate, 4)
+        .unwrap();
+    let restore_reconciled = record_state(&restore_ledger, restore_receipt.id);
+    assert!(restore_ledger
+        .finish_restore(restore_receipt.id, RestoreTerminalOutcome::Indeterminate, 5,)
+        .is_err());
+    assert!(record_state(&restore_ledger, restore_receipt.id) == restore_reconciled);
+}
+
+fn prepared_ledger() -> (MutationLedger<()>, MutationReceipt) {
+    let selected = snapshot();
+    let receipt = MutationReceipt {
+        id: Uuid::new_v4(),
+        snapshot_id: selected.id,
+        request_id: Uuid::new_v4(),
+    };
+    let mut ledger = MutationLedger::new(1);
+    ledger
+        .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
+        .unwrap();
+    (ledger, receipt)
+}
+
+fn restoring_ledger() -> (MutationLedger<()>, MutationReceipt) {
+    let (mut ledger, receipt) = prepared_ledger();
+    ledger
+        .finish_replace(receipt.id, ReplaceTerminalOutcome::Confirmed, 1)
+        .unwrap();
+    ledger.begin_restore(receipt.id, 2).unwrap();
+    (ledger, receipt)
+}
+
+fn record_state(
+    ledger: &MutationLedger<()>,
+    id: Uuid,
+) -> (MutationStatus, Option<u64>, bool, Option<TerminalPhase>) {
     let record = ledger.records.get(&id).unwrap();
     (
         record.projection.status,
         record.terminal_at,
         record.restore_attempted,
+        record.terminal_phase,
     )
 }
