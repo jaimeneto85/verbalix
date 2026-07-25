@@ -119,7 +119,10 @@ impl<T> MutationLedger<T> {
         record.projection.status = status;
         record.terminal_at = matches!(
             status,
-            MutationStatus::Restored | MutationStatus::RestoreRejected
+            MutationStatus::Confirmed
+                | MutationStatus::Rejected
+                | MutationStatus::Restored
+                | MutationStatus::RestoreRejected
         )
         .then_some(now_ms);
         Ok(record.projection.clone())
