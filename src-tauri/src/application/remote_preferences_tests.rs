@@ -1,4 +1,7 @@
 use super::*;
+use crate::application::preferences_sync_store::{
+    parse_iso8601_utc_secs, LocalSyncMeta, PreferencesSyncStore,
+};
 use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
@@ -96,55 +99,176 @@ fn remote(formality: u8, updated_at: Option<&str>) -> RemotePreferences {
     }
 }
 
-#[test]
-fn merge_prefers_remote_when_updated_at_present() {
-    let local = base_settings();
-    let merged = merge_preferences(&local, Some(remote(5, Some("2026-07-25T00:00:00Z"))));
+fn meta_with_timestamp(updated_at_secs: u64) -> LocalSyncMeta {
+    LocalSyncMeta {
+        updated_at_secs: Some(updated_at_secs),
+        synced_at_secs: None,
+        sequence: 1,
+    }
+}
 
-    assert_eq!(merged.formality, 5);
-    assert_eq!(merged.length, LengthPreference::Concise);
-    assert_eq!(merged.tone, TonePreference::Friendly);
-    assert!(merged.history_enabled);
+fn meta_with_both(updated_at_secs: u64, synced_at_secs: u64) -> LocalSyncMeta {
+    LocalSyncMeta {
+        updated_at_secs: Some(updated_at_secs),
+        synced_at_secs: Some(synced_at_secs),
+        sequence: 1,
+    }
 }
 
 #[test]
-fn merge_keeps_local_when_remote_updated_at_is_missing() {
+fn remote_wins_when_remote_is_strictly_newer_than_local() {
     let local = base_settings();
-    let merged = merge_preferences(&local, Some(remote(5, None)));
+    let local_secs = parse_iso8601_utc_secs("2026-07-24T00:00:00Z").unwrap();
+    let meta = meta_with_timestamp(local_secs);
+    let outcome = merge_preferences(
+        &local,
+        Some(&meta),
+        Some(remote(5, Some("2026-07-25T00:00:00Z"))),
+    );
 
-    assert_eq!(merged, local);
+    assert_eq!(outcome.settings.formality, 5);
+    assert_eq!(outcome.settings.length, LengthPreference::Concise);
+    assert_eq!(outcome.settings.tone, TonePreference::Friendly);
+    assert!(outcome.settings.history_enabled);
+    assert!(!outcome.needs_push);
 }
 
 #[test]
-fn merge_keeps_local_when_remote_row_is_absent() {
+fn local_wins_on_exact_timestamp_tie() {
     let local = base_settings();
-    let merged = merge_preferences(&local, None);
+    let same_secs = parse_iso8601_utc_secs("2026-07-25T00:00:00Z").unwrap();
+    let meta = meta_with_timestamp(same_secs);
+    let outcome = merge_preferences(
+        &local,
+        Some(&meta),
+        Some(remote(5, Some("2026-07-25T00:00:00Z"))),
+    );
 
-    assert_eq!(merged, local);
+    assert_eq!(outcome.settings.formality, local.formality);
 }
 
 #[test]
-fn merge_never_overwrites_macos_only_fields() {
+fn local_wins_when_local_is_newer_than_remote() {
     let local = base_settings();
-    let merged = merge_preferences(&local, Some(remote(5, Some("2026-07-25T00:00:00Z"))));
+    let local_secs = parse_iso8601_utc_secs("2026-07-26T00:00:00Z").unwrap();
+    let meta = meta_with_timestamp(local_secs);
+    let outcome = merge_preferences(
+        &local,
+        Some(&meta),
+        Some(remote(5, Some("2026-07-25T00:00:00Z"))),
+    );
 
-    assert_eq!(merged.confirm_before_replace, local.confirm_before_replace);
-    assert_eq!(merged.automatic_toolbar, local.automatic_toolbar);
-    assert_eq!(merged.shortcut, local.shortcut);
+    assert_eq!(outcome.settings.formality, local.formality);
 }
 
 #[test]
-fn merge_never_overwrites_macos_only_fields_when_local_values_are_the_non_defaults() {
+fn needs_push_when_local_wins_and_never_synced() {
+    let local = base_settings();
+    let local_secs = parse_iso8601_utc_secs("2026-07-26T00:00:00Z").unwrap();
+    let meta = meta_with_timestamp(local_secs);
+    let outcome = merge_preferences(
+        &local,
+        Some(&meta),
+        Some(remote(5, Some("2026-07-25T00:00:00Z"))),
+    );
+
+    assert!(outcome.needs_push);
+}
+
+#[test]
+fn no_push_when_local_wins_but_already_synced_with_same_timestamp() {
+    let local = base_settings();
+    let ts = parse_iso8601_utc_secs("2026-07-26T00:00:00Z").unwrap();
+    let meta = meta_with_both(ts, ts);
+    let outcome = merge_preferences(
+        &local,
+        Some(&meta),
+        Some(remote(5, Some("2026-07-25T00:00:00Z"))),
+    );
+
+    assert!(!outcome.needs_push);
+}
+
+#[test]
+fn remote_wins_when_no_sidecar_and_remote_has_timestamp() {
+    let local = base_settings();
+    let outcome = merge_preferences(&local, None, Some(remote(5, Some("2026-07-25T00:00:00Z"))));
+
+    assert_eq!(outcome.settings.formality, 5);
+    assert!(!outcome.needs_push);
+}
+
+#[test]
+fn local_wins_when_remote_row_is_absent() {
+    let local = base_settings();
+    let outcome = merge_preferences(&local, None, None);
+
+    assert_eq!(outcome.settings, local);
+    assert!(!outcome.needs_push);
+}
+
+#[test]
+fn local_wins_when_remote_updated_at_is_missing() {
+    let local = base_settings();
+    let outcome = merge_preferences(&local, None, Some(remote(5, None)));
+
+    assert_eq!(outcome.settings, local);
+}
+
+#[test]
+fn macos_only_fields_never_overwritten_when_remote_wins() {
+    let local = base_settings();
+    let local_secs = parse_iso8601_utc_secs("2026-07-24T00:00:00Z").unwrap();
+    let meta = meta_with_timestamp(local_secs);
+    let outcome = merge_preferences(
+        &local,
+        Some(&meta),
+        Some(remote(5, Some("2026-07-25T00:00:00Z"))),
+    );
+
+    assert_eq!(
+        outcome.settings.confirm_before_replace,
+        local.confirm_before_replace
+    );
+    assert_eq!(outcome.settings.automatic_toolbar, local.automatic_toolbar);
+    assert_eq!(outcome.settings.shortcut, local.shortcut);
+}
+
+#[test]
+fn macos_only_fields_preserved_at_non_default_values() {
     let mut local = base_settings();
     local.confirm_before_replace = false;
     local.automatic_toolbar = false;
     local.shortcut = "Cmd+Shift+Z".to_owned();
 
-    let merged = merge_preferences(&local, Some(remote(5, Some("2026-07-25T00:00:00Z"))));
+    let local_secs = parse_iso8601_utc_secs("2026-07-24T00:00:00Z").unwrap();
+    let meta = meta_with_timestamp(local_secs);
+    let outcome = merge_preferences(
+        &local,
+        Some(&meta),
+        Some(remote(5, Some("2026-07-25T00:00:00Z"))),
+    );
 
-    assert!(!merged.confirm_before_replace);
-    assert!(!merged.automatic_toolbar);
-    assert_eq!(merged.shortcut, "Cmd+Shift+Z");
+    assert!(!outcome.settings.confirm_before_replace);
+    assert!(!outcome.settings.automatic_toolbar);
+    assert_eq!(outcome.settings.shortcut, "Cmd+Shift+Z");
+}
+
+#[test]
+fn concurrent_save_during_fetch_leaves_local_changes_intact() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = PreferencesSyncStore::new(dir.path().join("preferences_sync.json"));
+
+    store.record_change(1_000_000).unwrap();
+    let captured_seq = store.load().map(|m| m.sequence).unwrap_or(0);
+
+    store.record_change(2_000_000).unwrap();
+
+    let current_seq = store.load().map(|m| m.sequence).unwrap_or(0);
+    assert_ne!(
+        current_seq, captured_seq,
+        "background sync must detect concurrent save and abort to preserve local edit"
+    );
 }
 
 #[tokio::test]

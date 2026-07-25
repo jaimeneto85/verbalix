@@ -1,4 +1,7 @@
-use crate::domain::{AppSettings, LengthPreference, TonePreference, VerbalixError};
+use crate::{
+    application::preferences_sync_store::{parse_iso8601_utc_secs, LocalSyncMeta},
+    domain::{AppSettings, LengthPreference, TonePreference, VerbalixError},
+};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -30,6 +33,11 @@ struct PreferencesUpsert {
 #[derive(Deserialize)]
 struct SupabaseUser {
     id: String,
+}
+
+pub struct MergeOutcome {
+    pub settings: AppSettings,
+    pub needs_push: bool,
 }
 
 impl RemotePreferencesRepository {
@@ -139,13 +147,64 @@ fn tone_str(tone: TonePreference) -> String {
     .to_owned()
 }
 
-pub fn merge_preferences(local: &AppSettings, remote: Option<RemotePreferences>) -> AppSettings {
+pub fn merge_preferences(
+    local: &AppSettings,
+    local_meta: Option<&LocalSyncMeta>,
+    remote: Option<RemotePreferences>,
+) -> MergeOutcome {
     let Some(remote) = remote else {
-        return local.clone();
+        return MergeOutcome {
+            settings: local.clone(),
+            needs_push: false,
+        };
     };
-    if remote.updated_at.is_none() {
-        return local.clone();
+
+    let local_updated_at_secs = local_meta.and_then(|m| m.updated_at_secs);
+    let synced_at_secs = local_meta.and_then(|m| m.synced_at_secs);
+
+    let remote_secs = remote
+        .updated_at
+        .as_deref()
+        .and_then(parse_iso8601_utc_secs);
+
+    let Some(remote_secs) = remote_secs else {
+        let needs_push = should_push(local_updated_at_secs, synced_at_secs);
+        return MergeOutcome {
+            settings: local.clone(),
+            needs_push,
+        };
+    };
+
+    let Some(local_secs) = local_updated_at_secs else {
+        return MergeOutcome {
+            settings: apply_remote(remote, local),
+            needs_push: false,
+        };
+    };
+
+    if remote_secs > local_secs {
+        MergeOutcome {
+            settings: apply_remote(remote, local),
+            needs_push: false,
+        }
+    } else {
+        let needs_push = should_push(Some(local_secs), synced_at_secs);
+        MergeOutcome {
+            settings: local.clone(),
+            needs_push,
+        }
     }
+}
+
+fn should_push(local_updated_at_secs: Option<u64>, synced_at_secs: Option<u64>) -> bool {
+    match (local_updated_at_secs, synced_at_secs) {
+        (Some(updated), Some(synced)) => updated > synced,
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
+}
+
+fn apply_remote(remote: RemotePreferences, local: &AppSettings) -> AppSettings {
     AppSettings {
         formality: remote.formality,
         length: remote.length,
