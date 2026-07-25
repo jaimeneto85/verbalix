@@ -30,8 +30,7 @@
 ### Riscos de impacto
 
 - Corrigir o clique sem corrigir a revalidação AX pode produzir sucesso aparente ou escrita stale após a seleção mudar.
-- O overlay pode tomar foco e invalidar a seleção antes do comando.
-- Traduzir e Aprimorar podem compartilhar um defeito, mas exigem cobertura independente e smoke real além dos mocks.
+- O overlay pode invalidar a seleção; Traduzir e Aprimorar exigem cobertura independente e smoke real além dos mocks.
 
 ## 1. REQUIREMENTS
 
@@ -126,10 +125,8 @@
 
 ### Edge cases
 
-- EC01: Duplo clique/ações concorrentes.
-- EC02: Overlay perde/reordena readiness durante o clique.
-- EC03: Sessão ausente/expirada e refresh transitório.
-- EC04: Backend retorna erro, timeout ou resultado vazio.
+- EC01/EC02: Duplo clique, ações concorrentes ou readiness reordenada.
+- EC03/EC04: Sessão ausente/expirada, refresh transitório ou erro/timeout do backend.
 - EC05: Seleção, foco, range ou conteúdo muda durante a transformação.
 - EC06: Unicode e ranges UTF-16.
 - EC07: Elemento editável sem setter AX suportado.
@@ -140,8 +137,7 @@
 - EC12: Histórico remoto não responde depois de uma transformação aplicada.
 - EC13: A guarda é cancelada enquanto o executor principal cria ou posiciona a janela, antes do primeiro efeito visual.
 - EC14: A mesma ação publica uma superfície inicial e depois precisa publicar feedback de falha de Apply, Undo ou pin.
-- EC15: `AXValue` contém Unicode com pares substitutos e o range UTF-16 começa/termina somente em boundary válido.
-- EC16: Range negativo, vazio, fora do valor, no meio de surrogate pair ou valor alterado entre captura e escrita deve falhar fechado.
+- EC15/EC16: `AXValue` Unicode exige boundaries UTF-16; range inválido, surrogate dividido ou valor alterado falha fechado.
 - EC17: `AXValue` é legível, mas `AXSelectedText` não é settable; a seleção deve permanecer read-only e receber nota.
 
 ## 2. DESIGN
@@ -200,8 +196,7 @@
 ### Componentes reutilizáveis
 
 - `Overlay`, `native.transformSelection` e `commands::transform_selection`.
-- `SelectionCoordinator`, fakes existentes e matriz AX de identidade/replace/restore.
-- `TransformOperation`, `request_id`, `NoteResultState`, `route_refresh_failure` e `error_code` existentes.
+- `SelectionCoordinator`, fakes, matriz AX, `TransformOperation`, `request_id`, `NoteResultState`, `route_refresh_failure` e `error_code`.
 
 ## 3. TASKS
 
@@ -242,7 +237,7 @@
 - [x] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
 - [x] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
 - [x] T2.28 `[CRITICAL]` Ancorar restore no target epoch e mover validação de correlação antes de todos os early returns/reconcile.
-- [ ] T2.29 `[CRITICAL]` Integrar epoch check ao write boundary pós-arm e aplicar TTL antes do replay lookup.
+- [x] T2.29 `[CRITICAL]` Integrar epoch check ao write boundary pós-arm e aplicar TTL antes do replay lookup.
 
 ### Fase 3 — Testes
 
@@ -288,14 +283,12 @@
 - Escrita, undo e erro precisam de receipts e roteamento tipado; `confirm_before_replace`, falhas pós-setter e múltiplos feedbacks da mesma ação fazem parte da matriz.
 - O fallback TextEdit é UTF-16 transacional e lê somente o range de `AXValue`; `AXSelectedText` continua o único writer quando settable, com diagnóstico sanitizado e probe real fechado por TCC.
 - As rodadas QA RF16–RF30 originaram RF20–RF34: allowlist precoce, handle/ledger completos, secure subrole, epoch fora da FIFO, focus/self-notification, restore/reconcile monotônicos, identifier privado, write gate tardio e provenance por fase.
-- O QA RF34 aprovou esses boundaries, mas encontrou restore adotando epoch novo e validando replay tarde; RF35–RF36 fecham os dois defects causais.
-- O QA RF35 encontrou gap pós-arm/pré-setter e replay sem prune; RF37–RF38 movem o check ao setter e aplicam TTL no lookup.
+- QA RF34–RF35 encontrou epoch novo, replay tardio, gap pós-arm/pré-setter e lookup sem prune; RF35–RF38 fecham esses defects.
 
 ### 🟢 Oportunidades incorporadas
 
 - Reuso de operação/request, state machine, ports/fakes, note state, diagnósticos e harnesses paramétricos mantém uma única arquitetura.
-- Readiness nativa e timeline sanitizada usam `request_id + snapshot_id`; TextEdit e Slack formam a matriz real.
-- `CFRange`, geometria, strong identity, lease, setter `AXSelectedText`, helper UTF-16 puro e `same_target` cobrem o fallback sem mudar coordinator/provider/overlay.
+- Readiness/timeline usam `request_id + snapshot_id`; TextEdit/Slack, `CFRange`, geometria, identity, lease, setter e `same_target` cobrem a matriz.
 
 ### Síntese
 

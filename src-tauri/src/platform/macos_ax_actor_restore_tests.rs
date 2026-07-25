@@ -33,8 +33,17 @@ impl AxMutationTarget for RestoreTarget {
         Ok(())
     }
 
-    fn write_replace(&self, _expected: &SelectionSnapshot, _text: &str) -> WriteOutcome {
-        WriteOutcome::Confirmed
+    fn write_replace(
+        &self,
+        _expected: &SelectionSnapshot,
+        _text: &str,
+        authorization: &AxWriteAuthorization,
+    ) -> WriteOutcome {
+        if authorization.is_current() {
+            WriteOutcome::Confirmed
+        } else {
+            WriteOutcome::Rejected
+        }
     }
 
     fn prepare_restore(
@@ -46,8 +55,16 @@ impl AxMutationTarget for RestoreTarget {
         Ok(())
     }
 
-    fn write_restore(&self, _expected: &SelectionSnapshot) -> RestoreWriteOutcome {
-        RestoreWriteOutcome::Confirmed
+    fn write_restore(
+        &self,
+        _expected: &SelectionSnapshot,
+        authorization: &AxWriteAuthorization,
+    ) -> RestoreWriteOutcome {
+        if authorization.is_current() {
+            RestoreWriteOutcome::Confirmed
+        } else {
+            RestoreWriteOutcome::Rejected
+        }
     }
 
     fn read(
@@ -165,7 +182,8 @@ fn terminal_state(
 }
 
 fn record_meta(state: &mut ActorState, id: Uuid) -> RecordMeta {
-    let record = state.mutations.get_mut(id).unwrap();
+    let now = state.now();
+    let record = state.mutations.get_mut(id, now).unwrap();
     RecordMeta {
         status: record.projection.status,
         terminal_at: record.terminal_at,

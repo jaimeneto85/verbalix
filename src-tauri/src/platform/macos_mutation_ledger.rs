@@ -107,7 +107,8 @@ impl<T> MutationLedger<T> {
             .transpose()
     }
 
-    pub(super) fn get_mut(&mut self, id: Uuid) -> Option<&mut ActorMutationRecord<T>> {
+    pub(super) fn get_mut(&mut self, id: Uuid, now_ms: u64) -> Option<&mut ActorMutationRecord<T>> {
+        self.prune(now_ms);
         self.records.get_mut(&id)
     }
 

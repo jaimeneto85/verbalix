@@ -3,6 +3,7 @@ use super::{
     macos_replace::{self, WriteOutcome},
     macos_restore::{self, RestoreWriteOutcome},
     macos_selection_revalidation::{self, CurrentSelection},
+    macos_write_authorization::AxWriteAuthorization,
 };
 use crate::domain::{SelectionExtractionStrategy, SelectionSnapshot, VerbalixError};
 use std::rc::Rc;
@@ -14,7 +15,12 @@ pub(super) trait AxMutationTarget {
         causal: bool,
     ) -> Result<(), VerbalixError>;
 
-    fn write_replace(&self, expected: &SelectionSnapshot, text: &str) -> WriteOutcome;
+    fn write_replace(
+        &self,
+        expected: &SelectionSnapshot,
+        text: &str,
+        authorization: &AxWriteAuthorization,
+    ) -> WriteOutcome;
 
     fn prepare_restore(
         &self,
@@ -23,7 +29,11 @@ pub(super) trait AxMutationTarget {
         causal: bool,
     ) -> Result<(), VerbalixError>;
 
-    fn write_restore(&self, expected: &SelectionSnapshot) -> RestoreWriteOutcome;
+    fn write_restore(
+        &self,
+        expected: &SelectionSnapshot,
+        authorization: &AxWriteAuthorization,
+    ) -> RestoreWriteOutcome;
 
     fn read(
         &self,
@@ -44,8 +54,18 @@ impl AxMutationTarget for NativeAxMutationTarget {
         macos_replace::prepare_on_element(expected, &self.element, causal)
     }
 
-    fn write_replace(&self, expected: &SelectionSnapshot, text: &str) -> WriteOutcome {
-        macos_replace::write_on_element(expected, text, self.element.as_ref().as_ref())
+    fn write_replace(
+        &self,
+        expected: &SelectionSnapshot,
+        text: &str,
+        authorization: &AxWriteAuthorization,
+    ) -> WriteOutcome {
+        macos_replace::write_on_element(
+            expected,
+            text,
+            self.element.as_ref().as_ref(),
+            authorization,
+        )
     }
 
     fn prepare_restore(
@@ -57,8 +77,12 @@ impl AxMutationTarget for NativeAxMutationTarget {
         macos_restore::prepare_on_element(expected, transformed, &self.element, causal)
     }
 
-    fn write_restore(&self, expected: &SelectionSnapshot) -> RestoreWriteOutcome {
-        macos_restore::write_on_element(expected, self.element.as_ref().as_ref())
+    fn write_restore(
+        &self,
+        expected: &SelectionSnapshot,
+        authorization: &AxWriteAuthorization,
+    ) -> RestoreWriteOutcome {
+        macos_restore::write_on_element(expected, self.element.as_ref().as_ref(), authorization)
     }
 
     fn read(
@@ -120,7 +144,11 @@ pub(super) mod tests {
             }
         }
 
-        fn write(&self, expected: &SelectionSnapshot) -> bool {
+        fn write(
+            &self,
+            expected: &SelectionSnapshot,
+            authorization: &AxWriteAuthorization,
+        ) -> bool {
             let (role, subrole) = self.role.borrow().clone();
             let validated = macos_text_role::validate(role, subrole);
             validated
@@ -128,6 +156,7 @@ pub(super) mod tests {
                     set_after_role_validation(
                         expected.element_identity.as_ref().unwrap(),
                         current,
+                        authorization,
                         || {
                             self.setters.set(self.setters.get() + 1);
                             AxWriteResult::Confirmed
@@ -148,8 +177,13 @@ pub(super) mod tests {
             Ok(())
         }
 
-        fn write_replace(&self, expected: &SelectionSnapshot, _text: &str) -> WriteOutcome {
-            if self.write(expected) {
+        fn write_replace(
+            &self,
+            expected: &SelectionSnapshot,
+            _text: &str,
+            authorization: &AxWriteAuthorization,
+        ) -> WriteOutcome {
+            if self.write(expected, authorization) {
                 WriteOutcome::Confirmed
             } else {
                 WriteOutcome::Rejected
@@ -166,8 +200,12 @@ pub(super) mod tests {
             Ok(())
         }
 
-        fn write_restore(&self, expected: &SelectionSnapshot) -> RestoreWriteOutcome {
-            if self.write(expected) {
+        fn write_restore(
+            &self,
+            expected: &SelectionSnapshot,
+            authorization: &AxWriteAuthorization,
+        ) -> RestoreWriteOutcome {
+            if self.write(expected, authorization) {
                 RestoreWriteOutcome::Confirmed
             } else {
                 RestoreWriteOutcome::Rejected

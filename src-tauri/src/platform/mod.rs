@@ -61,6 +61,8 @@ mod macos_text_role;
 #[cfg(target_os = "macos")]
 mod macos_value_range;
 #[cfg(target_os = "macos")]
+mod macos_write_authorization;
+#[cfg(target_os = "macos")]
 mod macos_write_boundary;
 
 pub use clipboard::SystemClipboard;

@@ -7,6 +7,7 @@ use super::{
     macos_element_token::AxElementToken,
     macos_mutation_ledger::{MutationLedger, ReplaceTerminalOutcome, RestoreTerminalOutcome},
     macos_replace, macos_restore, macos_selection,
+    macos_write_authorization::AxWriteAuthorization,
 };
 use crate::{
     application::{MutationProjection, MutationReceipt, MutationStatus, PublicationGuard},
@@ -96,6 +97,14 @@ impl ActorState {
             target.clone(),
             now,
         )?;
+        if ensure_current(&self.epoch, target.epoch).is_err() {
+            self.mutations.finish_replace(
+                receipt.id,
+                ReplaceTerminalOutcome::Rejected,
+                self.now(),
+            )?;
+            return Err(VerbalixError::StaleSelection);
+        }
         let request_id = match claim(&lease) {
             Ok(request_id) => request_id,
             Err(error) => {
@@ -115,16 +124,11 @@ impl ActorState {
             )?;
             return Err(VerbalixError::StaleSelection);
         }
-        if ensure_current(&self.epoch, target.epoch).is_err() {
-            self.mutations.finish_replace(
-                receipt.id,
-                ReplaceTerminalOutcome::Rejected,
-                self.now(),
-            )?;
-            return Err(VerbalixError::StaleSelection);
-        }
         self.arm_self_notification(receipt.id, &expected, &target, target.epoch, text.clone());
-        let outcome = target.target.write_replace(&expected, &text);
+        let authorization = AxWriteAuthorization::new(self.epoch.clone(), target.epoch);
+        let outcome = target
+            .target
+            .write_replace(&expected, &text, &authorization);
         let terminal_outcome = match outcome {
             macos_replace::WriteOutcome::Confirmed => ReplaceTerminalOutcome::Confirmed,
             macos_replace::WriteOutcome::Rejected => ReplaceTerminalOutcome::Rejected,
@@ -146,9 +150,10 @@ impl ActorState {
         transformed: String,
         lease: Option<PublicationGuard>,
     ) -> Result<MutationReceipt, VerbalixError> {
+        let now = self.now();
         let (projection, target) = self
             .mutations
-            .get_mut(mutation_id)
+            .get_mut(mutation_id, now)
             .map(|record| (record.projection.clone(), record.target.clone()))
             .ok_or(VerbalixError::StaleSelection)?;
         if !restore_correlates(mutation_id, &projection, &expected, &transformed, &lease) {
@@ -193,9 +198,7 @@ impl ActorState {
                 return Err(error);
             }
         };
-        if request_id != projection.receipt.request_id
-            || ensure_current(&self.epoch, boundary_epoch).is_err()
-        {
+        if request_id != projection.receipt.request_id {
             self.mutations.finish_restore(
                 mutation_id,
                 RestoreTerminalOutcome::Rejected,
@@ -210,7 +213,8 @@ impl ActorState {
             boundary_epoch,
             expected.text.clone(),
         );
-        let outcome = target.target.write_restore(&expected);
+        let authorization = AxWriteAuthorization::new(self.epoch.clone(), boundary_epoch);
+        let outcome = target.target.write_restore(&expected, &authorization);
         let terminal_outcome = match outcome {
             macos_restore::RestoreWriteOutcome::Confirmed => RestoreTerminalOutcome::Restored,
             macos_restore::RestoreWriteOutcome::Rejected => RestoreTerminalOutcome::Rejected,

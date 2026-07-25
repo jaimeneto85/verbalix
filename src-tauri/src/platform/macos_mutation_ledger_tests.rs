@@ -72,7 +72,10 @@ fn prepared_record_contains_complete_recovery_projection_before_setter() {
     assert_eq!(projection.strategy, selected.extraction_strategy);
     assert_eq!(projection.target_snapshot_id, selected.id);
     assert!(projection.status == MutationStatus::Prepared);
-    assert_eq!(ledger.get_mut(receipt.id).unwrap().target, "exact-target");
+    assert_eq!(
+        ledger.get_mut(receipt.id, 0).unwrap().target,
+        "exact-target"
+    );
 }
 
 #[test]

@@ -104,8 +104,11 @@ impl ActorState {
         target: AxElementToken,
         generation: u64,
     ) -> ObservedSelectionChange {
-        let Some((mutation_id, target_snapshot_id, status, current)) =
-            self.mutations.get_mut(expected.mutation_id).map(|record| {
+        let now = self.now();
+        let Some((mutation_id, target_snapshot_id, status, current)) = self
+            .mutations
+            .get_mut(expected.mutation_id, now)
+            .map(|record| {
                 (
                     record.projection.receipt.id,
                     record.projection.target_snapshot_id,

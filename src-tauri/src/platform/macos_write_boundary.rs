@@ -1,6 +1,7 @@
 use super::{
     macos_ax::{self, AXUIElementRef, AxWriteResult},
     macos_selection, macos_text_role,
+    macos_write_authorization::AxWriteAuthorization,
 };
 use crate::domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError};
 
@@ -8,6 +9,7 @@ pub(super) fn set_selected_text(
     expected: &SelectionSnapshot,
     text: &str,
     element: AXUIElementRef,
+    authorization: &AxWriteAuthorization,
 ) -> Result<AxWriteResult, VerbalixError> {
     let expected_identity = expected
         .element_identity
@@ -17,7 +19,7 @@ pub(super) fn set_selected_text(
         VerbalixError::ProtectedField => error,
         _ => VerbalixError::StaleSelection,
     })?;
-    set_after_role_validation(expected_identity, current_role, || {
+    set_after_role_validation(expected_identity, current_role, authorization, || {
         macos_ax::set_selected_text(element, text)
     })
 }
@@ -25,9 +27,13 @@ pub(super) fn set_selected_text(
 pub(super) fn set_after_role_validation(
     expected: &SelectionElementIdentity,
     current: macos_text_role::ValidatedTextRole,
+    authorization: &AxWriteAuthorization,
     setter: impl FnOnce() -> AxWriteResult,
 ) -> Result<AxWriteResult, VerbalixError> {
-    if current.role != expected.role || current.subrole != expected.subrole {
+    if current.role != expected.role
+        || current.subrole != expected.subrole
+        || !authorization.is_current()
+    {
         return Err(VerbalixError::StaleSelection);
     }
     Ok(setter())
@@ -79,6 +85,10 @@ mod tests {
         .with_element_identity(identity())
     }
 
+    fn authorization() -> AxWriteAuthorization {
+        AxWriteAuthorization::new(crate::platform::causal_epoch::CausalEpoch::default(), 0)
+    }
+
     #[test]
     fn secure_or_changed_role_rejects_before_the_setter() {
         for current in [
@@ -90,7 +100,7 @@ mod tests {
         ] {
             let setters = Cell::new(0);
             let result = current.and_then(|role| {
-                set_after_role_validation(&identity(), role, || {
+                set_after_role_validation(&identity(), role, &authorization(), || {
                     setters.set(setters.get() + 1);
                     AxWriteResult::Confirmed
                 })
@@ -104,7 +114,7 @@ mod tests {
     fn matching_role_invokes_exactly_one_setter() {
         let setters = Cell::new(0);
         let current = macos_text_role::validate("AXTextField".to_owned(), None).unwrap();
-        let result = set_after_role_validation(&identity(), current, || {
+        let result = set_after_role_validation(&identity(), current, &authorization(), || {
             setters.set(setters.get() + 1);
             AxWriteResult::Confirmed
         });
@@ -130,7 +140,7 @@ mod tests {
             Some("AXSecureTextField".to_owned()),
         )
         .and_then(|role| {
-            set_after_role_validation(&identity(), role, || {
+            set_after_role_validation(&identity(), role, &authorization(), || {
                 setters.set(setters.get() + 1);
                 AxWriteResult::Confirmed
             })
@@ -160,7 +170,7 @@ mod tests {
             Some("AXSecureTextField".to_owned()),
         )
         .and_then(|role| {
-            set_after_role_validation(&identity(), role, || {
+            set_after_role_validation(&identity(), role, &authorization(), || {
                 setters.set(setters.get() + 1);
                 AxWriteResult::Confirmed
             })

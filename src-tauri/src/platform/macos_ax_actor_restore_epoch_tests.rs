@@ -38,7 +38,12 @@ impl AxMutationTarget for BlockingRestoreTarget {
         Ok(())
     }
 
-    fn write_replace(&self, _expected: &SelectionSnapshot, _text: &str) -> WriteOutcome {
+    fn write_replace(
+        &self,
+        _expected: &SelectionSnapshot,
+        _text: &str,
+        _authorization: &crate::platform::macos_write_authorization::AxWriteAuthorization,
+    ) -> WriteOutcome {
         WriteOutcome::Confirmed
     }
 
@@ -57,7 +62,14 @@ impl AxMutationTarget for BlockingRestoreTarget {
             .map_err(|_| VerbalixError::LocalFailure)
     }
 
-    fn write_restore(&self, _expected: &SelectionSnapshot) -> RestoreWriteOutcome {
+    fn write_restore(
+        &self,
+        _expected: &SelectionSnapshot,
+        authorization: &crate::platform::macos_write_authorization::AxWriteAuthorization,
+    ) -> RestoreWriteOutcome {
+        if !authorization.is_current() {
+            return RestoreWriteOutcome::Rejected;
+        }
         self.setters.fetch_add(1, Ordering::SeqCst);
         RestoreWriteOutcome::Confirmed
     }
@@ -160,7 +172,8 @@ fn focus_epoch_rejects_real_restore_before_pending_capture_and_preserves_ledger(
                     state.now(),
                 )
                 .unwrap();
-            let before = state.mutations.get_mut(receipt_worker.id).unwrap();
+            let now = state.now();
+            let before = state.mutations.get_mut(receipt_worker.id, now).unwrap();
             let before_meta = (
                 before.projection.status,
                 before.terminal_at,
@@ -173,7 +186,8 @@ fn focus_epoch_rejects_real_restore_before_pending_capture_and_preserves_ledger(
                 "after".to_owned(),
                 Some(lease),
             );
-            let after = state.mutations.get_mut(receipt_worker.id).unwrap();
+            let now = state.now();
+            let after = state.mutations.get_mut(receipt_worker.id, now).unwrap();
             let after_meta = (
                 after.projection.status,
                 after.terminal_at,

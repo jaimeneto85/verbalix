@@ -7,7 +7,8 @@ use uuid::Uuid;
 
 impl ActorState {
     pub(super) fn reconcile(&mut self, id: Uuid) -> Option<MutationProjection> {
-        let recovery = self.mutations.get_mut(id).and_then(|record| {
+        let now = self.now();
+        let recovery = self.mutations.get_mut(id, now).and_then(|record| {
             matches!(
                 record.projection.status,
                 MutationStatus::Indeterminate | MutationStatus::RestoreIndeterminate
