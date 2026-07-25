@@ -44,12 +44,9 @@ impl SelfNotificationPhase {
 
     pub(super) fn claim_observation(&self) -> bool {
         loop {
-            match self.state.load(Ordering::Acquire) {
+            let observed = self.state.load(Ordering::Acquire);
+            match observed {
                 ARMED | AUTHORIZING => {
-                    let observed = self.state.load(Ordering::Acquire);
-                    if !matches!(observed, ARMED | AUTHORIZING) {
-                        continue;
-                    }
                     if self
                         .state
                         .compare_exchange(observed, CANCELLED, Ordering::AcqRel, Ordering::Acquire)
