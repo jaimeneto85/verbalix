@@ -72,6 +72,11 @@
 - O undo possui lease próprio criado no commit `Applied`; restore faz revalidação antes do claim e o commit posterior preserva qualquer Candidate B que tenha supersedido A.
 - Persistência de histórico é best-effort, detached e limitada por timeout no cliente e na tarefa; falhas expõem somente evento e código sanitizado, sem bloquear nem alterar o resultado da transformação.
 - A guarda visual representa a vida reutilizável da ação; cada comando cria um `PublicationPermit` single-use próprio antes do dispatch. `cancel` e `permit.try_claim` compartilham apenas um mutex curto, fora de I/O, para ordenar cancelamento global contra o boundary imediatamente anterior a `emit/show`. Assim feedbacks sequenciais legítimos funcionam, enquanto cancelamento que vence um permit limpa readiness e produz zero efeito.
+- A estratégia de extração (`SelectedText`, `StringForRange`, `ValueRange` ou `TextMarker`) faz parte do snapshot e de `same_target`; replace e restore revalidam exclusivamente pela estratégia original.
+- O fallback `ValueRange` é autorizado somente após falha de capacidade de `AXStringForRange`, executa `range₁ → AXValue → range₂`, exige ranges iguais e copia apenas o trecho selecionado por offsets UTF-16.
+- `AXValue` é limitado a 262.144 code units, precisa ser CFString e nunca é convertido integralmente, logado, persistido, enviado ou usado como writer. Writability continua independente e depende somente do setter `AXSelectedText`.
+- Roles protegidas falham antes da extração. A allowlist textual restringe apenas o acesso ao fallback `AXValue`; não deve bloquear globalmente rotas direct, CFRange ou text marker de editores complexos.
+- Diagnósticos de capacidade registram apenas estágio/origem/categoria e presença de identifier, sem valor, identifier concreto ou range. A consulta de `AXSelectedTextRange` settable é somente um probe sanitizado quando diagnósticos estão habilitados.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.
