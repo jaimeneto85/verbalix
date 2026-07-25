@@ -6,6 +6,21 @@
 - Toda tarefa é executada em worktree dedicado e só é integrada à branch de origem após aprovação explícita.
 
 ## Decisões Arquiteturais
+- O companion iOS começa como Swift Package puro `ios/VerbalixKit` (só Foundation + Security, zero deps externas),
+  com `platforms: [.iOS(.v17), .macOS(.v14)]` — macOS existe só para `swift test` rodar no host sem simulador.
+  supabase-swift só entra na Fase 3 (app SwiftUI/extensões), ainda pendente de decisão de tooling.
+- O contrato iOS (`Transform.swift`) espelha `supabase/functions/transform/contract.ts` no wire (camelCase),
+  com `requestId` serializado em lowercase via `CodingKeys`+`encode(to:)`. Guardas 12.000 unicode scalars e
+  64 KiB do corpo JSON são INDEPENDENTES; o guard de 64 KiB é pré-check defensivo do cliente (index.ts não
+  impõe tamanho de corpo). Fixtures Swift derivam dos mesmos literais de `contract_test.ts` para evitar drift.
+- Sync de preferências: só campos de IA (`formality`, `length`, `tone`, `history_enabled`) trafegam;
+  `shortcut`/`automatic_toolbar`/`confirm_before_replace` são macOS-only e nunca entram/saem pelo sync.
+  `settings.json` continua a fonte de verdade; qualquer falha de rede é não-fatal e nunca propaga erro.
+  `load_settings` virou `async fn` (transparente ao frontend, que usa `invoke()` retornando Promise);
+  `save_settings` segue não-bloqueante — grava local, re-registra shortcut e só então dispara upsert detached
+  via `tauri::async_runtime::spawn`. Adapter `remote_preferences.rs` usa timeout estrito de 4s (bootstrap path).
+- LWW de preferências: `updated_at` é server-authoritative (default now() + trigger BEFORE INSERT/UPDATE que
+  força now()); merge trata remoto ausente/nulo como "infinitamente antigo" (local vence) e empate mantém local.
 - O MVP tem macOS 14 como versão mínima e distribuição direta, assinada e notarizada fora da Mac App Store.
 - Settings e onboarding usam a WebView do Tauri; observação de seleção, geometria e overlays usam APIs nativas do macOS.
 - Resultados atrasados nunca podem alterar uma seleção nova: toda transformação referencia e revalida um snapshot.
@@ -37,7 +52,21 @@
 - AXIdentifier é identidade causal interna e não pertence a DTO/serde/IPC/Debug. Redigir somente o token não basta se o snapshot ainda serializa a mesma informação.
 - Mutation ledgers devem expor outcomes tipados por operação; uma API genérica de terminalização permite transições cruzadas inválidas mesmo quando os callers atuais parecem corretos.
 
+## Erros Recorrentes & Soluções (iOS/Swift)
+- `swift test` bare no host NÃO tem entitlement de keychain-access-groups nem de App Group: `SecItem*` com
+  `kSecAttrAccessGroup` e `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` falham. Solução:
+  separar via protocolo (`SessionPersisting`) com double em memória e diretório tmp injetável; o caminho real
+  de Keychain/App Group compila mas não roda em CI.
+- `XCTAssertEqual(_:_:accuracy:)` exige `FloatingPoint` NÃO-opcional; comparar `TimeInterval?` quebra a
+  compilação. Desembrulhar com `try XCTUnwrap` antes de comparar com tolerância.
+- `NSLock.unlock()` em contexto assíncrono é warning no Swift 5 e ERRO no Swift 6 language mode. Usar locking
+  com escopo (`withLock`) numa seção síncrona, sem `lock()/unlock()` cruzando `await`, em stubs de transporte.
+
 ## Aprendizados de QA
+- Relatórios finais de sub-agentes podem chegar truncados/otimistas; o orquestrador DEVE re-rodar os gates
+  empiricamente (swift test, cargo test/clippy/fmt, npm test/build, deno) antes de aceitar qualquer verdict.
+  Nesta entrega um sub-agente reportou progresso mas deixou `Tests/` vazio e outro entregou teste que não
+  compilava (accuracy sobre Optional) — só a re-verificação direta pegou os dois.
 - A matriz de compatibilidade precisa cobrir seleção por mouse e teclado, campos editáveis e somente leitura, múltiplos monitores e conteúdo Unicode.
 - Testar separadamente detecção, leitura, bounds e escrita evita mascarar incompatibilidades específicas dos aplicativos.
 - Pausar precisa bloquear todos os entrypoints: polling, AXObserver, atalho global e fallback de clipboard.
