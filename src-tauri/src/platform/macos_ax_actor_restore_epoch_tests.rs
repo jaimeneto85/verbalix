@@ -204,7 +204,7 @@ fn focus_epoch_rejects_real_restore_before_pending_capture_and_preserves_ledger(
             kind: AccessibilityEventKind::FocusChanged,
             target: Some(AxElementToken::new(42, "other").unwrap()),
         },
-        &actor.causal_epoch(),
+        &actor,
         |_, _| panic!("focus must bump outside the actor FIFO"),
     ));
     let (capture_tx, capture_rx) = mpsc::channel();

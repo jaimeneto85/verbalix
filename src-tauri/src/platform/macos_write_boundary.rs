@@ -110,7 +110,6 @@ mod tests {
         )
         .with_element_identity(identity())
     }
-
     fn authorization() -> AxWriteAuthorization {
         AxWriteAuthorization::new(
             crate::platform::causal_epoch::CausalEpoch::default(),
@@ -118,7 +117,6 @@ mod tests {
             crate::platform::macos_self_notification_phase::SelfNotificationPhase::armed(),
         )
     }
-
     #[test]
     fn secure_or_changed_role_rejects_before_the_setter() {
         for current in [
@@ -139,7 +137,6 @@ mod tests {
             assert_eq!(setters.get(), 0);
         }
     }
-
     #[test]
     fn matching_role_invokes_exactly_one_setter() {
         let setters = Cell::new(0);
@@ -164,7 +161,6 @@ mod tests {
             phase.clone(),
         );
         let current = macos_text_role::validate("AXTextField".to_owned(), None).unwrap();
-
         let result = set_prepared_after_role_validation(
             &identity(),
             current,
@@ -177,11 +173,9 @@ mod tests {
                 AxWriteResult::Confirmed
             },
         );
-
         assert!(matches!(result, Ok(AxWriteResult::Confirmed)));
         assert_eq!(*trace.borrow(), ["prepared", "setter"]);
     }
-
     #[test]
     fn rejected_final_authorization_never_reaches_the_setter() {
         let setters = Cell::new(0);
@@ -194,7 +188,6 @@ mod tests {
         );
         epoch.bump();
         let current = macos_text_role::validate("AXTextField".to_owned(), None).unwrap();
-
         let result = set_prepared_after_role_validation(
             &identity(),
             current,
@@ -206,11 +199,9 @@ mod tests {
                 AxWriteResult::Confirmed
             },
         );
-
         assert!(matches!(result, Err(VerbalixError::StaleSelection)));
         assert_eq!(setters.get(), 0);
     }
-
     #[test]
     fn stale_epoch_cancels_authorizing_before_it_can_become_a_self_candidate() {
         let epoch = crate::platform::causal_epoch::CausalEpoch::default();
@@ -219,6 +210,19 @@ mod tests {
             AxWriteAuthorization::new(epoch.clone(), epoch.current(), phase.clone());
 
         assert!(!authorization.begin_setter_after_authorizing(|| {
+            epoch.bump();
+        }));
+        assert!(!phase.claim_observation());
+    }
+    #[test]
+    fn causal_cancel_after_epoch_check_makes_setter_promotion_lose() {
+        let epoch = crate::platform::causal_epoch::CausalEpoch::default();
+        let phase = crate::platform::macos_self_notification_phase::SelfNotificationPhase::armed();
+        let authorization =
+            AxWriteAuthorization::new(epoch.clone(), epoch.current(), phase.clone());
+
+        assert!(!authorization.begin_setter_after_epoch_valid(|| {
+            assert!(phase.cancel_before_setter());
             epoch.bump();
         }));
         assert!(!phase.claim_observation());

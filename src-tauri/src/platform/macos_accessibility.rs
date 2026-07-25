@@ -1,5 +1,4 @@
 use super::{
-    causal_epoch::CausalEpoch,
     macos_ax::{self, OwnedAxElement},
     macos_ax_actor::AxActor,
     macos_ax_actor_observation::ObservedSelectionChange,
@@ -25,12 +24,11 @@ impl MacAccessibility {
     }
 
     pub fn start_observer(&self, callback: Arc<dyn Fn() + Send + Sync>) {
-        let epoch = self.actor.causal_epoch();
         let actor = self.actor.clone();
         let pending_actor = actor.clone();
         super::macos_observer::start(
             Arc::new(move |event| {
-                if route_observer_event(event, &epoch, |target, generation| {
+                if route_observer_event(event, &actor, |target, generation| {
                     actor.observe_selection_change(target, generation)
                 }) {
                     callback();
@@ -51,16 +49,16 @@ impl MacAccessibility {
 
 pub(super) fn route_observer_event(
     event: AccessibilityEvent,
-    epoch: &CausalEpoch,
+    actor: &AxActor,
     classify: impl FnOnce(AxElementToken, u64) -> Result<ObservedSelectionChange, VerbalixError>,
 ) -> bool {
     match event.kind {
         AccessibilityEventKind::FocusChanged | AccessibilityEventKind::ElementDestroyed => {
-            epoch.bump();
+            actor.signal_causal_change();
             true
         }
         AccessibilityEventKind::SelectedTextChanged => {
-            let generation = epoch.current();
+            let generation = actor.causal_epoch().current();
             let own_change = event
                 .target
                 .and_then(|target| classify(target, generation).ok())
@@ -68,7 +66,7 @@ pub(super) fn route_observer_event(
             if own_change {
                 false
             } else {
-                epoch.bump();
+                actor.signal_causal_change();
                 true
             }
         }

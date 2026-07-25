@@ -56,6 +56,19 @@ impl SelfNotificationSignal {
         }
     }
 
+    pub(super) fn cancel_pending_before_setter(&self) -> bool {
+        let Ok(mut pending) = self.pending.lock() else {
+            return false;
+        };
+        let cancelled = pending
+            .as_ref()
+            .is_some_and(|expected| expected.phase.cancel_before_setter());
+        if cancelled {
+            pending.take();
+        }
+        cancelled
+    }
+
     pub(super) fn take_exact(
         &self,
         target: AxElementToken,

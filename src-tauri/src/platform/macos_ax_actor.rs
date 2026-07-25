@@ -161,6 +161,7 @@ impl AxActor {
     }
 
     pub(super) fn signal_causal_change(&self) {
+        self.self_notifications.cancel_pending_before_setter();
         self.epoch.bump();
     }
 

@@ -40,7 +40,7 @@ fn keyboard_focus_epoch_revokes_blocked_write_before_pending_capture_runs() {
             kind: AccessibilityEventKind::FocusChanged,
             target: Some(AxElementToken::new(42, "editor").unwrap()),
         },
-        &actor.causal_epoch(),
+        &actor,
         |_, _| panic!("focus events must bypass selection classification"),
     ));
     let (capture_tx, capture_rx) = mpsc::channel();
@@ -132,7 +132,7 @@ fn selected_change_without_exact_expectation_does_not_wait_for_actor_fifo() {
             kind: AccessibilityEventKind::SelectedTextChanged,
             target: Some(AxElementToken::new(42, "editor").unwrap()),
         },
-        &actor.causal_epoch(),
+        &actor,
         |target, generation| actor.observe_selection_change(target, generation),
     ));
     assert!(!actor.epoch.is_current(observed_epoch));

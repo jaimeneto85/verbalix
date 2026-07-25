@@ -240,7 +240,7 @@ fn assert_interruption_revokes_write(
                 kind: AccessibilityEventKind::SelectedTextChanged,
                 target: Some(AxElementToken::new(selected.pid, "editor").unwrap()),
             },
-            &actor.causal_epoch(),
+            &actor,
             |target, generation| actor.observe_selection_change(target, generation),
         ));
         assert!(!actor.has_pending_self_notification());

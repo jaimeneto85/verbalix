@@ -12,13 +12,14 @@ fn event(kind: AccessibilityEventKind, target: Option<AxElementToken>) -> Access
 
 #[test]
 fn exact_self_change_is_suppressed_once_and_next_external_change_bumps_epoch() {
-    let epoch = CausalEpoch::default();
+    let actor = AxActor::new();
+    let epoch = actor.causal_epoch();
     let generation = epoch.current();
     let classifications = Cell::new(0);
 
     let own = route_observer_event(
         event(AccessibilityEventKind::SelectedTextChanged, Some(token(7))),
-        &epoch,
+        &actor,
         |target, observed_generation| {
             classifications.set(classifications.get() + 1);
             assert_eq!(target, token(7));
@@ -31,7 +32,7 @@ fn exact_self_change_is_suppressed_once_and_next_external_change_bumps_epoch() {
 
     let external = route_observer_event(
         event(AccessibilityEventKind::SelectedTextChanged, Some(token(7))),
-        &epoch,
+        &actor,
         |_, _| Ok(ObservedSelectionChange::External),
     );
     assert!(external);
@@ -42,11 +43,12 @@ fn exact_self_change_is_suppressed_once_and_next_external_change_bumps_epoch() {
 #[test]
 fn target_mismatch_or_missing_target_is_never_suppressed() {
     for target in [Some(token(8)), None] {
-        let epoch = CausalEpoch::default();
+        let actor = AxActor::new();
+        let epoch = actor.causal_epoch();
         let generation = epoch.current();
         let routed = route_observer_event(
             event(AccessibilityEventKind::SelectedTextChanged, target),
-            &epoch,
+            &actor,
             |_, _| Ok(ObservedSelectionChange::External),
         );
         assert!(routed);
@@ -60,10 +62,11 @@ fn focus_and_destroy_always_bump_before_callback_without_classification() {
         AccessibilityEventKind::FocusChanged,
         AccessibilityEventKind::ElementDestroyed,
     ] {
-        let epoch = CausalEpoch::default();
+        let actor = AxActor::new();
+        let epoch = actor.causal_epoch();
         let generation = epoch.current();
         let classified = Cell::new(false);
-        let routed = route_observer_event(event(kind, Some(token(7))), &epoch, |_, _| {
+        let routed = route_observer_event(event(kind, Some(token(7))), &actor, |_, _| {
             classified.set(true);
             Ok(ObservedSelectionChange::SelfGenerated)
         });

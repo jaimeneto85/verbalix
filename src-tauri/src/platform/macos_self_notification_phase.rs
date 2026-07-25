@@ -42,6 +42,22 @@ impl SelfNotificationPhase {
         );
     }
 
+    pub(super) fn cancel_before_setter(&self) -> bool {
+        loop {
+            let observed = self.state.load(Ordering::Acquire);
+            if !matches!(observed, ARMED | AUTHORIZING) {
+                return false;
+            }
+            if self
+                .state
+                .compare_exchange(observed, CANCELLED, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
+                return true;
+            }
+        }
+    }
+
     pub(super) fn claim_observation(&self) -> bool {
         loop {
             let observed = self.state.load(Ordering::Acquire);
