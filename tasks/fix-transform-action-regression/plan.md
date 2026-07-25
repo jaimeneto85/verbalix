@@ -13,11 +13,9 @@
 
 ### Arquivos/módulos potencialmente afetados
 
-- `src/Overlay.tsx`, `src/native.ts` e testes frontend do overlay/IPC.
-- `src-tauri/src/commands.rs` e runtime/comandos Tauri.
-- `src-tauri/src/application/coordinator.rs` e respectivos testes.
-- `src-tauri/src/platform/macos_accessibility*.rs` e testes de replace/identidade.
-- Diagnósticos sanitizados estritamente necessários à reprodução.
+- `src/Overlay.tsx`, `src/native.ts`, comandos Tauri e testes de overlay/IPC.
+- `src-tauri/src/application/coordinator.rs`, runtime e respectivos testes.
+- `src-tauri/src/platform/macos_accessibility*.rs`, testes de replace/identidade e diagnósticos sanitizados necessários.
 
 ### Dependências diretas
 
@@ -31,11 +29,9 @@
 
 ### Riscos de impacto
 
-- Corrigir o clique sem corrigir a revalidação AX pode produzir sucesso aparente sem substituir.
-- Uma seleção muda enquanto a IA responde; a correção deve continuar rejeitando a escrita stale.
+- Corrigir o clique sem corrigir a revalidação AX pode produzir sucesso aparente ou escrita stale após a seleção mudar.
 - O overlay pode tomar foco e invalidar a seleção antes do comando.
-- Traduzir e Aprimorar podem compartilhar um defeito comum, mas ainda precisam de cobertura independente.
-- Testes com mocks podem passar sem provar sessão remota, Accessibility e substituição reais.
+- Traduzir e Aprimorar podem compartilhar um defeito, mas exigem cobertura independente e smoke real além dos mocks.
 
 ## 1. REQUIREMENTS
 
@@ -149,11 +145,9 @@
 ### Estratégia
 
 - Reproduzir primeiro com diagnósticos sanitizados para localizar a primeira quebra observável.
-- Manter a UI como entrypoint explícito e o comando Tauri como boundary de validação/readiness.
-- Manter o `SelectionCoordinator` como dono de latest-wins, revalidação e decisão `replace` versus `note`.
-- Manter o adapter Accessibility como único responsável pela escrita real e pela revalidação do mesmo handle.
-- Tornar o comando nativo a autoridade de readiness, reduzindo a janela criada pela pré-checagem frontend duplicada.
-- Fixar `snapshot.id + request_id` antes de refresh de sessão/provider e iniciar o estado Processing antes do primeiro `await`.
+- Manter UI/comando Tauri como entrypoint e boundary de readiness; o `SelectionCoordinator` continua dono de latest-wins e da decisão `replace` versus `note`.
+- Manter o adapter Accessibility como único responsável por revalidar o mesmo handle e escrever.
+- Tornar o comando nativo a autoridade de readiness e fixar `snapshot.id + request_id` em Processing antes do primeiro `await`.
 - Tratar falha de captura enquanto Processing como sinal transitório somente para retenção de estado; o setter AX ainda deve recapturar/resolver e revalidar o alvo antes de qualquer escrita.
 
 ### Fluxo de dados esperado
@@ -201,10 +195,8 @@
 
 ### Componentes reutilizáveis
 
-- `Overlay` e `native.transformSelection`.
-- `commands::transform_selection`.
-- `SelectionCoordinator` e fakes existentes.
-- Matriz AX de identidade, replace/restore e diagnósticos tipados.
+- `Overlay`, `native.transformSelection` e `commands::transform_selection`.
+- `SelectionCoordinator`, fakes existentes e matriz AX de identidade/replace/restore.
 - `TransformOperation`, `request_id`, `NoteResultState`, `route_refresh_failure` e `error_code` existentes.
 
 ## 3. TASKS
@@ -245,7 +237,7 @@
 - [x] T2.25 `[HIGH]` Refatorar callback observer para fast-path Focus/Destroyed/Selected-sem-expectativa antes de token reads.
 - [x] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
 - [x] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
-- [ ] T2.28 `[CRITICAL]` Ancorar restore no target epoch e mover validação de correlação antes de todos os early returns/reconcile.
+- [x] T2.28 `[CRITICAL]` Ancorar restore no target epoch e mover validação de correlação antes de todos os early returns/reconcile.
 
 ### Fase 3 — Testes
 

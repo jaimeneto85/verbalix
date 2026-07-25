@@ -151,6 +151,9 @@ impl ActorState {
             .get_mut(mutation_id)
             .map(|record| (record.projection.clone(), record.target.clone()))
             .ok_or(VerbalixError::StaleSelection)?;
+        if !restore_correlates(mutation_id, &projection, &expected, &transformed, &lease) {
+            return Err(VerbalixError::StaleSelection);
+        }
         if projection.status == MutationStatus::Restored {
             return Ok(projection.receipt);
         }
@@ -161,16 +164,15 @@ impl ActorState {
                 .map(|record| record.receipt)
                 .ok_or(VerbalixError::LocalFailure);
         }
-        if projection.status != MutationStatus::Confirmed
-            || !projection.snapshot.same_target(&expected)
-            || projection.transformed_text != transformed
-        {
+        if projection.status != MutationStatus::Confirmed {
             return Err(VerbalixError::StaleSelection);
         }
-        let boundary_epoch = self.epoch.current();
+        let boundary_epoch = target.epoch;
+        ensure_current(&self.epoch, boundary_epoch)?;
         target
             .target
             .prepare_restore(&expected, &transformed, target.token.is_none())?;
+        ensure_current(&self.epoch, boundary_epoch)?;
         self.mutations.begin_restore(mutation_id, self.now())?;
         if ensure_current(&self.epoch, boundary_epoch).is_err() {
             self.mutations.finish_restore(
@@ -256,6 +258,28 @@ fn ensure_current(epoch: &CausalEpoch, expected: u64) -> Result<(), VerbalixErro
         .is_current(expected)
         .then_some(())
         .ok_or(VerbalixError::StaleSelection)
+}
+
+fn restore_correlates(
+    mutation_id: Uuid,
+    projection: &MutationProjection,
+    expected: &SelectionSnapshot,
+    transformed: &str,
+    lease: &Option<PublicationGuard>,
+) -> bool {
+    projection.receipt.id == mutation_id
+        && projection.receipt.snapshot_id == expected.id
+        && projection.target_snapshot_id == expected.id
+        && projection.snapshot.same_target(expected)
+        && projection.transformed_text == transformed
+        && lease
+            .as_ref()
+            .map_or(projection.receipt.request_id.is_nil(), |lease| {
+                lease.owns(
+                    projection.receipt.snapshot_id,
+                    projection.receipt.request_id,
+                )
+            })
 }
 
 fn claim(lease: &Option<PublicationGuard>) -> Result<Uuid, VerbalixError> {

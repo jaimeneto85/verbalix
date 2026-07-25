@@ -38,6 +38,7 @@
 - Readiness de IA deve ter uma única autoridade no command Tauri; uma pré-checagem async no overlay cria uma janela de invalidação antes de `Processing`.
 - Depois que `SelectionPort::replace` retorna sucesso, `Applied` é o commit point. Feedback de undo é best-effort e não pode reclassificar a mutação.
 - Nunca usar o mutex de state para linearizar I/O AX: isso bloqueia Candidate/Invalidated e derrota o cancelamento. O ponto de linearização da escrita é o CAS do lease imediatamente antes do setter; `Applied` é um commit condicional posterior.
+- Restore no actor conserva o `epoch` do retained target: nunca adota `epoch.current()` como nova autorização. Correlação de mutation/snapshot/texto/lease deve ocorrer antes de replay terminal ou reconcile, e epoch divergente deve falhar antes de prepare/begin para não consumir a lease nem alterar provenance.
 
 ## Dependências & Integrações
 - Transformações passam exclusivamente pela Edge Function autenticada.
