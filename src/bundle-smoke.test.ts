@@ -94,6 +94,10 @@ describe("macOS bundle smoke contract", () => {
   });
 
   it("keeps fallback, mutation, bounds, and diagnostics fail-closed", () => {
+    const actorState = readFileSync(
+      "src-tauri/src/platform/macos_ax_actor_state.rs",
+      "utf8"
+    );
     const replacement = readFileSync(
       "src-tauri/src/platform/macos_replace.rs",
       "utf8"
@@ -123,22 +127,19 @@ describe("macOS bundle smoke contract", () => {
       "marker_fallback_rejects_structural_and_cross_stage_failures"
     );
 
-    const eligibilityCheck = replacement.indexOf("validate_expected(expected)?");
-    const focusedElementLookup = replacement.indexOf(
-      "macos_ax::focused_element_for_pid(expected.pid)",
-      eligibilityCheck
-    );
+    const exactTargetLookup = actorState.indexOf(".targets");
+    const retainedHandleLookup = actorState.indexOf(".get(expected.id, now)");
     const recapture = replacement.indexOf(
-      "macos_selection::capture_with_strategy(&element, expected.extraction_strategy)?",
-      focusedElementLookup
+      "macos_selection::capture_with_strategy(element, expected.extraction_strategy)?"
     );
     const setter = replacement.indexOf(
-      "macos_ax::set_selected_text(element.as_ref(), text)",
+      "macos_ax::set_selected_text(element, text)",
       recapture
     );
-    expect(eligibilityCheck).toBeGreaterThan(-1);
-    expect(focusedElementLookup).toBeGreaterThan(eligibilityCheck);
-    expect(recapture).toBeGreaterThan(focusedElementLookup);
+    expect(exactTargetLookup).toBeGreaterThan(-1);
+    expect(retainedHandleLookup).toBeGreaterThan(exactTargetLookup);
+    expect(actorState).not.toContain("focused_element_for_pid");
+    expect(recapture).toBeGreaterThan(-1);
     expect(setter).toBeGreaterThan(recapture);
 
     const rectDecoder = geometry.slice(

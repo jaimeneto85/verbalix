@@ -178,3 +178,15 @@ fn claim(lease: &Option<PublicationGuard>) -> Result<Uuid, VerbalixError> {
         None => Ok(Uuid::nil()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn missing_causal_handle_has_no_focus_or_identity_fallback() {
+        let source = include_str!("macos_ax_actor_state.rs");
+        assert!(
+            !source.contains(concat!("focused_element_for_", "pid")),
+            "an absent or expired causal handle must fail before re-resolving an AX element"
+        );
+    }
+}

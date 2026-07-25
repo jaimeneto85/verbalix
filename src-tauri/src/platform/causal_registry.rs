@@ -106,4 +106,48 @@ mod tests {
         registry.remove(third);
         assert_eq!(drops.load(Ordering::SeqCst), 3);
     }
+
+    #[test]
+    fn expiration_boundary_evicts_without_sleeping() {
+        let drops = Arc::new(AtomicUsize::new(0));
+        let mut registry = CausalRegistry::new(1, 10);
+        let id = Uuid::new_v4();
+        registry.insert(id, Tracked(drops.clone()), 7);
+
+        assert!(registry.get(id, 16).is_some());
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
+        assert!(registry.get(id, 17).is_none());
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+        assert_eq!(registry.len(), 0);
+    }
+
+    #[test]
+    fn replacement_and_registry_drop_release_each_value_once() {
+        let drops = Arc::new(AtomicUsize::new(0));
+        let id = Uuid::new_v4();
+        {
+            let mut registry = CausalRegistry::new(2, 50);
+            registry.insert(id, Tracked(drops.clone()), 0);
+            registry.insert(id, Tracked(drops.clone()), 1);
+            assert_eq!(drops.load(Ordering::SeqCst), 1);
+            assert_eq!(registry.len(), 1);
+        }
+        assert_eq!(drops.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn capacity_evicts_in_insertion_order_even_after_reads() {
+        let mut registry = CausalRegistry::new(2, 100);
+        let first = Uuid::new_v4();
+        let second = Uuid::new_v4();
+        let third = Uuid::new_v4();
+        registry.insert(first, 1, 0);
+        registry.insert(second, 2, 1);
+        assert_eq!(registry.get(first, 2), Some(&1));
+        registry.insert(third, 3, 3);
+
+        assert!(registry.get(first, 3).is_none());
+        assert_eq!(registry.get(second, 3), Some(&2));
+        assert_eq!(registry.get(third, 3), Some(&3));
+    }
 }
