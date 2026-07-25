@@ -301,3 +301,7 @@ mod tests;
 #[cfg(test)]
 #[path = "macos_ax_actor_restore_tests.rs"]
 mod restore_tests;
+
+#[cfg(test)]
+#[path = "macos_ax_actor_boundary_tests.rs"]
+mod boundary_tests;
