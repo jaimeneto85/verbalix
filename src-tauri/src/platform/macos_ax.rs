@@ -5,10 +5,7 @@ use core_foundation::{
     dictionary::CFDictionary,
     string::{CFString, CFStringGetTypeID, CFStringRef},
 };
-use core_foundation_sys::{
-    base::{Boolean, CFHash},
-    dictionary::CFDictionaryRef,
-};
+use core_foundation_sys::{base::Boolean, dictionary::CFDictionaryRef};
 use std::{
     ffi::c_void,
     mem,
@@ -19,12 +16,6 @@ pub(super) type AXUIElementRef = *const c_void;
 type AXError = i32;
 
 pub(super) const AX_SUCCESS: AXError = 0;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct AxElementToken {
-    pub(super) pid: i32,
-    pub(super) hash: usize,
-}
 
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
@@ -241,13 +232,6 @@ pub(super) fn pid(element: AXUIElementRef) -> Result<i32, AxFailure> {
         };
         Err(AxFailure::new(AxStage::Pid, category))
     }
-}
-
-pub(super) fn element_token(element: AXUIElementRef) -> Result<AxElementToken, AxFailure> {
-    Ok(AxElementToken {
-        pid: pid(element)?,
-        hash: unsafe { CFHash(element.cast()) },
-    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -30,6 +30,8 @@ mod macos_ax_actor_state;
 #[cfg(target_os = "macos")]
 mod macos_classic_range;
 #[cfg(target_os = "macos")]
+mod macos_element_token;
+#[cfg(target_os = "macos")]
 pub(crate) mod macos_focus;
 #[cfg(all(target_os = "macos", test))]
 mod macos_focus_tests;

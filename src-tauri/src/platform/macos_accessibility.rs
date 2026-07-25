@@ -3,6 +3,7 @@ use super::{
     macos_ax::{self, OwnedAxElement},
     macos_ax_actor::AxActor,
     macos_ax_actor_observation::ObservedSelectionChange,
+    macos_element_token::AxElementToken,
     macos_focus::{AxCategory, AxStage, ExtractionOrigin},
     macos_observer::{AccessibilityEvent, AccessibilityEventKind},
 };
@@ -47,10 +48,7 @@ impl MacAccessibility {
 pub(super) fn route_observer_event(
     event: AccessibilityEvent,
     epoch: &CausalEpoch,
-    classify: impl FnOnce(
-        macos_ax::AxElementToken,
-        u64,
-    ) -> Result<ObservedSelectionChange, VerbalixError>,
+    classify: impl FnOnce(AxElementToken, u64) -> Result<ObservedSelectionChange, VerbalixError>,
 ) -> bool {
     match event.kind {
         AccessibilityEventKind::FocusChanged | AccessibilityEventKind::ElementDestroyed => {

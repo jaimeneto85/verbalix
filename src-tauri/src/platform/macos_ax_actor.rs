@@ -1,10 +1,10 @@
 use super::{
     causal_epoch::CausalEpoch,
-    macos_ax::AxElementToken,
     macos_ax_actor_observation::{
         ExpectedSelfNotification, ObservedSelectionChange, SelfNotificationSignal,
     },
     macos_ax_actor_state::ActorState,
+    macos_element_token::AxElementToken,
 };
 use crate::{
     application::{MutationProjection, MutationReceipt, PublicationGuard},
@@ -169,7 +169,10 @@ impl AxActor {
         target: AxElementToken,
         generation: u64,
     ) -> Result<ObservedSelectionChange, VerbalixError> {
-        let Some(expected) = self.self_notifications.take_exact(target, generation) else {
+        let Some(expected) = self
+            .self_notifications
+            .take_exact(target.clone(), generation)
+        else {
             return Ok(ObservedSelectionChange::External);
         };
         let (sender, receiver) = mpsc::channel();

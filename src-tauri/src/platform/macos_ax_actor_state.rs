@@ -1,8 +1,9 @@
 use super::{
     causal_epoch::CausalEpoch,
     causal_registry::CausalRegistry,
-    macos_ax::{self, AxElementToken, OwnedAxElement},
+    macos_ax::{self, OwnedAxElement},
     macos_ax_actor_observation::{self, SelfNotificationSignal},
+    macos_element_token::AxElementToken,
     macos_mutation_ledger::MutationLedger,
     macos_replace, macos_restore, macos_selection,
 };
@@ -20,7 +21,7 @@ const REGISTRY_TTL_MS: u64 = 600_000;
 pub(super) struct CapturedTarget {
     pub(super) element: Rc<OwnedAxElement>,
     pub(super) epoch: u64,
-    pub(super) token: AxElementToken,
+    pub(super) token: Option<AxElementToken>,
 }
 
 pub(super) struct ActorState {
@@ -51,8 +52,11 @@ impl ActorState {
             return Err(VerbalixError::StaleSelection);
         }
         if snapshot.writable {
-            let token = macos_ax::element_token(element.as_ref())
-                .map_err(|_| VerbalixError::SelectionUnavailable)?;
+            let token = snapshot
+                .element_identity
+                .as_ref()
+                .and_then(|identity| identity.strong_identifier())
+                .and_then(|identifier| AxElementToken::new(snapshot.pid, identifier));
             self.targets.insert(
                 snapshot.id,
                 macos_ax_actor_observation::captured_target(

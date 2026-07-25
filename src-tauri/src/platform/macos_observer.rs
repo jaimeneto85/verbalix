@@ -1,6 +1,7 @@
 use super::{
     macos_accessibility::MacAccessibility,
-    macos_ax::{self, AXUIElementRef, AxElementToken, AX_SUCCESS},
+    macos_ax::{AXUIElementRef, AX_SUCCESS},
+    macos_element_token::{self, AxElementToken},
 };
 use core_foundation::{
     base::{CFRelease, TCFType},
@@ -22,7 +23,7 @@ pub(super) enum AccessibilityEventKind {
     ElementDestroyed,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct AccessibilityEvent {
     pub(super) kind: AccessibilityEventKind,
     pub(super) target: Option<AxElementToken>,
@@ -69,7 +70,7 @@ extern "C" fn observer_callback(
     };
     callback(AccessibilityEvent {
         kind,
-        target: macos_ax::element_token(element).ok(),
+        target: macos_element_token::read(element).ok().flatten(),
     });
 }
 
@@ -112,9 +113,9 @@ pub fn start(callback: Arc<dyn Fn(AccessibilityEvent) + Send + Sync>) {
                     continue;
                 }
             };
-            let current_target = macos_ax::element_token(element.as_ref()).ok();
+            let current_target = macos_element_token::read(element.as_ref()).ok().flatten();
             if previous_target.is_some() && previous_target != current_target {
-                publish_focus_change(&callback, current_target);
+                publish_focus_change(&callback, current_target.clone());
             }
             previous_target = current_target;
             let mut pid = 0;

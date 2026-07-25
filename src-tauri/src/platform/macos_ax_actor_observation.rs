@@ -1,6 +1,7 @@
 use super::{
-    macos_ax::{AxElementToken, OwnedAxElement},
+    macos_ax::OwnedAxElement,
     macos_ax_actor_state::{ActorState, CapturedTarget},
+    macos_element_token::AxElementToken,
     macos_selection_revalidation,
 };
 use crate::{
@@ -71,10 +72,14 @@ impl ActorState {
         generation: u64,
         expected_text: String,
     ) {
+        let Some(target_token) = target.token.clone() else {
+            self.self_notifications.clear();
+            return;
+        };
         self.self_notifications.arm(ExpectedSelfNotification {
             mutation_id,
             target_snapshot_id: snapshot.id,
-            target: target.token,
+            target: target_token,
             generation,
             expected_location: snapshot.range.location,
             expected_length: expected_text.encode_utf16().count(),
@@ -157,7 +162,7 @@ impl ActorState {
 pub(super) fn captured_target(
     element: Rc<OwnedAxElement>,
     epoch: u64,
-    token: AxElementToken,
+    token: Option<AxElementToken>,
 ) -> CapturedTarget {
     CapturedTarget {
         element,
