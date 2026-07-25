@@ -62,12 +62,6 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
     });
 }
 
-fn trigger_shortcut(runtime: &AppRuntime) {
-    let _ = runtime
-        .pause
-        .run_global_shortcut(|| trigger_active_shortcut(runtime));
-}
-
 fn trigger_active_shortcut(runtime: &AppRuntime) {
     diagnostics::detection("shortcut");
     match runtime.coordinator.refresh_selection() {
@@ -256,7 +250,9 @@ pub fn run() {
                     .with_shortcuts([shortcut.as_str()])?
                     .with_handler(move |_app, _shortcut, event| {
                         if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                            trigger_shortcut(&shortcut_runtime);
+                            let _ = shortcut_runtime
+                                .pause
+                                .run_global_shortcut(|| trigger_active_shortcut(&shortcut_runtime));
                         }
                     })
                     .build(),
