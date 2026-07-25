@@ -279,37 +279,16 @@
 
 ### 🔴 Riscos incorporados
 
-- A ação não estava vinculada ao snapshot original através do refresh assíncrono; ID e request agora são invariantes explícitas.
-- `replace` reencontrava apenas o elemento focado depois da chamada remota; o plano exige retenção ou resolução segura do alvo original.
-- Polling/observer podiam apagar o estado entre clique e resultado; os testes agora distinguem falha transitória do overlay de mudança real.
-- Ignorar todo `Candidate` durante `Processing` permitiria escrever no alvo anterior após uma captura real diferente; somente um candidato equivalente preserva o lease.
-- O modo `confirm_before_replace` estava ausente dos critérios e agora tem dois fluxos objetivos.
-- Erros stale/AX eram mascarados como provider e pelo `catch` frontend; o roteamento tipado passou a requisito.
-- Escrita bem-sucedida seguida de falha de undo criava estado parcial; a consistência pós-write passou a invariável.
-- Segurar o mutex durante AX/overlay impedia o próprio evento de supersede de revogar a ação; I/O foi separado das transições e a autorização final passou a um CAS no setter.
-- Verificar ownership e depois reler o snapshot para publicar erro criava TOCTOU; a publicação agora carrega bounds e guarda imutáveis da ação até a main thread.
-- Uma checagem única da guarda antes de `get/create/place` ainda permite publicação stale; o boundary visual final precisa de linearização própria e teste de cancelamento durante a preparação.
-- Um claim visual único por ação corrige a primeira publicação, mas bloqueia feedback posterior legítimo; a linearização precisa ser por comando sob uma lifetime guard comum.
-- `AXStringForRange` não é universal: TextEdit pode expor `AXValue` e `AXSelectedTextRange` mesmo retornando `attribute_unsupported` para `AXSelectedText`; o fallback deve ser explícito, UTF-16-correto e transacional.
-- A nova evidência do TextEdit justifica leitura restrita de `AXValue`, mas não setter integral: somente o trecho selecionado é copiado e o writer continua sendo `AXSelectedText` quando settable.
-- O probe Swift externo falhou fechado por TCC (`-25204`) e não tentou mutação; a árvore real via Computer Use evidencia identidade `First Text View`, valor legível e edição settable, suficientes para a primeira implementação conservadora.
-- Capacidade deve ser diagnosticada uma vez por transição/categoria no build de smoke, sem texto, range concreto ou identificador.
-- O QA RF16 encontrou que a allowlist era aplicada tarde, que o handle causal não sobrevivia à captura e que o commit lógico ocorria depois do setter sem receipt independente; RF20–RF22 tornam esses pontos gates explícitos.
-- O QA RF20 mostrou que secure é subrole, que Capture e Replace na mesma FIFO ainda atrasam latest-wins e que IDs pré-setter sem payload completo não permitem recovery; RF23–RF25 fecham esses três pontos.
-- O QA RF23 mostrou ausência de focus notification, autocancelamento por self-notification, restore não monotônico e reconcile sem secure gate; RF26–RF29 tornam os quatro comportamentos verificáveis.
-- O QA RF26 mostrou identifier no DTO, bump posterior a token reads, secure race no setter e terminalização permissiva; RF30–RF33 fecham esses boundaries reais.
-- O test-engineer RF30 encontrou idempotência cross-phase, teste do helper sem ActorState real e arquivo acima do limite; RF34/T2.27/T3.24 fecham o gate de integração.
+- A transação exige `snapshot.id + request_id`, handle causal retido, candidato equivalente e feedback guardado; polling, mutex durante I/O, releitura global e claims visuais únicos criavam supersede/TOCTOU.
+- Escrita, undo e erro precisam de receipts e roteamento tipado; `confirm_before_replace`, falhas pós-setter e múltiplos feedbacks da mesma ação fazem parte da matriz.
+- O fallback TextEdit é UTF-16 transacional e lê somente o range de `AXValue`; `AXSelectedText` continua o único writer quando settable, com diagnóstico sanitizado e probe real fechado por TCC.
+- As rodadas QA RF16–RF30 originaram RF20–RF34: allowlist precoce, handle/ledger completos, secure subrole, epoch fora da FIFO, focus/self-notification, restore/reconcile monotônicos, identifier privado, write gate tardio e provenance por fase.
 
 ### 🟢 Oportunidades incorporadas
 
-- Reuso de `TransformOperation`, `request_id`, state machine, ports/fakes, `NoteResultState` e diagnósticos privacy-safe.
-- Testes paramétricos de Translate/Improve e extensão dos harnesses existentes, sem criar arquitetura paralela.
-- Command nativo como authority de readiness, reduzindo round-trip e janela de corrida.
-- Timeline sanitizada por `request_id + snapshot_id`, útil para diagnosticar cada estágio sem conteúdo do usuário.
-- TextEdit como baseline AX e Slack como editor complexo na matriz real.
-- Reuso de `CFRange`, `macos_ax::string_value`, `macos_geometry::resolve`, setter `AXSelectedText`, strong identifier e lease existente; coordinator, provider e overlay não precisam mudar.
-- Um helper UTF-16 puro sobre code units permite testar slice/range/overflow/surrogates sem depender do macOS.
-- Capturas `ValueRange` equivalentes podem reutilizar `same_target`; observer só muda se o smoke ainda provar spam depois da equivalência correta.
+- Reuso de operação/request, state machine, ports/fakes, note state, diagnósticos e harnesses paramétricos mantém uma única arquitetura.
+- Readiness nativa e timeline sanitizada usam `request_id + snapshot_id`; TextEdit e Slack formam a matriz real.
+- `CFRange`, geometria, strong identity, lease, setter `AXSelectedText`, helper UTF-16 puro e `same_target` cobrem o fallback sem mudar coordinator/provider/overlay.
 
 ### Síntese
 
@@ -317,7 +296,5 @@ A transação permanece ligada a `snapshot.id + request_id`. Para RF16, o adapte
 
 ## 🔄 Parallelization Synthesis
 
-- 🔴 Estimativa pessimista RF16: 1 agente, pois captura, estratégia, replace e restore compartilham o mesmo contrato de revalidação.
-- 🟢 Estimativa otimista RF16: helper UTF-16 e testes puros podem ser delegados depois que a estratégia for implementada.
-- Decisão RF16: implementação serial por 1 agente; test-engineer independente audita matriz UTF-16/AX e gates depois.
+- RF16 permanece serial por um agente porque captura/replace/restore compartilham revalidação; helper UTF-16 e auditoria independente podem seguir depois.
 - Risco de conflito: baixo.
