@@ -75,6 +75,8 @@
 - [x] RF32: Replace/Restore revalidam `AXRole + AXSubrole` no handle retido imediatamente no boundary do setter, depois de ledger/claim/epoch.
 - [x] RF33: A API de terminalização aceita outcome tipado exclusivo de replace; estados restore/Prepared semanticamente inválidos são rejeitados sem mutar status/TTL.
 - [x] RF34: Idempotência é específica da fase/API; `finish_*` e `reconcile_*` não aceitam o mesmo outcome quando o predecessor exigido não corresponde.
+- [ ] RF35: Restore permanece ancorado ao `target.epoch` original; qualquer epoch divergente antes de begin/claim/setter rejeita sem consumir lease ou escrever.
+- [ ] RF36: Replay/reconcile de restore valida mutation ID, snapshot, texto e lease antes de qualquer early return idempotente ou transição.
 
 ### Requisitos não funcionais
 
@@ -119,6 +121,8 @@
 - [x] CA32: Teste actor/retained-handle muda subrole para secure depois de prepare e antes de setter, exigindo zero setter e terminal Rejected.
 - [x] CA33: Matriz de terminalização inválida mantém status e TTL byte-for-byte; outcomes válidos continuam idempotentes.
 - [x] CA34: Matriz cross-phase cobre mesmo outcome em API errada para replace/restore e preserva status, terminal_at e restore_attempted.
+- [ ] CA35: Actor real E0→E1 com Focus B/Capture B pendente rejeita Restore A, zero setter e lease não consumida.
+- [ ] CA36: Restored/RestoreIndeterminate com snapshot, texto ou lease divergente retorna erro sem alterar status/terminal/provenance; replay idêntico permanece idempotente.
 
 ### Edge cases
 
@@ -192,6 +196,7 @@
 - O último passo anterior ao setter é o secure gate no mesmo handle retido; nenhuma operação falível ou yield separa esse gate do setter.
 - Terminalização expõe enums distintos de replace/restore, tornando transições cruzadas não representáveis na API pública do ledger.
 - Idempotência não é apenas igualdade de outcome: ela exige que o registro já tenha sido terminalizado pela mesma fase/API, com provenance explícita.
+- A correlação completa do restore precede lookup terminal/reconcile, e o boundary causal usa sempre o epoch armazenado no retained target, nunca `epoch.current()` como nova autorização.
 - Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
@@ -240,6 +245,7 @@
 - [x] T2.25 `[HIGH]` Refatorar callback observer para fast-path Focus/Destroyed/Selected-sem-expectativa antes de token reads.
 - [x] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
 - [x] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
+- [ ] T2.28 `[CRITICAL]` Ancorar restore no target epoch e mover validação de correlação antes de todos os early returns/reconcile.
 
 ### Fase 3 — Testes
 
@@ -267,6 +273,7 @@
 - [x] T3.22 `[HIGH]` Cobrir restore setter count, estados monotônicos e secure transition zero-read com fakes instrumentados; `include_str!` não satisfaz.
 - [x] T3.23 `[HIGH]` Cobrir behavioralmente serde/IPC redaction, callback pre-I/O ordering, secure-after-prepare actor path e invalid terminal outcomes/status/TTL.
 - [x] T3.24 `[HIGH]` Cobrir ActorState real replace+restore secure-after-prepare e matriz ledger cross-phase same-outcome.
+- [ ] T3.25 `[CRITICAL]` Cobrir actor restore stale epoch com Capture B pendente e matriz replay divergente/sem mutação.
 
 ### Fase 4 — QA real
 
@@ -283,6 +290,7 @@
 - Escrita, undo e erro precisam de receipts e roteamento tipado; `confirm_before_replace`, falhas pós-setter e múltiplos feedbacks da mesma ação fazem parte da matriz.
 - O fallback TextEdit é UTF-16 transacional e lê somente o range de `AXValue`; `AXSelectedText` continua o único writer quando settable, com diagnóstico sanitizado e probe real fechado por TCC.
 - As rodadas QA RF16–RF30 originaram RF20–RF34: allowlist precoce, handle/ledger completos, secure subrole, epoch fora da FIFO, focus/self-notification, restore/reconcile monotônicos, identifier privado, write gate tardio e provenance por fase.
+- O QA RF34 aprovou esses boundaries, mas encontrou restore adotando epoch novo e validando replay tarde; RF35–RF36 fecham os dois defects causais.
 
 ### 🟢 Oportunidades incorporadas
 
