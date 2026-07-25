@@ -117,4 +117,52 @@ mod tests {
         journal.mark_restored(receipt.id);
         assert!(journal.get(receipt.id).unwrap().restored);
     }
+
+    #[test]
+    fn duplicate_transformed_text_remains_addressable_by_exact_receipt() {
+        let journal = MutationJournal::default();
+        let first_snapshot = snapshot();
+        let mut second_snapshot = snapshot();
+        second_snapshot.id = Uuid::new_v4();
+        let first = MutationReceipt {
+            id: Uuid::new_v4(),
+            snapshot_id: first_snapshot.id,
+            request_id: Uuid::new_v4(),
+        };
+        let second = MutationReceipt {
+            id: Uuid::new_v4(),
+            snapshot_id: second_snapshot.id,
+            request_id: Uuid::new_v4(),
+        };
+        journal.record(first.clone(), first_snapshot, "same result".to_owned());
+        journal.record(second.clone(), second_snapshot, "same result".to_owned());
+
+        journal.mark_restored(first.id);
+
+        assert!(journal.get(first.id).unwrap().restored);
+        assert!(!journal.get(second.id).unwrap().restored);
+        assert_eq!(journal.get(second.id).unwrap().receipt, second);
+    }
+
+    #[test]
+    fn capacity_evicts_oldest_receipt_deterministically() {
+        let journal = MutationJournal::default();
+        let mut ids = Vec::new();
+        for index in 0..=JOURNAL_CAPACITY {
+            let mut selected = snapshot();
+            selected.id = Uuid::from_u128(index as u128 + 1);
+            let receipt = MutationReceipt {
+                id: Uuid::from_u128(index as u128 + 101),
+                snapshot_id: selected.id,
+                request_id: Uuid::from_u128(index as u128 + 201),
+            };
+            ids.push(receipt.id);
+            journal.record(receipt, selected, format!("result-{index}"));
+        }
+
+        assert!(journal.get(ids[0]).is_none());
+        for id in &ids[1..] {
+            assert!(journal.get(*id).is_some());
+        }
+    }
 }

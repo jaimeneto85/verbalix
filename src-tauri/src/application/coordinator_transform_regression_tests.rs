@@ -268,10 +268,11 @@ async fn successful_direct_write_remains_applied_when_undo_feedback_fails() {
         .unwrap();
 
     assert_eq!(selection.writes.lock().unwrap().len(), 1);
-    assert!(matches!(
-        coordinator.state.lock().unwrap().clone(),
-        SelectionState::Applied { .. }
-    ));
+    let mutation_id = match coordinator.state.lock().unwrap().clone() {
+        SelectionState::Applied { mutation_id, .. } => mutation_id,
+        state => panic!("expected Applied after confirmed write, got {state:?}"),
+    };
+    assert!(coordinator.mutation_journal.contains(mutation_id));
 }
 
 #[tokio::test]
@@ -291,8 +292,9 @@ async fn successful_preview_apply_remains_applied_when_undo_feedback_fails() {
 
     assert_eq!(coordinator.apply_preview(request_id).unwrap(), "improved");
     assert_eq!(selection.writes.lock().unwrap().len(), 1);
-    assert!(matches!(
-        coordinator.state.lock().unwrap().clone(),
-        SelectionState::Applied { .. }
-    ));
+    let mutation_id = match coordinator.state.lock().unwrap().clone() {
+        SelectionState::Applied { mutation_id, .. } => mutation_id,
+        state => panic!("expected Applied after confirmed write, got {state:?}"),
+    };
+    assert!(coordinator.mutation_journal.contains(mutation_id));
 }

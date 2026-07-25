@@ -38,6 +38,7 @@ describe("macOS value-range privacy and write contract", () => {
 
   it("checks protected roles before extraction and keeps strategy-bound writes", () => {
     const selection = source("macos_selection.rs");
+    const textRole = source("macos_text_role.rs");
     const replace = source("macos_replace.rs");
     const restore = source("macos_restore.rs");
     const capture = selection.slice(
@@ -45,9 +46,16 @@ describe("macOS value-range privacy and write contract", () => {
       selection.indexOf("pub(super) fn capture_with_strategy")
     );
 
-    expect(capture.indexOf('"AXSecureTextField"')).toBeLessThan(
-      capture.indexOf("extract(element.as_ref(), &role)")
-    );
+    const roleRead = capture.indexOf("let role = role(element.as_ref())?");
+    const roleGate = capture.indexOf("macos_text_role::validate(&role)?");
+    const identityRead = capture.indexOf("element_identity(element.as_ref()");
+    const extraction = capture.indexOf("extract(element.as_ref(), &role, capability)?");
+    expect(roleRead).toBeGreaterThan(-1);
+    expect(roleGate).toBeGreaterThan(roleRead);
+    expect(identityRead).toBeGreaterThan(roleGate);
+    expect(extraction).toBeGreaterThan(identityRead);
+    expect(textRole).toContain('role == "AXSecureTextField"');
+    expect(textRole).toContain('"AXButton"');
     const valueFallback = selection.slice(
       selection.indexOf("fn extract("),
       selection.indexOf("fn extract_for_strategy")
@@ -56,7 +64,7 @@ describe("macOS value-range privacy and write contract", () => {
       valueFallback.indexOf("value_range_selection(element)")
     );
     expect(replace).toContain(
-      "capture_with_strategy(&element, expected.extraction_strategy)"
+      "capture_with_strategy(element, expected.extraction_strategy)"
     );
     expect(restore).toContain(
       "read(element.as_ref(), expected.extraction_strategy)"

@@ -209,3 +209,40 @@ fn candidate_after_restore_claim_allows_one_restore_without_hiding_b() {
     );
     assert_b_survives(&coordinator, &overlay, next_id);
 }
+
+#[test]
+fn undo_marks_the_exact_applied_receipt_when_results_are_identical() {
+    let (coordinator, selection, _overlay) = ready_for_undo(RestoreGatePoint::AfterClaim);
+    let (active_snapshot, active_mutation) = match coordinator.state.lock().unwrap().clone() {
+        SelectionState::Applied {
+            snapshot,
+            mutation_id,
+            ..
+        } => (snapshot, mutation_id),
+        state => panic!("expected Applied before undo, got {state:?}"),
+    };
+    let decoy = MutationReceipt {
+        id: Uuid::new_v4(),
+        snapshot_id: active_snapshot.id,
+        request_id: Uuid::new_v4(),
+    };
+    coordinator
+        .mutation_journal
+        .record(decoy.clone(), active_snapshot, "translated".to_owned());
+    let running = {
+        let coordinator = coordinator.clone();
+        thread::spawn(move || coordinator.undo("translated"))
+    };
+    selection.wait_until_entered();
+    selection.release();
+    running.join().unwrap().unwrap();
+
+    assert!(
+        coordinator
+            .mutation_journal
+            .get(active_mutation)
+            .unwrap()
+            .restored
+    );
+    assert!(!coordinator.mutation_journal.get(decoy.id).unwrap().restored);
+}

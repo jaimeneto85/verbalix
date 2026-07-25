@@ -19,13 +19,27 @@ pub(super) fn validate(role: &str) -> Result<TextRoleCapability, VerbalixError> 
 mod tests {
     use super::*;
 
+    fn capture_trace(role: &str) -> (Result<(), VerbalixError>, Vec<&'static str>) {
+        let mut trace = vec!["role"];
+        let result = validate(role).map(|_| {
+            trace.extend([
+                "identifier",
+                "selected_text",
+                "selected_range",
+                "value",
+                "marker",
+                "bounds",
+            ]);
+        });
+        (result, trace)
+    }
+
     #[test]
     fn blocked_roles_never_reach_the_content_reader() {
         for role in ["AXSecureTextField", "AXButton", "AXGroup", "AXImage", ""] {
-            let mut reads = 0;
-            let result = validate(role).map(|_| reads += 1);
+            let (result, trace) = capture_trace(role);
             assert!(result.is_err());
-            assert_eq!(reads, 0);
+            assert_eq!(trace, ["role"]);
         }
     }
 
@@ -38,9 +52,20 @@ mod tests {
             "AXWebArea",
             "AXComboBox",
         ] {
-            let mut reads = 0;
-            validate(role).map(|_| reads += 1).unwrap();
-            assert_eq!(reads, 1);
+            let (result, trace) = capture_trace(role);
+            result.unwrap();
+            assert_eq!(
+                trace,
+                [
+                    "role",
+                    "identifier",
+                    "selected_text",
+                    "selected_range",
+                    "value",
+                    "marker",
+                    "bounds",
+                ]
+            );
         }
     }
 }
