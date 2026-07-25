@@ -140,15 +140,20 @@ describe("macOS bundle smoke contract", () => {
       "macos_write_boundary::set_selected_text(expected, text, element, authorization)",
       recapture
     );
+    const payloadPreparation = writeBoundary.indexOf(
+      "macos_ax::prepare_selected_text_write(element, text)"
+    );
     const roleGate = writeBoundary.indexOf("macos_selection::text_role(element)");
     const nativeSetter = writeBoundary.indexOf(
-      "macos_ax::set_selected_text(element, text)"
+      "macos_ax::set_prepared_selected_text"
     );
     expect(exactTargetLookup).toBeGreaterThan(-1);
     expect(retainedHandleLookup).toBeGreaterThan(exactTargetLookup);
     expect(actorState).not.toContain("focused_element_for_pid");
     expect(recapture).toBeGreaterThan(-1);
     expect(setter).toBeGreaterThan(recapture);
+    expect(payloadPreparation).toBeGreaterThan(-1);
+    expect(payloadPreparation).toBeLessThan(roleGate);
     expect(roleGate).toBeGreaterThan(-1);
     expect(nativeSetter).toBeGreaterThan(roleGate);
 
