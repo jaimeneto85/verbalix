@@ -11,6 +11,12 @@ public struct SessionRefresher: Sendable {
         self.lock = RefreshLock(appGroupID: appGroupID, timeoutSeconds: 12)
     }
 
+    init(config: BackendConfig, store: SharedSessionStore, lock: RefreshLock) {
+        self.config = config
+        self.store = store
+        self.lock = lock
+    }
+
     public func validAccessToken() async throws -> String {
         guard let session = try store.load() else {
             throw VerbalixError.unauthenticated
