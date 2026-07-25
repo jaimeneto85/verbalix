@@ -85,6 +85,30 @@ final class PreferencesStoreTests: XCTestCase {
             XCTAssertEqual(error as? VerbalixError, .localFailure)
         }
     }
+
+    func testRecordLocalChangeSetsUpdatedAtBeforePersisting() throws {
+        let store = PreferencesStore(directory: tempDirectory)
+        let beforeSecs = floor(Date().timeIntervalSince1970)
+
+        try store.recordLocalChange()
+
+        let loaded = try store.load()
+        let updatedAt = try XCTUnwrap(loaded.updatedAt)
+        XCTAssertGreaterThanOrEqual(floor(updatedAt.timeIntervalSince1970), beforeSecs)
+    }
+
+    func testRecordLocalChangeBumpsUpdatedAtOnSubsequentCall() throws {
+        let store = PreferencesStore(directory: tempDirectory)
+        var prefs = SyncedPreferences(formality: 3, length: .balanced, tone: .technical, historyEnabled: false)
+        prefs.updatedAt = Date(timeIntervalSince1970: 1_000_000)
+        try store.save(prefs)
+
+        try store.recordLocalChange()
+
+        let loaded = try store.load()
+        let updatedAt = try XCTUnwrap(loaded.updatedAt)
+        XCTAssertGreaterThan(updatedAt.timeIntervalSince1970, 1_000_000)
+    }
 }
 
 final class PreferencesSyncSerializationTests: XCTestCase {
@@ -146,9 +170,10 @@ final class MergePreferencesTests: XCTestCase {
         let local = prefs(formality: 1, updatedAt: Date(timeIntervalSince1970: 100))
         let remote = prefs(formality: 2, updatedAt: Date(timeIntervalSince1970: 200))
 
-        let merged = mergePreferences(local: local, remote: remote)
+        let (merged, needsPush) = mergePreferences(local: local, remote: remote)
 
         XCTAssertEqual(merged.formality, 2)
+        XCTAssertFalse(needsPush)
     }
 
     func testLocalWinsOnExactTie() {
@@ -156,25 +181,37 @@ final class MergePreferencesTests: XCTestCase {
         let local = prefs(formality: 1, updatedAt: sameInstant)
         let remote = prefs(formality: 2, updatedAt: sameInstant)
 
-        let merged = mergePreferences(local: local, remote: remote)
+        let (merged, needsPush) = mergePreferences(local: local, remote: remote)
 
         XCTAssertEqual(merged.formality, 1)
+        XCTAssertTrue(needsPush, "tie means local won and should push to keep server in sync")
     }
 
     func testLocalWinsWhenRemoteUpdatedAtIsMissing() {
         let local = prefs(formality: 1, updatedAt: Date(timeIntervalSince1970: 100))
         let remote = prefs(formality: 2, updatedAt: nil)
 
-        let merged = mergePreferences(local: local, remote: remote)
+        let (merged, needsPush) = mergePreferences(local: local, remote: remote)
 
         XCTAssertEqual(merged.formality, 1)
+        XCTAssertTrue(needsPush)
+    }
+
+    func testLocalWinsWhenRemoteUpdatedAtIsMissingAndLocalHasNoTimestamp() {
+        let local = prefs(formality: 1, updatedAt: nil)
+        let remote = prefs(formality: 2, updatedAt: nil)
+
+        let (merged, needsPush) = mergePreferences(local: local, remote: remote)
+
+        XCTAssertEqual(merged.formality, 1)
+        XCTAssertFalse(needsPush)
     }
 
     func testRemoteWinsWhenLocalHasNoTimestampYet() {
         let local = prefs(formality: 1, updatedAt: nil)
         let remote = prefs(formality: 2, updatedAt: Date(timeIntervalSince1970: 200))
 
-        let merged = mergePreferences(local: local, remote: remote)
+        let (merged, _) = mergePreferences(local: local, remote: remote)
 
         XCTAssertEqual(merged.formality, 2)
     }
@@ -182,17 +219,19 @@ final class MergePreferencesTests: XCTestCase {
     func testLocalIsReturnedWhenNoRemoteRowExists() {
         let local = prefs(formality: 1, updatedAt: Date(timeIntervalSince1970: 100))
 
-        let merged = mergePreferences(local: local, remote: nil)
+        let (merged, needsPush) = mergePreferences(local: local, remote: nil)
 
         XCTAssertEqual(merged.formality, 1)
+        XCTAssertFalse(needsPush)
     }
 
     func testLocalWinsWhenRemoteIsOlder() {
         let local = prefs(formality: 1, updatedAt: Date(timeIntervalSince1970: 200))
         let remote = prefs(formality: 2, updatedAt: Date(timeIntervalSince1970: 100))
 
-        let merged = mergePreferences(local: local, remote: remote)
+        let (merged, needsPush) = mergePreferences(local: local, remote: remote)
 
         XCTAssertEqual(merged.formality, 1)
+        XCTAssertTrue(needsPush)
     }
 }

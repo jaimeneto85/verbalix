@@ -124,34 +124,41 @@ public struct PreferencesSync: Sendable {
     }
 }
 
-public func mergePreferences(local: SyncedPreferences, remote: SyncedPreferences?) -> SyncedPreferences {
+public func mergePreferences(local: SyncedPreferences, remote: SyncedPreferences?) -> (merged: SyncedPreferences, needsPush: Bool) {
     guard let remote = remote else {
-        return local
+        return (local, false)
     }
 
     guard let remoteDate = remote.updatedAt else {
-        return local
+        let needsPush = local.updatedAt != nil
+        return (local, needsPush)
     }
 
     guard let localDate = local.updatedAt else {
-        return SyncedPreferences(
-            formality: remote.formality,
-            length: remote.length,
-            tone: remote.tone,
-            historyEnabled: remote.historyEnabled,
-            updatedAt: remote.updatedAt
+        return (
+            SyncedPreferences(
+                formality: remote.formality,
+                length: remote.length,
+                tone: remote.tone,
+                historyEnabled: remote.historyEnabled,
+                updatedAt: remote.updatedAt
+            ),
+            false
         )
     }
 
     if remoteDate > localDate {
-        return SyncedPreferences(
-            formality: remote.formality,
-            length: remote.length,
-            tone: remote.tone,
-            historyEnabled: remote.historyEnabled,
-            updatedAt: remote.updatedAt
+        return (
+            SyncedPreferences(
+                formality: remote.formality,
+                length: remote.length,
+                tone: remote.tone,
+                historyEnabled: remote.historyEnabled,
+                updatedAt: remote.updatedAt
+            ),
+            false
         )
     }
 
-    return local
+    return (local, true)
 }

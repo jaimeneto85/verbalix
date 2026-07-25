@@ -80,4 +80,10 @@ public struct PreferencesStore: Sendable {
             throw VerbalixError.localFailure
         }
     }
+
+    public func recordLocalChange() throws {
+        var prefs = try load()
+        prefs.updatedAt = Date()
+        try save(prefs)
+    }
 }
