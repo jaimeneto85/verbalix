@@ -3,7 +3,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-ROOT_ENV="$(cd "$IOS_DIR/../.." && pwd)/.env"
+
+COMMON_GIT="$(git -C "$IOS_DIR" rev-parse --git-common-dir 2>/dev/null || true)"
+if [[ "$COMMON_GIT" = /* ]]; then
+  REPO_ROOT="$(dirname "$COMMON_GIT")"
+elif GIT_TOPLEVEL="$(git -C "$IOS_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
+  REPO_ROOT="$GIT_TOPLEVEL"
+else
+  REPO_ROOT="$(cd "$IOS_DIR/../.." && pwd)"
+fi
+ROOT_ENV="$REPO_ROOT/.env"
 
 if [[ ! -f "$ROOT_ENV" ]]; then
   echo "ERROR: .env not found at $ROOT_ENV" >&2
