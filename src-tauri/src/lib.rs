@@ -1,5 +1,6 @@
 mod application;
 mod commands;
+mod commands_settings;
 mod commands_transform;
 mod diagnostics;
 mod domain;
@@ -14,6 +15,7 @@ use application::{
 };
 use application::{PreferencesSyncStore, RemotePreferencesRepository};
 use commands::*;
+use commands_settings::*;
 use commands_transform::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use overlay_commands::*;
