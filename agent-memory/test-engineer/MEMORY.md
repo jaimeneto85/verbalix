@@ -72,6 +72,7 @@
 - Limites superiores de índices marker em macOS arm64 devem considerar que `isize::MAX == i64::MAX`; o maior location válido antes de um range de length 1 é `isize::MAX - 1`.
 - O analyzer QA considera linhas efetivas e impõe máximo de 300 por arquivo modificado; os boundaries macOS foram divididos e devem permanecer abaixo desse limite.
 - Em sandbox restrito, o teste de histórico HTTP pode falhar ao criar `TcpListener` com `PermissionDenied`; isso não deve ser confundido com regressão quando todos os demais testes passam. O gate completo precisa de execução com socket loopback permitido.
+- Em sandbox restrito, o web server do Playwright pode falhar com `listen EPERM` em `127.0.0.1:4173`; repita o mesmo `npm run test:e2e` com permissão de loopback antes de classificar como regressão.
 
 ## Cobertura & Métricas
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
