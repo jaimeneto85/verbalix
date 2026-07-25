@@ -73,6 +73,8 @@
 - [x] RF34: Idempotência é específica da fase/API; `finish_*` e `reconcile_*` não aceitam o mesmo outcome quando o predecessor exigido não corresponde.
 - [x] RF35: Restore permanece ancorado ao `target.epoch` original; qualquer epoch divergente antes de begin/claim/setter rejeita sem consumir lease ou escrever.
 - [x] RF36: Replay/reconcile de restore valida mutation ID, snapshot, texto e lease antes de qualquer early return idempotente ou transição.
+- [ ] RF37: Replace/Restore armam self-notification antes do check causal final; epoch é revalidado dentro do boundary imediatamente anterior ao setter.
+- [ ] RF38: Lookup/replay terminal aplica prune/TTL antes de qualquer early return idempotente.
 
 ### Requisitos não funcionais
 
@@ -119,6 +121,8 @@
 - [x] CA34: Matriz cross-phase cobre mesmo outcome em API errada para replace/restore e preserva status, terminal_at e restore_attempted.
 - [x] CA35: Actor real E0→E1 com Focus B/Capture B pendente rejeita Restore A, zero setter e lease não consumida.
 - [x] CA36: Restored/RestoreIndeterminate com snapshot, texto ou lease divergente retorna erro sem alterar status/terminal/provenance; replay idêntico permanece idempotente.
+- [ ] CA37: Actor real incrementa epoch após claim/arm e antes do setter em replace+restore, exigindo zero setter e terminal Rejected.
+- [ ] CA38: Replay Restored após TTL expira e retorna stale; antes do TTL permanece idempotente.
 
 ### Edge cases
 
@@ -238,6 +242,7 @@
 - [x] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
 - [x] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
 - [x] T2.28 `[CRITICAL]` Ancorar restore no target epoch e mover validação de correlação antes de todos os early returns/reconcile.
+- [ ] T2.29 `[CRITICAL]` Integrar epoch check ao write boundary pós-arm e aplicar TTL antes do replay lookup.
 
 ### Fase 3 — Testes
 
@@ -266,6 +271,7 @@
 - [x] T3.23 `[HIGH]` Cobrir behavioralmente serde/IPC redaction, callback pre-I/O ordering, secure-after-prepare actor path e invalid terminal outcomes/status/TTL.
 - [x] T3.24 `[HIGH]` Cobrir ActorState real replace+restore secure-after-prepare e matriz ledger cross-phase same-outcome.
 - [x] T3.25 `[CRITICAL]` Cobrir actor restore stale epoch com Capture B pendente e matriz replay divergente/sem mutação.
+- [ ] T3.26 `[CRITICAL]` Cobrir bump pós-claim/arm pré-setter em replace+restore e replay terminal expirado.
 
 ### Fase 4 — QA real
 
@@ -283,6 +289,7 @@
 - O fallback TextEdit é UTF-16 transacional e lê somente o range de `AXValue`; `AXSelectedText` continua o único writer quando settable, com diagnóstico sanitizado e probe real fechado por TCC.
 - As rodadas QA RF16–RF30 originaram RF20–RF34: allowlist precoce, handle/ledger completos, secure subrole, epoch fora da FIFO, focus/self-notification, restore/reconcile monotônicos, identifier privado, write gate tardio e provenance por fase.
 - O QA RF34 aprovou esses boundaries, mas encontrou restore adotando epoch novo e validando replay tarde; RF35–RF36 fecham os dois defects causais.
+- O QA RF35 encontrou gap pós-arm/pré-setter e replay sem prune; RF37–RF38 movem o check ao setter e aplicam TTL no lookup.
 
 ### 🟢 Oportunidades incorporadas
 
