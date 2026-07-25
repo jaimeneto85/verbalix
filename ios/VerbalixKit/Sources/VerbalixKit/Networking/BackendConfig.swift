@@ -39,4 +39,11 @@ extension BackendConfig {
     public var userEndpoint: URL {
         supabaseURL.appendingPathComponent("auth/v1/user")
     }
+
+    public var authTokenEndpoint: URL {
+        supabaseURL
+            .appendingPathComponent("auth")
+            .appendingPathComponent("v1")
+            .appendingPathComponent("token")
+    }
 }
