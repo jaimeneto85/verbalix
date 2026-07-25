@@ -67,7 +67,7 @@ impl AxMutationTarget for BlockingRestoreTarget {
         _expected: &SelectionSnapshot,
         authorization: &crate::platform::macos_write_authorization::AxWriteAuthorization,
     ) -> RestoreWriteOutcome {
-        if !authorization.is_current() {
+        if !authorization.begin_setter() {
             return RestoreWriteOutcome::Rejected;
         }
         self.setters.fetch_add(1, Ordering::SeqCst);

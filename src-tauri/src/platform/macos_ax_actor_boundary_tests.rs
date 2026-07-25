@@ -44,7 +44,7 @@ impl BoundaryEpochTarget {
         self.writes.set(self.writes.get() + 1);
         self.observed_pending.set(self.notifications.has_pending());
         self.epoch.bump();
-        if authorization.is_current() {
+        if authorization.begin_setter() {
             self.setters.set(self.setters.get() + 1);
             true
         } else {

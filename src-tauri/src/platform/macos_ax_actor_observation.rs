@@ -5,6 +5,7 @@ use super::{
     macos_element_token::AxElementToken,
     macos_mutation_ledger::{ReplaceTerminalOutcome, RestoreTerminalOutcome},
     macos_selection_revalidation,
+    macos_self_notification_phase::SelfNotificationPhase,
 };
 use crate::{
     application::MutationStatus,
@@ -26,6 +27,7 @@ pub(super) struct ExpectedSelfNotification {
     expected_location: i64,
     expected_length: usize,
     strategy: SelectionExtractionStrategy,
+    phase: SelfNotificationPhase,
 }
 
 #[derive(Clone, Default)]
@@ -40,13 +42,17 @@ impl SelfNotificationSignal {
 
     fn arm(&self, expected: ExpectedSelfNotification) {
         if let Ok(mut pending) = self.pending.lock() {
-            *pending = Some(expected);
+            if let Some(replaced) = pending.replace(expected) {
+                replaced.phase.cancel();
+            }
         }
     }
 
     pub(super) fn clear(&self) {
         if let Ok(mut pending) = self.pending.lock() {
-            pending.take();
+            if let Some(expected) = pending.take() {
+                expected.phase.cancel();
+            }
         }
     }
 
@@ -55,11 +61,14 @@ impl SelfNotificationSignal {
         target: AxElementToken,
         generation: u64,
     ) -> Option<ExpectedSelfNotification> {
-        self.pending
-            .lock()
-            .ok()?
-            .take()
-            .filter(|expected| expected.target == target && expected.generation == generation)
+        let expected = self.pending.lock().ok()?.take()?;
+        let exact = expected.target == target && expected.generation == generation;
+        if exact && expected.phase.claim_observation() {
+            Some(expected)
+        } else {
+            expected.phase.cancel();
+            None
+        }
     }
 }
 
@@ -77,10 +86,11 @@ impl ActorState {
         target: &CapturedTarget,
         generation: u64,
         expected_text: String,
-    ) {
+    ) -> SelfNotificationPhase {
+        let phase = SelfNotificationPhase::armed();
         let Some(target_token) = target.token.clone() else {
             self.self_notifications.clear();
-            return;
+            return phase;
         };
         self.self_notifications.arm(ExpectedSelfNotification {
             mutation_id,
@@ -91,7 +101,9 @@ impl ActorState {
             expected_length: expected_text.encode_utf16().count(),
             expected_text,
             strategy: snapshot.extraction_strategy,
+            phase: phase.clone(),
         });
+        phase
     }
 
     pub(super) fn clear_self_notification(&mut self) {

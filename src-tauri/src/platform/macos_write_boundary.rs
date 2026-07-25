@@ -11,6 +11,7 @@ pub(super) fn set_selected_text(
     element: AXUIElementRef,
     authorization: &AxWriteAuthorization,
 ) -> Result<AxWriteResult, VerbalixError> {
+    let write = macos_ax::prepare_selected_text_write(element, text);
     let expected_identity = expected
         .element_identity
         .as_ref()
@@ -20,7 +21,7 @@ pub(super) fn set_selected_text(
         _ => VerbalixError::StaleSelection,
     })?;
     set_after_role_validation(expected_identity, current_role, authorization, || {
-        macos_ax::set_selected_text(element, text)
+        macos_ax::set_prepared_selected_text(write)
     })
 }
 
@@ -32,11 +33,13 @@ pub(super) fn set_after_role_validation(
 ) -> Result<AxWriteResult, VerbalixError> {
     if current.role != expected.role
         || current.subrole != expected.subrole
-        || !authorization.is_current()
+        || !authorization.begin_setter()
     {
         return Err(VerbalixError::StaleSelection);
     }
-    Ok(setter())
+    let result = setter();
+    authorization.commit();
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -86,7 +89,11 @@ mod tests {
     }
 
     fn authorization() -> AxWriteAuthorization {
-        AxWriteAuthorization::new(crate::platform::causal_epoch::CausalEpoch::default(), 0)
+        AxWriteAuthorization::new(
+            crate::platform::causal_epoch::CausalEpoch::default(),
+            0,
+            crate::platform::macos_self_notification_phase::SelfNotificationPhase::armed(),
+        )
     }
 
     #[test]

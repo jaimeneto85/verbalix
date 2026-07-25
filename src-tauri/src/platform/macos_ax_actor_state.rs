@@ -124,8 +124,9 @@ impl ActorState {
             )?;
             return Err(VerbalixError::StaleSelection);
         }
-        self.arm_self_notification(receipt.id, &expected, &target, target.epoch, text.clone());
-        let authorization = AxWriteAuthorization::new(self.epoch.clone(), target.epoch);
+        let phase =
+            self.arm_self_notification(receipt.id, &expected, &target, target.epoch, text.clone());
+        let authorization = AxWriteAuthorization::new(self.epoch.clone(), target.epoch, phase);
         let outcome = target
             .target
             .write_replace(&expected, &text, &authorization);
@@ -206,14 +207,14 @@ impl ActorState {
             )?;
             return Err(VerbalixError::StaleSelection);
         }
-        self.arm_self_notification(
+        let phase = self.arm_self_notification(
             mutation_id,
             &expected,
             &target,
             boundary_epoch,
             expected.text.clone(),
         );
-        let authorization = AxWriteAuthorization::new(self.epoch.clone(), boundary_epoch);
+        let authorization = AxWriteAuthorization::new(self.epoch.clone(), boundary_epoch, phase);
         let outcome = target.target.write_restore(&expected, &authorization);
         let terminal_outcome = match outcome {
             macos_restore::RestoreWriteOutcome::Confirmed => RestoreTerminalOutcome::Restored,

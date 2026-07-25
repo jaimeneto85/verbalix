@@ -39,7 +39,7 @@ impl AxMutationTarget for RestoreTarget {
         _text: &str,
         authorization: &AxWriteAuthorization,
     ) -> WriteOutcome {
-        if authorization.is_current() {
+        if authorization.begin_setter() {
             WriteOutcome::Confirmed
         } else {
             WriteOutcome::Rejected
@@ -60,7 +60,7 @@ impl AxMutationTarget for RestoreTarget {
         _expected: &SelectionSnapshot,
         authorization: &AxWriteAuthorization,
     ) -> RestoreWriteOutcome {
-        if authorization.is_current() {
+        if authorization.begin_setter() {
             RestoreWriteOutcome::Confirmed
         } else {
             RestoreWriteOutcome::Rejected

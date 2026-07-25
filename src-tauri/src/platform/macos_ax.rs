@@ -241,14 +241,29 @@ pub(super) enum AxWriteResult {
     Indeterminate(AxCategory),
 }
 
-pub(super) fn set_selected_text(element: AXUIElementRef, text: &str) -> AxWriteResult {
-    let attribute = CFString::new("AXSelectedText");
-    let value = CFString::new(text);
+pub(super) struct PreparedSelectedTextWrite {
+    element: AXUIElementRef,
+    attribute: CFString,
+    value: CFString,
+}
+
+pub(super) fn prepare_selected_text_write(
+    element: AXUIElementRef,
+    text: &str,
+) -> PreparedSelectedTextWrite {
+    PreparedSelectedTextWrite {
+        element,
+        attribute: CFString::new("AXSelectedText"),
+        value: CFString::new(text),
+    }
+}
+
+pub(super) fn set_prepared_selected_text(write: PreparedSelectedTextWrite) -> AxWriteResult {
     let status = unsafe {
         AXUIElementSetAttributeValue(
-            element,
-            attribute.as_concrete_TypeRef(),
-            value.as_CFTypeRef(),
+            write.element,
+            write.attribute.as_concrete_TypeRef(),
+            write.value.as_CFTypeRef(),
         )
     };
     classify_write_status(status)

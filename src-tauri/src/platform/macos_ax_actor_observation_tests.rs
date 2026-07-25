@@ -27,6 +27,7 @@ fn self_notification_requires_exact_mutation_target_generation_and_utf16_selecti
         expected_location: 3,
         expected_length: "depois 👩🏽‍💻".encode_utf16().count(),
         strategy: SelectionExtractionStrategy::ValueRange,
+        phase: SelfNotificationPhase::armed(),
     };
     let current = CurrentSelection {
         text: expected.expected_text.clone(),
@@ -84,6 +85,8 @@ fn self_notification_requires_exact_mutation_target_generation_and_utf16_selecti
 }
 
 fn expectation(target: AxElementToken, generation: u64) -> ExpectedSelfNotification {
+    let phase = SelfNotificationPhase::armed();
+    assert!(phase.begin_setter());
     ExpectedSelfNotification {
         mutation_id: Uuid::new_v4(),
         target_snapshot_id: Uuid::new_v4(),
@@ -93,6 +96,7 @@ fn expectation(target: AxElementToken, generation: u64) -> ExpectedSelfNotificat
         expected_location: 0,
         expected_length: 5,
         strategy: SelectionExtractionStrategy::SelectedText,
+        phase,
     }
 }
 
@@ -156,6 +160,8 @@ fn exact_expectation_matches_actor_ledger_and_current_selection_once() {
         .unwrap();
     let projection = ledger.projection(receipt.id, 1).unwrap();
     let signal = SelfNotificationSignal::default();
+    let phase = SelfNotificationPhase::armed();
+    assert!(phase.begin_setter());
     signal.arm(ExpectedSelfNotification {
         mutation_id: projection.receipt.id,
         target_snapshot_id: projection.target_snapshot_id,
@@ -165,6 +171,7 @@ fn exact_expectation_matches_actor_ledger_and_current_selection_once() {
         expected_location: projection.snapshot.range.location,
         expected_length: projection.transformed_text.encode_utf16().count(),
         strategy: projection.strategy,
+        phase,
     });
     let current = CurrentSelection {
         text: projection.transformed_text.clone(),

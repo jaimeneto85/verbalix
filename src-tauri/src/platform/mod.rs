@@ -55,6 +55,8 @@ mod macos_selection_identity;
 #[cfg(target_os = "macos")]
 mod macos_selection_revalidation;
 #[cfg(target_os = "macos")]
+mod macos_self_notification_phase;
+#[cfg(target_os = "macos")]
 mod macos_text_marker;
 #[cfg(target_os = "macos")]
 mod macos_text_role;
