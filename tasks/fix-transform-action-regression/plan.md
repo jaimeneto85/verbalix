@@ -63,6 +63,9 @@
 - [x] RF20: Protected fields e roles fora da allowlist textual falham antes de qualquer leitura de `AXSelectedText`, `AXStringForRange` ou `AXValue`.
 - [x] RF21: Quando `AXIdentifier` não existe, captura, replace e restore usam a mesma referência AX retida causalmente por snapshot, com TTL/capacidade e cleanup; `role + frame` nunca substitui identidade forte.
 - [x] RF22: Toda mutação AX confirmada gera receipt lógico durável suficiente para `Applied + undo`; falha pós-setter não deixa alteração órfã nem reclassifica sucesso como ausência de write.
+- [ ] RF23: A classificação textual/protegida usa `AXRole + AXSubrole`; `AXTextField/AXSecureTextField` falha antes de identifier, bounds, settable ou qualquer leitura de conteúdo.
+- [ ] RF24: Mudança de seleção/foco revoga a lease por sinal causal não bloqueado atrás de Replace/Restore no actor; o setter revalida essa geração imediatamente antes do claim/write.
+- [ ] RF25: O actor registra antes do setter o mutation ID, snapshot, original, transformed, strategy, target e undo metadata completos; uma API idempotente reconcilia resposta perdida/commit falho.
 
 ### Requisitos não funcionais
 
@@ -95,6 +98,9 @@
 - [x] CA20: Trace prova zero APIs de conteúdo chamadas para secure/non-text roles, inclusive caminhos direct/CFRange/value/marker.
 - [x] CA21: Snapshot sem identifier substitui/restaura somente pelo handle AX original retido; handle ausente, expirado ou divergente produz zero setter.
 - [x] CA22: Setter bem-sucedido seguido de falha de commit/feedback mantém receipt, estado Applied recuperável e undo; setter rejeitado não cria receipt.
+- [ ] CA23: Trace de `AXTextField + AXSecureTextField` prova zero chamadas a identifier/bounds/settable/SelectedText/StringForRange/AXValue/marker.
+- [ ] CA24: Scheduler real prova que evento causal de Candidate B durante preparação de A cancela A antes do setter, mesmo com Capture B aguardando na fila AX.
+- [ ] CA25: Perda de response, expiração durante setter e falha de `finish_receipt`/commit são reconciliadas pelo mesmo mutation ID completo, sem sobrescrever Candidate B.
 
 ### Edge cases
 
@@ -157,6 +163,9 @@
 - O gate de role ocorre imediatamente após `AXRole` e antes de qualquer API que possa materializar conteúdo; a allowlist é explícita e coberta por trace.
 - O registry causal pertence à instância `MacAccessibility`, retém o `AXUIElementRef` sob `snapshot.id`, é limitado/expirável e só resolve após PID/role/estratégia/range/subtexto revalidados; entradas são removidas ao expirar/consumir e nunca serializadas.
 - O setter retorna resultado tipado e receipt. O receipt de mutação é registrado independentemente da apresentação/state machine antes de qualquer operação que possa falhar; `Applied`/undo podem ser reconciliados sem sobrescrever Candidate mais novo.
+- `AXSecureTextField` é subrole no SDK macOS. Role e subrole devem ser lidos/classificados antes de qualquer outra propriedade potencialmente sensível.
+- A revogação latest-wins não pode depender de uma Capture FIFO atrás do write. Observer/focus/input emite geração atômica ou sinal equivalente fora da fila bloqueada; o actor lê essa geração na preparação e novamente imediatamente antes do setter.
+- O actor mantém o registro completo em estado `Prepared → Confirmed | Rejected | Indeterminate`; coordinator consulta/reconcilia por mutation ID após timeout, perda de resposta ou falha de commit.
 - Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
@@ -195,6 +204,9 @@
 - [x] T2.15 `[HIGH]` Mover a allowlist de role para antes de qualquer leitura de conteúdo e provar zero-read por adapter trace.
 - [x] T2.16 `[HIGH]` Implementar registry causal bounded/TTL do `OwnedAxElement` por snapshot e integrá-lo a capture/replace/restore sem unsafe identidade fraca.
 - [x] T2.17 `[HIGH]` Introduzir write receipt e reconciliação pós-setter para preservar Applied/undo fora do estado visual latest-wins.
+- [ ] T2.18 `[CRITICAL]` Classificar role+subrole seguro antes de qualquer leitura/probe de conteúdo ou identidade.
+- [ ] T2.19 `[HIGH]` Redesenhar revogação do actor com epoch/sinal causal fora da FIFO e rechecagem no boundary do setter, mantendo handle no owner thread.
+- [ ] T2.20 `[HIGH]` Persistir mutation record completo no actor antes do setter e expor lookup/reconcile idempotente para response/commit failure.
 
 ### Fase 3 — Testes
 
@@ -215,6 +227,9 @@
 - [x] T3.15 `[HIGH]` Cobrir trace zero-read para cada role bloqueada e ausência de regressão nos roles textuais suportados.
 - [x] T3.16 `[HIGH]` Cobrir registry: identifier presente/ausente, handle exato, TTL, capacidade, cleanup, divergência e zero setter sem receipt causal.
 - [x] T3.17 `[HIGH]` Cobrir setter success/failure/indeterminate, falha de commit/feedback, Candidate concorrente, receipt recuperável e undo sem sobrescrever seleção nova.
+- [ ] T3.18 `[CRITICAL]` Cobrir secure subrole real com trace zero-read e constantes compatíveis com SDK.
+- [ ] T3.19 `[HIGH]` Cobrir scheduler actor end-to-end: preparação bloqueada, sinal B fora da FIFO, capture B pendente, zero setter A.
+- [ ] T3.20 `[HIGH]` Cobrir mutation recovery completo em perda de response, expiry durante setter, commit failure, reconcile repetido e Candidate B preservado.
 
 ### Fase 4 — QA real
 
@@ -243,6 +258,7 @@
 - O probe Swift externo falhou fechado por TCC (`-25204`) e não tentou mutação; a árvore real via Computer Use evidencia identidade `First Text View`, valor legível e edição settable, suficientes para a primeira implementação conservadora.
 - Capacidade deve ser diagnosticada uma vez por transição/categoria no build de smoke, sem texto, range concreto ou identificador.
 - O QA RF16 encontrou que a allowlist era aplicada tarde, que o handle causal não sobrevivia à captura e que o commit lógico ocorria depois do setter sem receipt independente; RF20–RF22 tornam esses pontos gates explícitos.
+- O QA RF20 mostrou que secure é subrole, que Capture e Replace na mesma FIFO ainda atrasam latest-wins e que IDs pré-setter sem payload completo não permitem recovery; RF23–RF25 fecham esses três pontos.
 
 ### 🟢 Oportunidades incorporadas
 
