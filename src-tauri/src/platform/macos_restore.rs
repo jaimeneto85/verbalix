@@ -1,7 +1,7 @@
 use super::{
     macos_attribute,
     macos_ax::{self, AXUIElementRef, AxWriteResult, OwnedAxElement},
-    macos_selection, macos_selection_revalidation, macos_value_range,
+    macos_selection, macos_selection_revalidation, macos_value_range, macos_write_boundary,
 };
 use crate::domain::{SelectionElementIdentity, SelectionSnapshot, VerbalixError};
 
@@ -55,10 +55,11 @@ pub(super) fn write_on_element(
     expected: &SelectionSnapshot,
     element: AXUIElementRef,
 ) -> RestoreWriteOutcome {
-    match macos_ax::set_selected_text(element, &expected.text) {
-        AxWriteResult::Confirmed => RestoreWriteOutcome::Confirmed,
-        AxWriteResult::Rejected(_) => RestoreWriteOutcome::Rejected,
-        AxWriteResult::Indeterminate(_) => {
+    match macos_write_boundary::set_selected_text(expected, &expected.text, element) {
+        Err(_) => RestoreWriteOutcome::Rejected,
+        Ok(AxWriteResult::Confirmed) => RestoreWriteOutcome::Confirmed,
+        Ok(AxWriteResult::Rejected(_)) => RestoreWriteOutcome::Rejected,
+        Ok(AxWriteResult::Indeterminate(_)) => {
             let Ok(current) =
                 macos_selection_revalidation::read(element, expected.extraction_strategy)
             else {

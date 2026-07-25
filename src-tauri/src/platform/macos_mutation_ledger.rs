@@ -257,3 +257,7 @@ fn matching<T>(
 #[cfg(test)]
 #[path = "macos_mutation_ledger_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "macos_mutation_ledger_transition_tests.rs"]
+mod transition_tests;

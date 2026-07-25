@@ -56,6 +56,8 @@ mod macos_text_marker;
 mod macos_text_role;
 #[cfg(target_os = "macos")]
 mod macos_value_range;
+#[cfg(target_os = "macos")]
+mod macos_write_boundary;
 
 pub use clipboard::SystemClipboard;
 pub use note_result::NoteResultPayload;
