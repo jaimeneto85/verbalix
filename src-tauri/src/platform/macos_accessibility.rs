@@ -1,7 +1,10 @@
 use super::{
+    causal_epoch::CausalEpoch,
     macos_ax::{self, OwnedAxElement},
     macos_ax_actor::AxActor,
+    macos_ax_actor_observation::ObservedSelectionChange,
     macos_focus::{AxCategory, AxStage, ExtractionOrigin},
+    macos_observer::{AccessibilityEvent, AccessibilityEventKind},
 };
 use crate::{
     application::{MutationProjection, MutationReceipt, PublicationGuard, SelectionPort},
@@ -10,21 +13,25 @@ use crate::{
 use std::sync::Arc;
 
 pub struct MacAccessibility {
-    actor: AxActor,
+    actor: Arc<AxActor>,
 }
 
 impl MacAccessibility {
     pub fn new() -> Self {
         Self {
-            actor: AxActor::new(),
+            actor: Arc::new(AxActor::new()),
         }
     }
 
     pub fn start_observer(&self, callback: Arc<dyn Fn() + Send + Sync>) {
         let epoch = self.actor.causal_epoch();
-        super::macos_observer::start(Arc::new(move || {
-            epoch.bump();
-            callback();
+        let actor = self.actor.clone();
+        super::macos_observer::start(Arc::new(move |event| {
+            if route_observer_event(event, &epoch, |target, generation| {
+                actor.observe_selection_change(target, generation)
+            }) {
+                callback();
+            }
         }));
     }
 
@@ -34,6 +41,35 @@ impl MacAccessibility {
 
     pub(super) fn focused_element() -> Result<OwnedAxElement, VerbalixError> {
         macos_ax::focused_element().map_err(|_| VerbalixError::SelectionUnavailable)
+    }
+}
+
+fn route_observer_event(
+    event: AccessibilityEvent,
+    epoch: &CausalEpoch,
+    classify: impl FnOnce(
+        macos_ax::AxElementToken,
+        u64,
+    ) -> Result<ObservedSelectionChange, VerbalixError>,
+) -> bool {
+    match event.kind {
+        AccessibilityEventKind::FocusChanged | AccessibilityEventKind::ElementDestroyed => {
+            epoch.bump();
+            true
+        }
+        AccessibilityEventKind::SelectedTextChanged => {
+            let generation = epoch.current();
+            let own_change = event
+                .target
+                .and_then(|target| classify(target, generation).ok())
+                == Some(ObservedSelectionChange::SelfGenerated);
+            if own_change {
+                false
+            } else {
+                epoch.bump();
+                true
+            }
+        }
     }
 }
 
@@ -132,6 +168,10 @@ impl SelectionPort for MacAccessibility {
         self.actor.reconcile(mutation_id)
     }
 }
+
+#[cfg(test)]
+#[path = "macos_accessibility_observer_tests.rs"]
+mod observer_tests;
 
 #[cfg(test)]
 fn replacement_eligible(expected: &SelectionSnapshot) -> bool {

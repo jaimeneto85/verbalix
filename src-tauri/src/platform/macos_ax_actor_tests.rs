@@ -9,7 +9,7 @@ fn actor_is_send_sync_without_sending_ax_handles() {
 }
 
 #[test]
-fn external_epoch_revokes_blocked_write_before_pending_capture_runs() {
+fn keyboard_focus_epoch_revokes_blocked_write_before_pending_capture_runs() {
     let actor = AxActor::new();
     let observed_epoch = actor.epoch.current();
     let lease = std::sync::Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
@@ -31,7 +31,7 @@ fn external_epoch_revokes_blocked_write_before_pending_capture_runs() {
         .unwrap();
     entered_rx.recv().unwrap();
 
-    actor.signal_causal_change();
+    actor.causal_epoch().bump();
     let (capture_tx, capture_rx) = mpsc::channel();
     actor
         .sender

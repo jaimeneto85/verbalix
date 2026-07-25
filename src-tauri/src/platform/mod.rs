@@ -22,6 +22,10 @@ mod macos_ax;
 #[cfg(target_os = "macos")]
 mod macos_ax_actor;
 #[cfg(target_os = "macos")]
+mod macos_ax_actor_observation;
+#[cfg(target_os = "macos")]
+mod macos_ax_actor_reconciliation;
+#[cfg(target_os = "macos")]
 mod macos_ax_actor_state;
 #[cfg(target_os = "macos")]
 mod macos_classic_range;

@@ -1,9 +1,10 @@
 use super::{
     causal_epoch::CausalEpoch,
     causal_registry::CausalRegistry,
-    macos_ax::{self, OwnedAxElement},
+    macos_ax::{self, AxElementToken, OwnedAxElement},
+    macos_ax_actor_observation::{self, ExpectedSelfNotification},
     macos_mutation_ledger::MutationLedger,
-    macos_replace, macos_restore, macos_selection, macos_selection_revalidation,
+    macos_replace, macos_restore, macos_selection,
 };
 use crate::{
     application::{MutationProjection, MutationReceipt, MutationStatus, PublicationGuard},
@@ -16,16 +17,18 @@ const REGISTRY_CAPACITY: usize = 64;
 const REGISTRY_TTL_MS: u64 = 600_000;
 
 #[derive(Clone)]
-struct CapturedTarget {
-    element: Rc<OwnedAxElement>,
-    epoch: u64,
+pub(super) struct CapturedTarget {
+    pub(super) element: Rc<OwnedAxElement>,
+    pub(super) epoch: u64,
+    pub(super) token: AxElementToken,
 }
 
 pub(super) struct ActorState {
-    started: Instant,
-    epoch: CausalEpoch,
-    targets: CausalRegistry<CapturedTarget>,
-    mutations: MutationLedger<CapturedTarget>,
+    pub(super) started: Instant,
+    pub(super) epoch: CausalEpoch,
+    pub(super) targets: CausalRegistry<CapturedTarget>,
+    pub(super) mutations: MutationLedger<CapturedTarget>,
+    pub(super) expected_self_notification: Option<ExpectedSelfNotification>,
 }
 
 impl ActorState {
@@ -35,6 +38,7 @@ impl ActorState {
             epoch,
             targets: CausalRegistry::new(REGISTRY_CAPACITY, REGISTRY_TTL_MS),
             mutations: MutationLedger::new(REGISTRY_CAPACITY),
+            expected_self_notification: None,
         }
     }
 
@@ -47,12 +51,15 @@ impl ActorState {
             return Err(VerbalixError::StaleSelection);
         }
         if snapshot.writable {
+            let token = macos_ax::element_token(element.as_ref())
+                .map_err(|_| VerbalixError::SelectionUnavailable)?;
             self.targets.insert(
                 snapshot.id,
-                CapturedTarget {
-                    element: Rc::new(element),
-                    epoch: captured_epoch,
-                },
+                macos_ax_actor_observation::captured_target(
+                    Rc::new(element),
+                    captured_epoch,
+                    token,
+                ),
                 self.now(),
             );
         }
@@ -74,6 +81,7 @@ impl ActorState {
         let target = self
             .targets
             .get(expected.id, now)
+            .cloned()
             .ok_or(VerbalixError::StaleSelection)?;
         macos_replace::prepare_on_element(&expected, &target.element, causal)?;
         ensure_current(&self.epoch, target.epoch)?;
@@ -102,6 +110,7 @@ impl ActorState {
                 .terminalize(receipt.id, MutationStatus::Rejected, self.now())?;
             return Err(VerbalixError::StaleSelection);
         }
+        self.arm_self_notification(receipt.id, &expected, &target, target.epoch, text.clone());
         let outcome =
             macos_replace::write_on_element(&expected, &text, target.element.as_ref().as_ref());
         let status = match outcome {
@@ -109,6 +118,9 @@ impl ActorState {
             macos_replace::WriteOutcome::Rejected => MutationStatus::Rejected,
             macos_replace::WriteOutcome::Indeterminate => MutationStatus::Indeterminate,
         };
+        if status == MutationStatus::Rejected {
+            self.clear_self_notification();
+        }
         let projection = self.mutations.terminalize(receipt.id, status, self.now())?;
         projection_result(projection)
     }
@@ -178,6 +190,13 @@ impl ActorState {
             )?;
             return Err(VerbalixError::StaleSelection);
         }
+        self.arm_self_notification(
+            mutation_id,
+            &expected,
+            &target,
+            boundary_epoch,
+            expected.text.clone(),
+        );
         let outcome = macos_restore::write_on_element(&expected, target.element.as_ref().as_ref());
         let status = match outcome {
             macos_restore::RestoreWriteOutcome::Confirmed => MutationStatus::Restored,
@@ -188,6 +207,9 @@ impl ActorState {
         };
         self.mutations
             .finish_restore(mutation_id, status, self.now())?;
+        if status == MutationStatus::RestoreRejected {
+            self.clear_self_notification();
+        }
         if status == MutationStatus::Restored {
             self.targets.remove(expected.id);
             Ok(projection.receipt)
@@ -200,74 +222,7 @@ impl ActorState {
         self.targets.remove(id);
     }
 
-    pub(super) fn reconcile(&mut self, id: Uuid) -> Option<MutationProjection> {
-        let recovery = self.mutations.get_mut(id).and_then(|record| {
-            matches!(
-                record.projection.status,
-                MutationStatus::Indeterminate | MutationStatus::RestoreIndeterminate
-            )
-            .then(|| {
-                let restoring = record.projection.status == MutationStatus::RestoreIndeterminate;
-                let current = macos_selection_revalidation::read(
-                    record.target.element.as_ref().as_ref(),
-                    record.projection.strategy,
-                );
-                current
-                    .map(|current| {
-                        let expected_location = record.projection.snapshot.range.location;
-                        let current_location = current.range.location as i64;
-                        let status = if restoring
-                            && current.text == record.projection.original_text
-                            && current_location == expected_location
-                            && current.range.length as i64
-                                == record.projection.snapshot.range.length
-                        {
-                            MutationStatus::Restored
-                        } else if restoring
-                            && current.text == record.projection.transformed_text
-                            && current_location == expected_location
-                            && current.range.length as usize
-                                == record.projection.transformed_text.encode_utf16().count()
-                        {
-                            MutationStatus::RestoreRejected
-                        } else if current.text == record.projection.transformed_text
-                            && current_location == expected_location
-                            && current.range.length as usize
-                                == record.projection.transformed_text.encode_utf16().count()
-                        {
-                            MutationStatus::Confirmed
-                        } else if current.text == record.projection.original_text
-                            && current_location == expected_location
-                            && current.range.length as i64
-                                == record.projection.snapshot.range.length
-                        {
-                            MutationStatus::Rejected
-                        } else {
-                            MutationStatus::Indeterminate
-                        };
-                        (restoring, status)
-                    })
-                    .unwrap_or((
-                        restoring,
-                        if restoring {
-                            MutationStatus::RestoreRejected
-                        } else {
-                            MutationStatus::Rejected
-                        },
-                    ))
-            })
-        });
-        if let Some((restoring, status)) = recovery {
-            if restoring {
-                let _ = self.mutations.reconcile_restore(id, status, self.now());
-            } else {
-                let _ = self.mutations.terminalize(id, status, self.now());
-            }
-        }
-        self.mutations.projection(id, self.now())
-    }
-
-    fn now(&self) -> u64 {
+    pub(super) fn now(&self) -> u64 {
         self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
     }
 }

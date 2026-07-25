@@ -1,4 +1,7 @@
-use super::{causal_epoch::CausalEpoch, macos_ax_actor_state::ActorState};
+use super::{
+    causal_epoch::CausalEpoch, macos_ax::AxElementToken,
+    macos_ax_actor_observation::ObservedSelectionChange, macos_ax_actor_state::ActorState,
+};
 use crate::{
     application::{MutationProjection, MutationReceipt, PublicationGuard},
     domain::{SelectionSnapshot, VerbalixError},
@@ -32,6 +35,11 @@ enum Command {
     Reconcile {
         mutation_id: Uuid,
         response: mpsc::Sender<Option<MutationProjection>>,
+    },
+    ObserveSelectionChange {
+        target: AxElementToken,
+        generation: u64,
+        response: mpsc::Sender<ObservedSelectionChange>,
     },
     #[cfg(test)]
     TestBoundary {
@@ -93,6 +101,13 @@ impl AxActor {
                     } => {
                         let _ = response.send(state.reconcile(mutation_id));
                     }
+                    Command::ObserveSelectionChange {
+                        target,
+                        generation,
+                        response,
+                    } => {
+                        let _ = response.send(state.observe_selection_change(target, generation));
+                    }
                     #[cfg(test)]
                     Command::TestBoundary {
                         observed_epoch,
@@ -136,6 +151,22 @@ impl AxActor {
 
     pub(super) fn causal_epoch(&self) -> CausalEpoch {
         self.epoch.clone()
+    }
+
+    pub(super) fn observe_selection_change(
+        &self,
+        target: AxElementToken,
+        generation: u64,
+    ) -> Result<ObservedSelectionChange, VerbalixError> {
+        let (sender, receiver) = mpsc::channel();
+        self.sender
+            .send(Command::ObserveSelectionChange {
+                target,
+                generation,
+                response: sender,
+            })
+            .map_err(|_| VerbalixError::LocalFailure)?;
+        receiver.recv().map_err(|_| VerbalixError::LocalFailure)
     }
 
     pub(super) fn capture(&self) -> Result<SelectionSnapshot, VerbalixError> {

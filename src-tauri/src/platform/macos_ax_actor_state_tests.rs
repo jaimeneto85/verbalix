@@ -21,15 +21,6 @@ fn replay_is_resolved_from_ledger_before_ax_preparation() {
 }
 
 #[test]
-fn indeterminate_reconcile_requires_exact_utf16_range_length() {
-    let source = include_str!("macos_ax_actor_state.rs");
-    let reconcile =
-        &source[source.find("pub(super) fn reconcile(").unwrap()..source.find("fn now(").unwrap()];
-    assert!(reconcile.contains("current.range.location"));
-    assert!(reconcile.contains("current.range.length"));
-}
-
-#[test]
 fn restore_is_idempotent_under_a_caller_preallocated_mutation_id() {
     let actor = include_str!("macos_ax_actor.rs");
     let command = &actor[actor.find("Restore {").unwrap()..actor.find("Discard(").unwrap()];
@@ -38,15 +29,4 @@ fn restore_is_idempotent_under_a_caller_preallocated_mutation_id() {
         ..state.find("pub(super) fn discard(").unwrap()];
     assert!(command.contains("mutation_id"));
     assert!(restore.contains("self.mutations"));
-}
-
-#[test]
-fn indeterminate_restore_reconciles_by_reading_without_a_second_setter() {
-    let source = include_str!("macos_ax_actor_state.rs");
-    let reconcile =
-        &source[source.find("pub(super) fn reconcile(").unwrap()..source.find("fn now(").unwrap()];
-    assert!(
-        reconcile.contains("MutationStatus::RestoreIndeterminate"),
-        "ambiguous restore must reconcile on the retained handle instead of retrying its setter"
-    );
 }
