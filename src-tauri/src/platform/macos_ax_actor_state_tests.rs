@@ -39,3 +39,14 @@ fn restore_is_idempotent_under_a_caller_preallocated_mutation_id() {
     assert!(command.contains("mutation_id"));
     assert!(restore.contains("self.mutations"));
 }
+
+#[test]
+fn indeterminate_restore_reconciles_by_reading_without_a_second_setter() {
+    let source = include_str!("macos_ax_actor_state.rs");
+    let reconcile =
+        &source[source.find("pub(super) fn reconcile(").unwrap()..source.find("fn now(").unwrap()];
+    assert!(
+        reconcile.contains("MutationStatus::RestoreIndeterminate"),
+        "ambiguous restore must reconcile on the retained handle instead of retrying its setter"
+    );
+}
