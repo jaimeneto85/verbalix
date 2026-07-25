@@ -194,6 +194,8 @@ pub fn run() {
                 overlay.clone(),
                 provider,
             ));
+            use application::RemotePreferencesRepository as RP;
+            let (su, ak) = (supabase_url, anonymous_key);
             let runtime = Arc::new(AppRuntime {
                 coordinator,
                 overlay,
@@ -207,11 +209,9 @@ pub fn run() {
                     let boxed: Box<dyn std::error::Error> = Box::new(error);
                     tauri::Error::Setup(boxed.into())
                 })?),
-                history: Arc::new(RemoteHistoryRepository::new(
-                    supabase_url.clone(),
-                    anonymous_key.clone(),
-                )),
-                auth: Arc::new(RemoteAuthRepository::new(supabase_url, anonymous_key)),
+                history: Arc::new(RemoteHistoryRepository::new(su.clone(), ak.clone())),
+                auth: Arc::new(RemoteAuthRepository::new(su.clone(), ak.clone())),
+                remote_preferences: backend_config.configured.then(|| Arc::new(RP::new(su, ak))),
                 backend_config,
                 pause: RuntimePause::default(),
             });

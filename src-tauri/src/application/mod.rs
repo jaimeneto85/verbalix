@@ -8,6 +8,7 @@ mod coordinator_transform;
 mod mutation;
 mod mutation_journal;
 mod ports;
+pub(crate) mod remote_preferences;
 mod runtime_pause;
 mod settings_file;
 mod supabase;
@@ -21,6 +22,7 @@ pub use auth_refresh::RemoteAuthRepository;
 pub use coordinator::SelectionCoordinator;
 pub use mutation::{MutationProjection, MutationReceipt, MutationStatus};
 pub use ports::{ClipboardPort, OverlayPort, SelectionPort};
+pub use remote_preferences::{merge_preferences, RemotePreferencesRepository};
 pub use runtime_pause::RuntimePause;
 pub use settings_file::JsonSettingsRepository;
 pub use supabase::{

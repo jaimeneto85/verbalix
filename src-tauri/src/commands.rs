@@ -93,10 +93,27 @@ pub(crate) fn accessibility_status(
 }
 
 #[tauri::command]
-pub(crate) fn load_settings(
+pub(crate) async fn load_settings(
     runtime: State<'_, Arc<AppRuntime>>,
 ) -> Result<AppSettings, VerbalixError> {
-    runtime.settings.load()
+    let local = runtime.settings.load()?;
+    let Some(repo) = &runtime.remote_preferences else {
+        return Ok(local);
+    };
+    let session = match runtime.session.load()? {
+        Some(s) => s,
+        None => return Ok(local),
+    };
+    match repo.fetch(&session.access_token).await {
+        Ok(remote) => {
+            let merged = crate::application::merge_preferences(&local, remote);
+            if merged != local {
+                let _ = runtime.settings.save(&merged);
+            }
+            Ok(merged)
+        }
+        Err(_) => Ok(local),
+    }
 }
 
 #[tauri::command]
@@ -113,7 +130,15 @@ pub(crate) fn save_settings(
         .map_err(|_| VerbalixError::LocalFailure)?;
     app.global_shortcut()
         .register(shortcut.as_str())
-        .map_err(|_| VerbalixError::LocalFailure)
+        .map_err(|_| VerbalixError::LocalFailure)?;
+    if let (Some(repo), Ok(Some(session))) = (&runtime.remote_preferences, runtime.session.load()) {
+        let repo = Arc::clone(repo);
+        let settings = settings.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = repo.upsert(&settings, &session.access_token).await;
+        });
+    }
+    Ok(())
 }
 
 #[tauri::command]

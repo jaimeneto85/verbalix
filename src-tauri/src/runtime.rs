@@ -1,7 +1,8 @@
 use crate::{
     application::{
         JsonSettingsRepository, KeychainSessionRepository, PublicBackendConfig,
-        RemoteAuthRepository, RemoteHistoryRepository, RuntimePause, SelectionCoordinator,
+        RemoteAuthRepository, RemoteHistoryRepository, RemotePreferencesRepository, RuntimePause,
+        SelectionCoordinator,
     },
     platform::{MacAccessibility, SystemClipboard, TauriOverlay},
 };
@@ -18,4 +19,5 @@ pub(crate) struct AppRuntime {
     pub auth: Arc<RemoteAuthRepository>,
     pub backend_config: PublicBackendConfig,
     pub pause: RuntimePause,
+    pub remote_preferences: Option<Arc<RemotePreferencesRepository>>,
 }
