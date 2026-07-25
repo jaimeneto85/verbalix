@@ -38,7 +38,7 @@ fn keyboard_focus_epoch_revokes_blocked_write_before_pending_capture_runs() {
     assert!(route_observer_event(
         AccessibilityEvent {
             kind: AccessibilityEventKind::FocusChanged,
-            target: Some(AxElementToken { pid: 42, hash: 7 }),
+            target: Some(AxElementToken::new(42, "editor").unwrap()),
         },
         &actor.causal_epoch(),
         |_, _| panic!("focus events must bypass selection classification"),
@@ -130,7 +130,7 @@ fn selected_change_without_exact_expectation_does_not_wait_for_actor_fifo() {
     assert!(route_observer_event(
         AccessibilityEvent {
             kind: AccessibilityEventKind::SelectedTextChanged,
-            target: Some(AxElementToken { pid: 42, hash: 7 }),
+            target: Some(AxElementToken::new(42, "editor").unwrap()),
         },
         &actor.causal_epoch(),
         |target, generation| actor.observe_selection_change(target, generation),

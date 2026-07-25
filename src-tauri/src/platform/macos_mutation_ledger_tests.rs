@@ -220,6 +220,66 @@ fn indeterminate_restore_reconcile_never_reopens_confirmed() {
 }
 
 #[test]
+fn every_restore_outcome_allows_at_most_one_setter_attempt_per_mutation_id() {
+    for outcome in [
+        MutationStatus::Restored,
+        MutationStatus::RestoreRejected,
+        MutationStatus::RestoreIndeterminate,
+    ] {
+        let selected = snapshot();
+        let receipt = receipt(&selected);
+        let mut ledger = MutationLedger::new(1);
+        ledger
+            .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
+            .unwrap();
+        ledger
+            .terminalize(receipt.id, MutationStatus::Confirmed, 1)
+            .unwrap();
+        let mut setters = 0;
+        if ledger.begin_restore(receipt.id, 2).is_ok() {
+            setters += 1;
+        }
+        ledger.finish_restore(receipt.id, outcome, 3).unwrap();
+        if ledger.begin_restore(receipt.id, 4).is_ok() {
+            setters += 1;
+        }
+        assert_eq!(setters, 1);
+
+        if outcome == MutationStatus::RestoreIndeterminate {
+            ledger
+                .reconcile_restore(receipt.id, MutationStatus::RestoreRejected, 5)
+                .unwrap();
+            assert!(ledger.begin_restore(receipt.id, 6).is_err());
+            assert_eq!(setters, 1);
+        }
+    }
+}
+
+#[test]
+fn rejected_write_and_terminal_restore_states_never_reopen() {
+    let selected = snapshot();
+    let receipt = receipt(&selected);
+    let mut ledger = MutationLedger::new(1);
+    ledger
+        .prepare(receipt.clone(), selected, "after".to_owned(), (), 0)
+        .unwrap();
+    ledger
+        .terminalize(receipt.id, MutationStatus::Rejected, 1)
+        .unwrap();
+
+    for status in [
+        MutationStatus::Indeterminate,
+        MutationStatus::Confirmed,
+        MutationStatus::RestoreIndeterminate,
+        MutationStatus::Restored,
+    ] {
+        let projection = ledger.terminalize(receipt.id, status, 2).unwrap();
+        assert!(projection.status == MutationStatus::Rejected);
+    }
+    assert!(ledger.begin_restore(receipt.id, 3).is_err());
+}
+
+#[test]
 fn mutation_record_source_stays_actor_private_and_non_serializable() {
     let source = include_str!("macos_mutation_ledger.rs");
     let record = &source[source

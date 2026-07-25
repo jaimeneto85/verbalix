@@ -91,21 +91,27 @@ mod tests {
 
     #[test]
     fn secure_transition_rejects_before_the_content_reader() {
-        let reads = Cell::new(0);
-        let secure = macos_text_role::validate(
-            "AXTextField".to_owned(),
-            Some("AXSecureTextField".to_owned()),
-        );
+        for _reader in [
+            SelectionExtractionStrategy::SelectedText,
+            SelectionExtractionStrategy::StringForRange,
+            SelectionExtractionStrategy::ValueRange,
+            SelectionExtractionStrategy::TextMarker,
+        ] {
+            let reads = Cell::new(0);
+            let secure = macos_text_role::validate(
+                "AXTextField".to_owned(),
+                Some("AXSecureTextField".to_owned()),
+            );
+            let result = secure.and_then(|role| {
+                read_authorized(role, || {
+                    reads.set(reads.get() + 1);
+                    Ok(())
+                })
+            });
 
-        let result = secure.and_then(|role| {
-            read_authorized(role, || {
-                reads.set(reads.get() + 1);
-                Ok(())
-            })
-        });
-
-        assert!(matches!(result, Err(VerbalixError::ProtectedField)));
-        assert_eq!(reads.get(), 0);
+            assert!(matches!(result, Err(VerbalixError::ProtectedField)));
+            assert_eq!(reads.get(), 0);
+        }
     }
 
     #[test]

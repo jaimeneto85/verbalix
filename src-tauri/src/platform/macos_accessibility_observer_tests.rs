@@ -1,9 +1,9 @@
 use super::*;
-use crate::platform::macos_ax::AxElementToken;
+use crate::platform::macos_element_token::AxElementToken;
 use std::cell::Cell;
 
 fn token(hash: usize) -> AxElementToken {
-    AxElementToken { pid: 42, hash }
+    AxElementToken::new(42, &format!("editor-{hash}")).unwrap()
 }
 
 fn event(kind: AccessibilityEventKind, target: Option<AxElementToken>) -> AccessibilityEvent {
