@@ -166,9 +166,7 @@ fn restore_indeterminate_reconciled_as_confirmed_expires_after_terminal_ttl() {
     assert!(ledger
         .projection(receipt.id, 3 + TERMINAL_TTL_MS - 1)
         .is_some());
-    assert!(ledger
-        .projection(receipt.id, 3 + TERMINAL_TTL_MS)
-        .is_none());
+    assert!(ledger.projection(receipt.id, 3 + TERMINAL_TTL_MS).is_none());
 }
 
 #[test]

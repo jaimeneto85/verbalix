@@ -45,6 +45,10 @@ describe("macOS value-range privacy and write contract", () => {
       selection.indexOf("pub(super) fn capture("),
       selection.indexOf("pub(super) fn capture_with_strategy")
     );
+    const strategyCapture = selection.slice(
+      selection.indexOf("pub(super) fn capture_with_strategy"),
+      selection.indexOf("fn snapshot(")
+    );
 
     const roleRead = capture.indexOf("let validated_role = text_role(element.as_ref())?");
     const identityRead = capture.indexOf("element_identity(element.as_ref()");
@@ -52,6 +56,12 @@ describe("macOS value-range privacy and write contract", () => {
     expect(roleRead).toBeGreaterThan(-1);
     expect(identityRead).toBeGreaterThan(roleRead);
     expect(extraction).toBeGreaterThan(identityRead);
+    expect(strategyCapture.indexOf("text_role(element.as_ref())")).toBeLessThan(
+      strategyCapture.indexOf("element_identity(element.as_ref()")
+    );
+    expect(strategyCapture.indexOf("text_role(element.as_ref())")).toBeLessThan(
+      strategyCapture.indexOf("extract_for_strategy(")
+    );
     expect(textRole).toContain('role == "AXSecureTextField"');
     expect(textRole).toContain(
       'subrole.as_deref() == Some("AXSecureTextField")'
