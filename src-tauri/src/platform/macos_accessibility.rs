@@ -92,7 +92,7 @@ impl SelectionPort for MacAccessibility {
         transformed_text: &str,
     ) -> Result<(), VerbalixError> {
         self.actor
-            .restore(expected, transformed_text, None)
+            .restore(uuid::Uuid::new_v4(), expected, transformed_text, None)
             .map(|_| ())
     }
 
@@ -102,8 +102,23 @@ impl SelectionPort for MacAccessibility {
         transformed_text: &str,
         lease: &PublicationGuard,
     ) -> Result<MutationReceipt, VerbalixError> {
+        self.actor.restore(
+            uuid::Uuid::new_v4(),
+            expected,
+            transformed_text,
+            Some(lease.clone()),
+        )
+    }
+
+    fn restore_guarded_with_id(
+        &self,
+        expected: &SelectionSnapshot,
+        transformed_text: &str,
+        lease: &PublicationGuard,
+        mutation_id: uuid::Uuid,
+    ) -> Result<MutationReceipt, VerbalixError> {
         self.actor
-            .restore(expected, transformed_text, Some(lease.clone()))
+            .restore(mutation_id, expected, transformed_text, Some(lease.clone()))
     }
 
     fn discard_snapshot(&self, snapshot_id: uuid::Uuid) {

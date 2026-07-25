@@ -14,6 +14,10 @@ pub enum MutationStatus {
     Confirmed,
     Rejected,
     Indeterminate,
+    RestorePrepared,
+    Restored,
+    RestoreRejected,
+    RestoreIndeterminate,
 }
 
 #[derive(Clone)]

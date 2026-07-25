@@ -48,6 +48,15 @@ pub trait SelectionPort: Send + Sync {
             request_id: lease.request_id(),
         })
     }
+    fn restore_guarded_with_id(
+        &self,
+        expected: &SelectionSnapshot,
+        transformed_text: &str,
+        lease: &PublicationGuard,
+        _mutation_id: uuid::Uuid,
+    ) -> Result<MutationReceipt, VerbalixError> {
+        self.restore_guarded(expected, transformed_text, lease)
+    }
     fn restore(
         &self,
         expected: &SelectionSnapshot,

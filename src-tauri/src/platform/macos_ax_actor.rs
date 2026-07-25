@@ -22,6 +22,7 @@ enum Command {
         response: mpsc::Sender<Result<MutationReceipt, VerbalixError>>,
     },
     Restore {
+        mutation_id: Uuid,
         expected: SelectionSnapshot,
         transformed: String,
         lease: Option<PublicationGuard>,
@@ -74,12 +75,14 @@ impl AxActor {
                         let _ = response.send(state.replace(receipt, expected, text, lease));
                     }
                     Command::Restore {
+                        mutation_id,
                         expected,
                         transformed,
                         lease,
                         response,
                     } => {
-                        let _ = response.send(state.restore(expected, transformed, lease));
+                        let _ =
+                            response.send(state.restore(mutation_id, expected, transformed, lease));
                     }
                     Command::Discard(id) => {
                         state.discard(id);
@@ -164,11 +167,13 @@ impl AxActor {
 
     pub(super) fn restore(
         &self,
+        mutation_id: Uuid,
         expected: &SelectionSnapshot,
         transformed: &str,
         lease: Option<PublicationGuard>,
     ) -> Result<MutationReceipt, VerbalixError> {
         self.request(|response| Command::Restore {
+            mutation_id,
             expected: expected.clone(),
             transformed: transformed.to_owned(),
             lease,

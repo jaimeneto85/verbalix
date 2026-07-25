@@ -268,3 +268,28 @@ fn candidate_after_write_claim_cannot_be_overwritten_by_applied_or_undo() {
     let receipt_id = selection.receipts.lock().unwrap()[0].id;
     assert!(coordinator.mutation_journal.contains(receipt_id));
 }
+
+#[test]
+fn confirmed_write_keeps_receipt_when_applied_commit_fails() {
+    let (coordinator, selection, _overlay, captured) = ready_blocked(GatePoint::AfterClaim);
+    let input = request();
+    coordinator
+        .begin_transform(captured.id, input.request_id)
+        .unwrap();
+    let running = spawn_transform(coordinator.clone(), captured, input);
+    selection.wait_until_entered();
+
+    let poisoned = coordinator.clone();
+    assert!(thread::spawn(move || {
+        let _state = poisoned.state.lock().unwrap();
+        panic!("deterministic commit failure");
+    })
+    .join()
+    .is_err());
+    selection.release();
+
+    running.join().unwrap().unwrap();
+    assert_eq!(selection.writes.lock().unwrap().len(), 1);
+    let receipt_id = selection.receipts.lock().unwrap()[0].id;
+    assert!(coordinator.mutation_journal.contains(receipt_id));
+}

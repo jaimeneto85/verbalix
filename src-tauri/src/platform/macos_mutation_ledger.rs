@@ -106,6 +106,25 @@ impl<T> MutationLedger<T> {
         Ok(record.projection.clone())
     }
 
+    pub(super) fn set_status(
+        &mut self,
+        id: Uuid,
+        status: MutationStatus,
+        now_ms: u64,
+    ) -> Result<MutationProjection, VerbalixError> {
+        let record = self
+            .records
+            .get_mut(&id)
+            .ok_or(VerbalixError::StaleSelection)?;
+        record.projection.status = status;
+        record.terminal_at = matches!(
+            status,
+            MutationStatus::Restored | MutationStatus::RestoreRejected
+        )
+        .then_some(now_ms);
+        Ok(record.projection.clone())
+    }
+
     pub(super) fn projection(&mut self, id: Uuid, now_ms: u64) -> Option<MutationProjection> {
         self.prune(now_ms);
         self.records

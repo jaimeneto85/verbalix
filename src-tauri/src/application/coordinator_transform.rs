@@ -165,8 +165,12 @@ impl SelectionCoordinator {
                     && record.transformed_text == transformed_text
             })
             .ok_or(VerbalixError::StaleSelection)?;
-        self.selection
-            .restore_guarded(&snapshot, transformed_text, &mutation.undo_lease)?;
+        self.selection.restore_guarded_with_id(
+            &snapshot,
+            transformed_text,
+            &mutation.undo_lease,
+            mutation_id,
+        )?;
         self.mutation_journal.mark_restored(mutation_id);
         if self.commit_undo(&snapshot, transformed_text, &mutation.undo_lease)?
             && self.overlay.hide_all().is_err()

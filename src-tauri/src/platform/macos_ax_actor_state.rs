@@ -115,30 +115,56 @@ impl ActorState {
 
     pub(super) fn restore(
         &mut self,
+        mutation_id: Uuid,
         expected: SelectionSnapshot,
         transformed: String,
         lease: Option<PublicationGuard>,
     ) -> Result<MutationReceipt, VerbalixError> {
-        let now = self.now();
-        let target = self
-            .targets
-            .get(expected.id, now)
+        let (projection, target) = self
+            .mutations
+            .get_mut(mutation_id)
+            .map(|record| (record.projection.clone(), record.target.clone()))
             .ok_or(VerbalixError::StaleSelection)?;
+        if projection.status == MutationStatus::Restored {
+            return Ok(projection.receipt);
+        }
+        if !matches!(
+            projection.status,
+            MutationStatus::Confirmed | MutationStatus::RestoreIndeterminate
+        ) || !projection.snapshot.same_target(&expected)
+            || projection.transformed_text != transformed
+        {
+            return Err(VerbalixError::StaleSelection);
+        }
+        let boundary_epoch = self.epoch.current();
         macos_restore::prepare_on_element(
             &expected,
             &transformed,
             &target.element,
             has_no_identifier(&expected),
         )?;
-        ensure_current(&self.epoch, target.epoch)?;
-        let receipt = receipt(&expected, claim(&lease)?);
-        ensure_current(&self.epoch, target.epoch)?;
+        self.mutations
+            .set_status(mutation_id, MutationStatus::RestorePrepared, self.now())?;
+        ensure_current(&self.epoch, boundary_epoch)?;
+        let request_id = claim(&lease)?;
+        if request_id != projection.receipt.request_id
+            || ensure_current(&self.epoch, boundary_epoch).is_err()
+        {
+            self.mutations
+                .set_status(mutation_id, MutationStatus::RestoreRejected, self.now())?;
+            return Err(VerbalixError::StaleSelection);
+        }
         let result = macos_restore::write_on_element(&expected, target.element.as_ref().as_ref());
-        let result = result.map(|_| receipt);
+        let status = if result.is_ok() {
+            MutationStatus::Restored
+        } else {
+            MutationStatus::RestoreIndeterminate
+        };
+        self.mutations.set_status(mutation_id, status, self.now())?;
         if result.is_ok() {
             self.targets.remove(expected.id);
         }
-        result
+        result.map(|_| projection.receipt)
     }
 
     pub(super) fn discard(&mut self, id: Uuid) {
@@ -188,9 +214,13 @@ impl ActorState {
 fn projection_result(projection: MutationProjection) -> Result<MutationReceipt, VerbalixError> {
     match projection.status {
         MutationStatus::Confirmed => Ok(projection.receipt),
-        MutationStatus::Prepared | MutationStatus::Rejected | MutationStatus::Indeterminate => {
-            Err(VerbalixError::LocalFailure)
-        }
+        MutationStatus::Prepared
+        | MutationStatus::Rejected
+        | MutationStatus::Indeterminate
+        | MutationStatus::RestorePrepared
+        | MutationStatus::Restored
+        | MutationStatus::RestoreRejected
+        | MutationStatus::RestoreIndeterminate => Err(VerbalixError::LocalFailure),
     }
 }
 
@@ -209,14 +239,6 @@ fn has_no_identifier(snapshot: &SelectionSnapshot) -> bool {
         .is_none()
 }
 
-fn receipt(snapshot: &SelectionSnapshot, request_id: Uuid) -> MutationReceipt {
-    MutationReceipt {
-        id: Uuid::new_v4(),
-        snapshot_id: snapshot.id,
-        request_id,
-    }
-}
-
 fn claim(lease: &Option<PublicationGuard>) -> Result<Uuid, VerbalixError> {
     match lease {
         Some(lease) if lease.try_claim_write() => Ok(lease.request_id()),
@@ -226,81 +248,5 @@ fn claim(lease: &Option<PublicationGuard>) -> Result<Uuid, VerbalixError> {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn missing_causal_handle_has_no_focus_or_identity_fallback() {
-        let source = include_str!("macos_ax_actor_state.rs");
-        assert!(
-            !source.contains(concat!("focused_element_for_", "pid")),
-            "an absent or expired causal handle must fail before re-resolving an AX element"
-        );
-    }
-
-    #[test]
-    fn unresolved_write_is_retained_as_indeterminate() {
-        let source = include_str!("macos_ax_actor_state.rs");
-        assert!(source.contains("MutationStatus::Indeterminate"));
-    }
-
-    #[test]
-    fn replay_is_resolved_from_ledger_before_ax_preparation() {
-        let source = include_str!("macos_ax_actor_state.rs");
-        let replace = &source[source
-            .find("pub(super) fn replace(")
-            .expect("replace boundary")
-            ..source
-                .find("pub(super) fn restore(")
-                .expect("restore boundary")];
-        let replay_lookup = replace
-            .find("self.mutations")
-            .expect("mutation ledger lookup");
-        let ax_preparation = replace
-            .find("macos_replace::prepare_on_element")
-            .expect("AX preparation");
-
-        assert!(
-            replay_lookup < ax_preparation,
-            "matching mutation IDs must resolve before any AX revalidation or setter path"
-        );
-    }
-
-    #[test]
-    fn indeterminate_reconcile_requires_exact_utf16_range_length() {
-        let source = include_str!("macos_ax_actor_state.rs");
-        let reconcile = &source[source
-            .find("pub(super) fn reconcile(")
-            .expect("reconcile boundary")
-            ..source.find("fn now(").expect("clock boundary")];
-
-        assert!(reconcile.contains("current.range.location"));
-        assert!(
-            reconcile.contains("current.range.length"),
-            "text and location alone cannot confirm the exact selected range"
-        );
-    }
-
-    #[test]
-    fn restore_is_idempotent_under_a_caller_preallocated_mutation_id() {
-        let actor = include_str!("macos_ax_actor.rs");
-        let restore_command = &actor[actor
-            .find("Restore {")
-            .expect("restore command")..actor
-            .find("Discard(")
-            .expect("discard command")];
-        let state = include_str!("macos_ax_actor_state.rs");
-        let restore = &state[state
-            .find("pub(super) fn restore(")
-            .expect("restore boundary")..state
-            .find("pub(super) fn discard(")
-            .expect("discard boundary")];
-
-        assert!(
-            restore_command.contains("mutation_id"),
-            "restore retries need the caller's stable mutation ID"
-        );
-        assert!(
-            restore.contains("self.mutations"),
-            "restore must reconcile an existing terminal outcome before repeating a setter"
-        );
-    }
-}
+#[path = "macos_ax_actor_state_tests.rs"]
+mod tests;
