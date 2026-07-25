@@ -244,8 +244,8 @@
 - [x] T3.18 `[CRITICAL]` Cobrir secure subrole real com trace zero-read e constantes compatíveis com SDK.
 - [x] T3.19 `[HIGH]` Cobrir scheduler actor end-to-end: preparação bloqueada, sinal B fora da FIFO, capture B pendente, zero setter A.
 - [x] T3.20 `[HIGH]` Cobrir mutation recovery completo em perda de response, expiry durante setter, commit failure, reconcile repetido e Candidate B preservado.
-- [ ] T3.21 `[HIGH]` Cobrir behavioralmente focus keyboard, self-notification versus external notification e zero setter stale.
-- [ ] T3.22 `[HIGH]` Cobrir restore setter count, estados monotônicos e secure transition zero-read com fakes instrumentados; `include_str!` não satisfaz.
+- [x] T3.21 `[HIGH]` Cobrir behavioralmente focus keyboard, self-notification versus external notification e zero setter stale.
+- [x] T3.22 `[HIGH]` Cobrir restore setter count, estados monotônicos e secure transition zero-read com fakes instrumentados; `include_str!` não satisfaz.
 
 ### Fase 4 — QA real
 

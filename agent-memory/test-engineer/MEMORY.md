@@ -47,6 +47,10 @@
 - O scheduler AX precisa de teste com o worker real: bloquear A no boundary anterior ao claim, avançar a epoch causal fora da FIFO, confirmar que Capture B fica pendente na fila, liberar A e exigir zero setter de A antes de B executar.
 - Recovery de mutation ledger é uma state machine persistente: o payload completo nasce em `Prepared` antes do setter; replay usa o mesmo ID; `Indeterminate` e `RestoreIndeterminate` reconciliam por leitura; estados reconciliados terminais recebem timestamp para TTL, ou o ledger fica permanentemente ocupado.
 - Commit failure depois de setter confirmado não pode apagar o receipt. O teste deve envenenar o commit de estado depois do claim, exigir uma única escrita e confirmar que o journal ainda permite reconciliação/undo exato.
+- Eventos AX causais usam o roteador real com o actor bloqueado: `FocusChanged` e `SelectedTextChanged` sem expectativa exata incrementam o epoch antes de uma `Capture` pendente e mantêm o setter anterior em zero.
+- Supressão de self-notification é one-shot por mutation ID, alvo forte, geração, ledger e seleção atual. O token usa PID + `AXIdentifier` completo após role+subrole; sem identifier, a supressão não é armada e o evento falha seguro como externo.
+- Restore exige matriz de estados do ledger: cada outcome permite no máximo um `begin_restore`, estados terminais nunca reabrem e reconcile de `RestoreIndeterminate` permanece somente leitura.
+- Todo reader de reconciliação passa pelo gate central role+subrole; a matriz de estratégias exige zero leitor de conteúdo após transição para `AXSecureTextField`.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -67,7 +71,7 @@
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 186 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, permits visuais reutilizáveis por ação, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX, fallback geométrico, matriz UTF-16/ValueRange, role+subrole secure, scheduler AX causal, mutation ledger idempotente e receipt exato.
+- A suíte Rust possui 199 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, revogação AX fora da FIFO, correlação one-shot forte, restore monotônico, secure zero-read, histórico detached e receipt exato.
 - O frontend possui 55 testes Vitest com 100% de statements, branches, functions e lines no escopo instrumentado; os 6 testes Playwright continuam verdes.
 
 ## Observações
