@@ -1,9 +1,7 @@
 # Plano — Corrigir ações Traduzir e Aprimorar
 
 ## 0. SCOPE
-
 ### Incluído
-
 - [x] Reproduzir e instrumentar a cadeia `overlay click → IPC Tauri → transformação autenticada → coordinator → escrita AX`.
 - [x] Corrigir Traduzir e Aprimorar para enviarem a operação correta.
 - [x] Restaurar a substituição do texto selecionado quando o conteúdo for editável.
@@ -12,28 +10,23 @@
 - [ ] Validar em app macOS real com Accessibility e backend configurado.
 
 ### Arquivos/módulos potencialmente afetados
-
 - `src/Overlay.tsx`, `src/native.ts`, comandos Tauri e testes de overlay/IPC.
 - `src-tauri/src/application/coordinator.rs`, runtime e respectivos testes.
 - `src-tauri/src/platform/macos_accessibility*.rs`, testes de replace/identidade e diagnósticos sanitizados necessários.
 
 ### Dependências diretas
-
 - Tauri IPC, React, Supabase Auth/Edge Function e Accessibility API do macOS.
 
 ### Fora do escopo
-
 - Alterar prompts, modelo de IA, UI visual do overlay ou geometria já aprovada.
 - Afrouxar validações de identidade/staleness para forçar a escrita.
 - Merge em `main`, geração de release, mudanças na Edge Function ou no contrato público sem evidência de necessidade.
 
 ### Riscos de impacto
-
 - Corrigir o clique sem corrigir a revalidação AX pode produzir sucesso aparente ou escrita stale após a seleção mudar.
 - O overlay pode invalidar a seleção; Traduzir e Aprimorar exigem cobertura independente e smoke real além dos mocks.
 
 ## 1. REQUIREMENTS
-
 ### Requisitos funcionais
 
 - [ ] RF01: Clicar em Traduzir invoca exatamente uma transformação `translate`.
@@ -74,8 +67,8 @@
 - [x] RF36: Replay/reconcile de restore valida mutation ID, snapshot, texto e lease antes de qualquer early return idempotente ou transição.
 - [x] RF37: Replace/Restore armam self-notification antes do check causal final; epoch é revalidado dentro do boundary imediatamente anterior ao setter.
 - [x] RF38: Lookup/replay terminal aplica prune/TTL antes de qualquer early return idempotente.
-- [ ] RF39: Expectativa self tem fase atômica `ArmedBeforeWrite → InSetter`; evento Selected em Armed é sempre externo e bumpa epoch fora da FIFO.
-- [ ] RF40: Attribute/value CF são pré-alocados antes do boundary; CAS/check causal é a última operação antes de `AXUIElementSetAttributeValue`.
+- [x] RF39: Expectativa self tem fase atômica `ArmedBeforeWrite → InSetter`; evento Selected em Armed é sempre externo e bumpa epoch fora da FIFO.
+- [x] RF40: Attribute/value CF são pré-alocados antes do boundary; CAS/check causal é a última operação antes de `AXUIElementSetAttributeValue`.
 
 ### Requisitos não funcionais
 
@@ -242,7 +235,7 @@
 - [x] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
 - [x] T2.28 `[CRITICAL]` Ancorar restore no target epoch e mover validação de correlação antes de todos os early returns/reconcile.
 - [x] T2.29 `[CRITICAL]` Integrar epoch check ao write boundary pós-arm e aplicar TTL antes do replay lookup.
-- [ ] T2.30 `[CRITICAL]` Fasear expectation e pré-alocar CF payload, movendo CAS/check final ao FFI setter.
+- [x] T2.30 `[CRITICAL]` Fasear expectation e pré-alocar CF payload, movendo CAS/check final ao FFI setter.
 
 ### Fase 3 — Testes
 
