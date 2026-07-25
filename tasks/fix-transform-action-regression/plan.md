@@ -70,6 +70,10 @@
 - [ ] RF27: Notificação `AXSelectedTextChanged` causada pelo próprio mutation ID é correlacionada/suprimida sem esconder mudanças externas reais.
 - [ ] RF28: Estados de restore são monotônicos e tipados; `Rejected` nunca vira `Indeterminate/Confirmed` e o mesmo mutation ID executa no máximo um restore setter.
 - [ ] RF29: Toda leitura de reconciliação revalida `AXRole + AXSubrole` antes de conteúdo, inclusive em handles retidos que mudaram para secure.
+- [ ] RF30: `AXIdentifier` permanece identidade nativa interna e nunca aparece em serde/IPC, Debug ou logs de `SelectionSnapshot`/`SelectionElementIdentity`.
+- [ ] RF31: FocusChanged/Destroyed incrementam epoch antes de qualquer token/AX metadata I/O; somente SelectedTextChanged candidato pode construir token.
+- [ ] RF32: Replace/Restore revalidam `AXRole + AXSubrole` no handle retido imediatamente no boundary do setter, depois de ledger/claim/epoch.
+- [ ] RF33: A API de terminalização aceita outcome tipado exclusivo de replace; estados restore/Prepared semanticamente inválidos são rejeitados sem mutar status/TTL.
 
 ### Requisitos não funcionais
 
@@ -109,6 +113,10 @@
 - [ ] CA27: Self-notification exata mantém Applied/undo/feedback; notificação externa subsequente cancela normalmente.
 - [ ] CA28: Restore Rejected/Indeterminate/Confirmed e retry/reconcile provam setter count máximo 1 por mutation ID.
 - [ ] CA29: Handle que muda para secure antes de reconcile produz trace zero-read e terminal Rejected.
+- [ ] CA30: Teste comportamental serde/IPC e Debug prova ausência de AXIdentifier, mantendo comparação nativa interna.
+- [ ] CA31: Callback FFI-classifier instrumentado prova Focus/Destroyed zero token reads e bump anterior ao callback; Selected sem expectativa também bumpa sem metadata.
+- [ ] CA32: Teste actor/retained-handle muda subrole para secure depois de prepare e antes de setter, exigindo zero setter e terminal Rejected.
+- [ ] CA33: Matriz de terminalização inválida mantém status e TTL byte-for-byte; outcomes válidos continuam idempotentes.
 
 ### Edge cases
 
@@ -177,6 +185,10 @@
 - Focus change deve ser observado no nível apropriado fora da fila de writes; seleção e foco são sinais causais distintos.
 - Supressão de self-notification é por mutation ID/target/generation e consumo único; janela temporal ou supressão global é proibida.
 - Restore e reconcile usam a mesma máquina monotônica e o secure gate compartilhado; nenhum caminho de recuperação pode reler conteúdo diretamente.
+- Identidade serializável contém apenas metadados não sensíveis; o identifier forte fica em token/registry nativo não serializável e Debug redigido.
+- O callback classifica primeiro pelo nome da notificação. Focus/Destroyed e Selected sem expectativa não executam qualquer leitura AX auxiliar antes do bump.
+- O último passo anterior ao setter é o secure gate no mesmo handle retido; nenhuma operação falível ou yield separa esse gate do setter.
+- Terminalização expõe enums distintos de replace/restore, tornando transições cruzadas não representáveis na API pública do ledger.
 - Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
@@ -221,6 +233,9 @@
 - [ ] T2.21 `[HIGH]` Observar focus-changed fora da FIFO e integrar ao CausalEpoch sem depender do polling.
 - [ ] T2.22 `[HIGH]` Correlacionar self-notification ao mutation record e consumir exatamente uma notificação esperada.
 - [ ] T2.23 `[HIGH]` Tornar restore terminal monotônico/idempotente e compartilhar secure-gated revalidation no reconcile.
+- [ ] T2.24 `[HIGH]` Remover AXIdentifier de serde/IPC/Debug mantendo-o no registry/token nativo interno.
+- [ ] T2.25 `[HIGH]` Refatorar callback observer para fast-path Focus/Destroyed/Selected-sem-expectativa antes de token reads.
+- [ ] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
 
 ### Fase 3 — Testes
 
@@ -246,6 +261,7 @@
 - [x] T3.20 `[HIGH]` Cobrir mutation recovery completo em perda de response, expiry durante setter, commit failure, reconcile repetido e Candidate B preservado.
 - [x] T3.21 `[HIGH]` Cobrir behavioralmente focus keyboard, self-notification versus external notification e zero setter stale.
 - [x] T3.22 `[HIGH]` Cobrir restore setter count, estados monotônicos e secure transition zero-read com fakes instrumentados; `include_str!` não satisfaz.
+- [ ] T3.23 `[HIGH]` Cobrir behavioralmente serde/IPC redaction, callback pre-I/O ordering, secure-after-prepare actor path e invalid terminal outcomes/status/TTL.
 
 ### Fase 4 — QA real
 
@@ -276,6 +292,7 @@
 - O QA RF16 encontrou que a allowlist era aplicada tarde, que o handle causal não sobrevivia à captura e que o commit lógico ocorria depois do setter sem receipt independente; RF20–RF22 tornam esses pontos gates explícitos.
 - O QA RF20 mostrou que secure é subrole, que Capture e Replace na mesma FIFO ainda atrasam latest-wins e que IDs pré-setter sem payload completo não permitem recovery; RF23–RF25 fecham esses três pontos.
 - O QA RF23 mostrou ausência de focus notification, autocancelamento por self-notification, restore não monotônico e reconcile sem secure gate; RF26–RF29 tornam os quatro comportamentos verificáveis.
+- O QA RF26 mostrou identifier no DTO, bump posterior a token reads, secure race no setter e terminalização permissiva; RF30–RF33 fecham esses boundaries reais.
 
 ### 🟢 Oportunidades incorporadas
 

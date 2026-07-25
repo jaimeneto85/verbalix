@@ -32,6 +32,10 @@
 - A criação de overlay é transacional: falha depois do build invalida a geração e destrói a janela, com hide diagnosticado como fallback.
 - Publicação visual guardada precisa separar a lifetime cancelável da ação de um permit single-use por comando. Um claim único na lifetime bloqueia feedbacks sequenciais legítimos como Preview → erro de Apply.
 - O boundary visual correto é `prepare → claim do permit → emit/show`: cancelamento durante preparação vence com zero efeito; cancelamento depois do claim lineariza `publish → hide` e termina oculto.
+- `AXSecureTextField` é subrole. Gates de privacidade precisam classificar `AXRole + AXSubrole` antes de identifier, bounds, settable, token ou qualquer leitura de conteúdo, inclusive no último boundary do setter e em reconcile.
+- Eventos de foco/destruição precisam revogar a geração antes de qualquer leitura AX auxiliar. Eventos de seleção própria exigem correlação one-shot forte; ausência ou mismatch deve falhar como evento externo imediatamente.
+- AXIdentifier é identidade causal interna e não pertence a DTO/serde/IPC/Debug. Redigir somente o token não basta se o snapshot ainda serializa a mesma informação.
+- Mutation ledgers devem expor outcomes tipados por operação; uma API genérica de terminalização permite transições cruzadas inválidas mesmo quando os callers atuais parecem corretos.
 
 ## Aprendizados de QA
 - A matriz de compatibilidade precisa cobrir seleção por mouse e teclado, campos editáveis e somente leitura, múltiplos monitores e conteúdo Unicode.
