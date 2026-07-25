@@ -23,7 +23,6 @@ extern "C" {
     fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> Boolean;
     static kAXTrustedCheckOptionPrompt: CFStringRef;
     fn AXUIElementCreateSystemWide() -> AXUIElementRef;
-    fn AXUIElementCreateApplication(pid: i32) -> AXUIElementRef;
     fn AXUIElementGetTypeID() -> usize;
     fn AXUIElementCopyAttributeValue(
         element: AXUIElementRef,
@@ -120,27 +119,6 @@ pub(super) fn focused_element() -> Result<OwnedAxElement, AxFailure> {
         origin,
     )?
     .into_ax_element(AxStage::SystemWideFocusedElement, origin)
-}
-
-pub(super) fn focused_element_for_pid(pid: i32) -> Result<OwnedAxElement, AxFailure> {
-    if pid <= 0 {
-        return Err(AxFailure::new(
-            AxStage::SystemWideFocusedElement,
-            AxCategory::InvalidPid,
-        ));
-    }
-    let application = unsafe { AXUIElementCreateApplication(pid) };
-    let application = OwnedAxElement::from_created(application, AxStage::SystemWideFocusedElement)?;
-    attribute(
-        application.as_ref(),
-        "AXFocusedUIElement",
-        AxStage::SystemWideFocusedElement,
-        ExtractionOrigin::SelectedText,
-    )?
-    .into_ax_element(
-        AxStage::SystemWideFocusedElement,
-        ExtractionOrigin::SelectedText,
-    )
 }
 
 pub(super) fn attribute(

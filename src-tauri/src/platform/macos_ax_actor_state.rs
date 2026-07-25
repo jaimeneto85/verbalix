@@ -55,7 +55,6 @@ impl ActorState {
         text: String,
         lease: Option<PublicationGuard>,
     ) -> Result<MutationReceipt, VerbalixError> {
-        self.ensure_target(&expected)?;
         let causal = has_no_identifier(&expected);
         let now = self.now();
         let target = self
@@ -116,20 +115,6 @@ impl ActorState {
 
     fn now(&self) -> u64 {
         self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
-    }
-
-    fn ensure_target(&mut self, expected: &SelectionSnapshot) -> Result<(), VerbalixError> {
-        let now = self.now();
-        if self.targets.get(expected.id, now).is_some() {
-            return Ok(());
-        }
-        if has_no_identifier(expected) {
-            return Err(VerbalixError::StaleSelection);
-        }
-        let element = macos_ax::focused_element_for_pid(expected.pid)
-            .map_err(|_| VerbalixError::StaleSelection)?;
-        self.targets.insert(expected.id, element, now);
-        Ok(())
     }
 
     fn finish_receipt(
