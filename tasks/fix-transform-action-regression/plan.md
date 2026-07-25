@@ -239,7 +239,7 @@
 - [ ] T2.24 `[HIGH]` Remover AXIdentifier de serde/IPC/Debug mantendo-o no registry/token nativo interno.
 - [ ] T2.25 `[HIGH]` Refatorar callback observer para fast-path Focus/Destroyed/Selected-sem-expectativa antes de token reads.
 - [ ] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
-- [ ] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
+- [x] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
 
 ### Fase 3 — Testes
 
