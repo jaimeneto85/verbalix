@@ -137,7 +137,7 @@ describe("macOS bundle smoke contract", () => {
       "macos_selection::capture_with_strategy(element, expected.extraction_strategy)?"
     );
     const setter = replacement.indexOf(
-      "macos_write_boundary::set_selected_text(expected, text, element)",
+      "macos_write_boundary::set_selected_text(expected, text, element, authorization)",
       recapture
     );
     const roleGate = writeBoundary.indexOf("macos_selection::text_role(element)");
