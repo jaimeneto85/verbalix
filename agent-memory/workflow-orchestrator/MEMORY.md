@@ -66,4 +66,5 @@
 - A promessa do produto é mensurável na matriz de aplicativos suportados e best-effort nos demais; não existe evento universal de seleção no macOS.
 - O código do MVP recebeu verdict final `APPROVED`; T5.4 e T5.5 permanecem gates manuais de pré-release.
 - RF42 foi aprovado: todos os sinais causais cancelam `Armed|Authorizing` antes do bump; writer-wins preserva `InSetter|Committed`. Gates: Rust 229/229, Vitest 55/55, Playwright 6/6, Deno 38/38 e limite de 300 linhas.
+- Ao limpar worktrees, auditar novamente imediatamente antes da remoção: arquivos não rastreados podem surgir depois da auditoria inicial. Preservar trabalho incompleto em bundle/cópia fora do repositório antes de excluir branch ou usar `--force`.
 - Os masters da marca vivem em `branding/`; ícones derivados para targets Tauri vivem em `src-tauri/icons/`.
