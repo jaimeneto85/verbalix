@@ -46,16 +46,38 @@ describe("macOS value-range privacy and write contract", () => {
       selection.indexOf("pub(super) fn capture_with_strategy")
     );
 
-    const roleRead = capture.indexOf("let role = role(element.as_ref())?");
-    const roleGate = capture.indexOf("macos_text_role::validate(&role)?");
+    const roleRead = capture.indexOf("let validated_role = text_role(element.as_ref())?");
     const identityRead = capture.indexOf("element_identity(element.as_ref()");
-    const extraction = capture.indexOf("extract(element.as_ref(), &role, capability)?");
+    const extraction = capture.indexOf("let extracted = extract(");
     expect(roleRead).toBeGreaterThan(-1);
-    expect(roleGate).toBeGreaterThan(roleRead);
-    expect(identityRead).toBeGreaterThan(roleGate);
+    expect(identityRead).toBeGreaterThan(roleRead);
     expect(extraction).toBeGreaterThan(identityRead);
     expect(textRole).toContain('role == "AXSecureTextField"');
+    expect(textRole).toContain(
+      'subrole.as_deref() == Some("AXSecureTextField")'
+    );
     expect(textRole).toContain('"AXButton"');
+    const roleBoundary = selection.slice(
+      selection.indexOf("pub(super) fn text_role("),
+      selection.indexOf("fn extract(")
+    );
+    expect(roleBoundary.indexOf('"AXRole"')).toBeLessThan(
+      roleBoundary.indexOf('"AXSubrole"')
+    );
+    expect(roleBoundary.indexOf('"AXSubrole"')).toBeLessThan(
+      roleBoundary.indexOf("macos_text_role::validate(role, subrole)")
+    );
+    for (const forbidden of [
+      "AXIdentifier",
+      "selected_text_writable",
+      "AXSelectedText",
+      "AXSelectedTextRange",
+      "AXValue",
+      "marker_selection",
+      "element_frame",
+    ]) {
+      expect(roleBoundary).not.toContain(forbidden);
+    }
     const valueFallback = selection.slice(
       selection.indexOf("fn extract("),
       selection.indexOf("fn extract_for_strategy")
@@ -71,6 +93,12 @@ describe("macOS value-range privacy and write contract", () => {
     );
     expect(restore).toContain(
       "current.strategy != expected.extraction_strategy"
+    );
+    expect(restore.indexOf("macos_selection::text_role")).toBeLessThan(
+      restore.indexOf("macos_selection::element_identity")
+    );
+    expect(restore.indexOf("macos_selection::text_role")).toBeLessThan(
+      restore.indexOf("selected_text_writable")
     );
   });
 });

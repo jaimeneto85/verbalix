@@ -238,4 +238,41 @@ mod tests {
         let source = include_str!("macos_ax_actor_state.rs");
         assert!(source.contains("MutationStatus::Indeterminate"));
     }
+
+    #[test]
+    fn replay_is_resolved_from_ledger_before_ax_preparation() {
+        let source = include_str!("macos_ax_actor_state.rs");
+        let replace = &source[source
+            .find("pub(super) fn replace(")
+            .expect("replace boundary")..source
+            .find("pub(super) fn restore(")
+            .expect("restore boundary")];
+        let replay_lookup = replace
+            .find("self.mutations")
+            .expect("mutation ledger lookup");
+        let ax_preparation = replace
+            .find("macos_replace::prepare_on_element")
+            .expect("AX preparation");
+
+        assert!(
+            replay_lookup < ax_preparation,
+            "matching mutation IDs must resolve before any AX revalidation or setter path"
+        );
+    }
+
+    #[test]
+    fn indeterminate_reconcile_requires_exact_utf16_range_length() {
+        let source = include_str!("macos_ax_actor_state.rs");
+        let reconcile = &source[source
+            .find("pub(super) fn reconcile(")
+            .expect("reconcile boundary")..source
+            .find("fn now(")
+            .expect("clock boundary")];
+
+        assert!(reconcile.contains("current.range.location"));
+        assert!(
+            reconcile.contains("current.range.length"),
+            "text and location alone cannot confirm the exact selected range"
+        );
+    }
 }
