@@ -286,3 +286,7 @@ mod tests;
 #[cfg(test)]
 #[path = "macos_ax_actor_restore_epoch_tests.rs"]
 mod restore_epoch_tests;
+
+#[cfg(test)]
+#[path = "macos_ax_actor_notification_phase_tests.rs"]
+mod notification_phase_tests;
