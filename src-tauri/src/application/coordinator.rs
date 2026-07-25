@@ -264,6 +264,10 @@ impl SelectionCoordinator {
 mod tests;
 
 #[cfg(test)]
+#[path = "coordinator_bounds_tests.rs"]
+mod bounds_tests;
+
+#[cfg(test)]
 #[path = "coordinator_identity_tests.rs"]
 mod identity_tests;
 

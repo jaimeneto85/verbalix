@@ -22,6 +22,8 @@ pub use coordinator::SelectionCoordinator;
 pub use mutation::{MutationProjection, MutationReceipt, MutationStatus};
 pub use ports::{ClipboardPort, OverlayPort, SelectionPort};
 pub use runtime_pause::RuntimePause;
+#[cfg(test)]
+pub(crate) use runtime_pause::{set_test_clock_ms, test_clock_ms};
 pub use settings_file::JsonSettingsRepository;
 pub use supabase::{
     HistoryItem, KeychainSessionRepository, RemoteHistoryRepository, RemoteTransformer,

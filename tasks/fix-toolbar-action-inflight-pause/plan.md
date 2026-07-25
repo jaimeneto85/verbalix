@@ -165,9 +165,9 @@ fn error_bounds(runtime: &AppRuntime) -> Option<Rect> {
 - [x] T3.2: [LOW] `commands.rs`: helper `error_bounds` (fallback escopado por `is_action_in_flight()`) usado por `show_readiness` e `show_provider_unavailable`.
 
 ### Fase 4: Testes (test-engineer)
-- [ ] T4.1: [MEDIUM] Unit `runtime_pause`: supressão in-flight de polling/observer/mouse-dismiss; reentrância (contador); graça pós-Drop com clock injetável (CA01/CA02/CA06).
-- [ ] T4.2: [MEDIUM] Unit `coordinator`: `last_known_bounds` presente enquanto ativo e `None` após `Invalidated`; latest-wins/revalidação intactos (CA03).
-- [ ] T4.3: [MEDIUM] Unit/integração `commands`: fallback de erro só com `is_action_in_flight()`; snapshot `None` sem ação → sem nota (RF04); `dismiss_overlays`/pause/undo ainda invalidam (CA04/CA05).
+- [x] T4.1: [MEDIUM] Unit `runtime_pause`: supressão in-flight de polling/observer/mouse-dismiss; reentrância (contador); graça pós-Drop com clock injetável (CA01/CA02/CA06).
+- [x] T4.2: [MEDIUM] Unit `coordinator`: `last_known_bounds` presente enquanto ativo e `None` após `Invalidated`; latest-wins/revalidação intactos (CA03).
+- [x] T4.3: [MEDIUM] Unit/integração `commands`: fallback de erro só com `is_action_in_flight()`; snapshot `None` sem ação → sem nota (RF04); `dismiss_overlays`/pause/undo ainda invalidam (CA04/CA05).
 
 ### Fase 5: Gates & QA
 - [ ] T5.1: Rodar todos os gates.

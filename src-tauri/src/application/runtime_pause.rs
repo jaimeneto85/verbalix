@@ -177,4 +177,69 @@ mod tests {
 
         assert!(pause.run_polling(false, || ()).is_none());
     }
+
+    #[test]
+    fn in_flight_guard_suppresses_all_detection_entry_points() {
+        set_test_clock_ms(0);
+        let pause = RuntimePause::with_clock(test_clock_ms);
+        let _guard = pause.begin_action();
+
+        assert!(pause.run_polling(true, || ()).is_none());
+        assert!(pause.run_ax_observer(|| ()).is_none());
+        assert!(pause.run_mouse_dismiss(|| ()).is_none());
+    }
+
+    #[test]
+    fn in_flight_guard_suppresses_during_grace_after_drop() {
+        set_test_clock_ms(1000);
+        let pause = RuntimePause::with_clock(test_clock_ms);
+        let guard = pause.begin_action();
+        drop(guard);
+
+        assert!(pause.is_action_in_flight());
+        assert!(pause.run_polling(true, || ()).is_none());
+        assert!(pause.run_ax_observer(|| ()).is_none());
+        assert!(pause.run_mouse_dismiss(|| ()).is_none());
+    }
+
+    #[test]
+    fn in_flight_reentrancy_requires_all_guards_dropped_and_grace_expired() {
+        set_test_clock_ms(1000);
+        let pause = RuntimePause::with_clock(test_clock_ms);
+        let g1 = pause.begin_action();
+        let g2 = pause.begin_action();
+        drop(g1);
+
+        assert!(pause.is_action_in_flight());
+
+        drop(g2);
+
+        assert!(pause.is_action_in_flight());
+
+        set_test_clock_ms(1000 + GRACE_MS + 1);
+
+        assert!(!pause.is_action_in_flight());
+        assert!(pause.run_polling(true, || ()).is_some());
+        assert!(pause.run_ax_observer(|| ()).is_some());
+        assert!(pause.run_mouse_dismiss(|| ()).is_some());
+    }
+
+    #[test]
+    fn grace_period_expires_at_deadline_boundary() {
+        set_test_clock_ms(500);
+        let pause = RuntimePause::with_clock(test_clock_ms);
+        let g = pause.begin_action();
+        drop(g);
+
+        assert!(pause.is_action_in_flight());
+
+        set_test_clock_ms(500 + GRACE_MS - 1);
+        assert!(pause.is_action_in_flight());
+
+        set_test_clock_ms(500 + GRACE_MS);
+        assert!(!pause.is_action_in_flight());
+
+        set_test_clock_ms(500 + GRACE_MS + 1);
+        assert!(!pause.is_action_in_flight());
+    }
 }

@@ -1,7 +1,8 @@
 use crate::{
     application::{
         classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
-        HistoryItem, PublicBackendConfig, RefreshFailureRoute, SessionRepository, StoredSession,
+        HistoryItem, PublicBackendConfig, RefreshFailureRoute, RuntimePause, SelectionCoordinator,
+        SessionRepository, StoredSession,
     },
     domain::{AppSettings, SelectionEvent, SettingsRepository, VerbalixError},
     AppRuntime,
@@ -21,18 +22,23 @@ pub(crate) fn current_ai_readiness(runtime: &AppRuntime) -> Result<AiReadiness, 
     Ok(evaluate_ai_readiness(true, has_session))
 }
 
-fn error_bounds(runtime: &AppRuntime) -> Option<crate::domain::Rect> {
-    runtime
-        .coordinator
+fn error_bounds_with(
+    coordinator: &SelectionCoordinator,
+    pause: &RuntimePause,
+) -> Option<crate::domain::Rect> {
+    coordinator
         .current_snapshot()
         .map(|s| s.bounds)
         .or_else(|| {
-            runtime
-                .pause
+            pause
                 .is_action_in_flight()
-                .then(|| runtime.coordinator.last_known_bounds())
+                .then(|| coordinator.last_known_bounds())
                 .flatten()
         })
+}
+
+fn error_bounds(runtime: &AppRuntime) -> Option<crate::domain::Rect> {
+    error_bounds_with(&runtime.coordinator, &runtime.pause)
 }
 
 pub(crate) fn show_readiness(runtime: &AppRuntime, readiness: &AiReadiness) {
