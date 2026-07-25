@@ -20,11 +20,34 @@ pub(super) fn set_selected_text(
         VerbalixError::ProtectedField => error,
         _ => VerbalixError::StaleSelection,
     })?;
-    set_after_role_validation(expected_identity, current_role, authorization, || {
-        macos_ax::set_prepared_selected_text(write)
-    })
+    set_prepared_after_role_validation(
+        expected_identity,
+        current_role,
+        authorization,
+        write,
+        macos_ax::set_prepared_selected_text,
+    )
 }
 
+fn set_prepared_after_role_validation<T>(
+    expected: &SelectionElementIdentity,
+    current: macos_text_role::ValidatedTextRole,
+    authorization: &AxWriteAuthorization,
+    write: T,
+    setter: impl FnOnce(T) -> AxWriteResult,
+) -> Result<AxWriteResult, VerbalixError> {
+    if current.role != expected.role
+        || current.subrole != expected.subrole
+        || !authorization.begin_setter()
+    {
+        return Err(VerbalixError::StaleSelection);
+    }
+    let result = setter(write);
+    authorization.commit();
+    Ok(result)
+}
+
+#[cfg(test)]
 pub(super) fn set_after_role_validation(
     expected: &SelectionElementIdentity,
     current: macos_text_role::ValidatedTextRole,
@@ -127,6 +150,65 @@ mod tests {
         });
         assert!(matches!(result, Ok(AxWriteResult::Confirmed)));
         assert_eq!(setters.get(), 1);
+    }
+
+    #[test]
+    fn prepared_payload_crosses_final_authorization_directly_into_one_setter() {
+        let trace = std::cell::RefCell::new(Vec::new());
+        let write = macos_ax::prepare_selected_text_write(std::ptr::null_mut(), "after");
+        trace.borrow_mut().push("prepared");
+        let phase = crate::platform::macos_self_notification_phase::SelfNotificationPhase::armed();
+        let authorization = AxWriteAuthorization::new(
+            crate::platform::causal_epoch::CausalEpoch::default(),
+            0,
+            phase.clone(),
+        );
+        let current = macos_text_role::validate("AXTextField".to_owned(), None).unwrap();
+
+        let result = set_prepared_after_role_validation(
+            &identity(),
+            current,
+            &authorization,
+            write,
+            |write| {
+                assert!(phase.claim_observation());
+                trace.borrow_mut().push("setter");
+                drop(write);
+                AxWriteResult::Confirmed
+            },
+        );
+
+        assert!(matches!(result, Ok(AxWriteResult::Confirmed)));
+        assert_eq!(*trace.borrow(), ["prepared", "setter"]);
+    }
+
+    #[test]
+    fn rejected_final_authorization_never_reaches_the_setter() {
+        let setters = Cell::new(0);
+        let write = macos_ax::prepare_selected_text_write(std::ptr::null_mut(), "after");
+        let epoch = crate::platform::causal_epoch::CausalEpoch::default();
+        let authorization = AxWriteAuthorization::new(
+            epoch.clone(),
+            epoch.current(),
+            crate::platform::macos_self_notification_phase::SelfNotificationPhase::armed(),
+        );
+        epoch.bump();
+        let current = macos_text_role::validate("AXTextField".to_owned(), None).unwrap();
+
+        let result = set_prepared_after_role_validation(
+            &identity(),
+            current,
+            &authorization,
+            write,
+            |write| {
+                setters.set(setters.get() + 1);
+                drop(write);
+                AxWriteResult::Confirmed
+            },
+        );
+
+        assert!(matches!(result, Err(VerbalixError::StaleSelection)));
+        assert_eq!(setters.get(), 0);
     }
 
     #[test]
