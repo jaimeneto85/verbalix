@@ -69,6 +69,7 @@
 - [x] RF38: Lookup/replay terminal aplica prune/TTL antes de qualquer early return idempotente.
 - [x] RF39: Expectativa self tem fase atômica `ArmedBeforeWrite → InSetter`; evento Selected em Armed é sempre externo e bumpa epoch fora da FIFO.
 - [x] RF40: Attribute/value CF são pré-alocados antes do boundary; CAS/check causal é a última operação antes de `AXUIElementSetAttributeValue`.
+- [ ] RF41: Autorização usa `Armed → Authorizing → InSetter`; evento exato pode cancelar Authorizing, e epoch stale termina Cancelled sem fase self-candidate.
 
 ### Requisitos não funcionais
 
@@ -119,6 +120,7 @@
 - [x] CA38: Replay Restored após TTL expira e retorna stale; antes do TTL permanece idempotente.
 - [x] CA39: Router real recebe evento externo exato durante Armed com actor bloqueado em replace/restore e prova bump imediato, zero setter e terminal Rejected.
 - [x] CA40: Teste atravessa o shared production boundary e prova nenhuma alocação/lock/fallible op entre autorização final e FFI setter.
+- [ ] CA41: Interleaving stale epoch + evento exato durante Authorizing prova zero setter, bump externo, expectation removida e nenhuma classificação self.
 
 ### Edge cases
 
@@ -236,6 +238,7 @@
 - [x] T2.28 `[CRITICAL]` Ancorar restore no target epoch e mover validação de correlação antes de todos os early returns/reconcile.
 - [x] T2.29 `[CRITICAL]` Integrar epoch check ao write boundary pós-arm e aplicar TTL antes do replay lookup.
 - [x] T2.30 `[CRITICAL]` Fasear expectation e pré-alocar CF payload, movendo CAS/check final ao FFI setter.
+- [ ] T2.31 `[CRITICAL]` Introduzir Authorizing cancelável e promover a InSetter somente após epoch válido.
 
 ### Fase 3 — Testes
 
@@ -266,6 +269,7 @@
 - [x] T3.25 `[CRITICAL]` Cobrir actor restore stale epoch com Capture B pendente e matriz replay divergente/sem mutação.
 - [x] T3.26 `[CRITICAL]` Cobrir bump pós-claim/arm pré-setter em replace+restore e replay terminal expirado.
 - [x] T3.27 `[CRITICAL]` Cobrir router/actor externos em Armed e shared production write boundary com setter instrumentado.
+- [ ] T3.28 `[CRITICAL]` Cobrir exact event versus stale authorization em Authorizing, incluindo phase/expectation cleanup.
 
 ### Fase 4 — QA real
 
@@ -282,7 +286,7 @@
 - Escrita, undo e erro precisam de receipts e roteamento tipado; `confirm_before_replace`, falhas pós-setter e múltiplos feedbacks da mesma ação fazem parte da matriz.
 - O fallback TextEdit é UTF-16 transacional e lê somente o range de `AXValue`; `AXSelectedText` continua o único writer quando settable, com diagnóstico sanitizado e probe real fechado por TCC.
 - As rodadas QA RF16–RF30 originaram RF20–RF34: allowlist precoce, handle/ledger completos, secure subrole, epoch fora da FIFO, focus/self-notification, restore/reconcile monotônicos, identifier privado, write gate tardio e provenance por fase.
-- QA RF34–RF37 fechou restore/TTL, mas encontrou self-event pré-write e alocações pós-check; RF39–RF40 tornam o setter linearizável.
+- QA RF39 validou o seam, mas encontrou stale epoch deixando InSetter; RF41 adiciona Authorizing cancelável antes da fase self.
 
 ### 🟢 Oportunidades incorporadas
 
