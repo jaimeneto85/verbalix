@@ -4,6 +4,12 @@ use super::{
 };
 use crate::domain::{SelectionSnapshot, VerbalixError};
 
+pub(super) enum WriteOutcome {
+    Confirmed,
+    Rejected,
+    Indeterminate,
+}
+
 pub(super) fn prepare_on_element(
     expected: &SelectionSnapshot,
     element: &OwnedAxElement,
@@ -18,24 +24,34 @@ pub(super) fn write_on_element(
     expected: &SelectionSnapshot,
     text: &str,
     element: AXUIElementRef,
-) -> Result<(), VerbalixError> {
+) -> WriteOutcome {
     match macos_ax::set_selected_text(element, text) {
-        AxWriteResult::Confirmed => Ok(()),
-        AxWriteResult::Rejected(_) => Err(VerbalixError::LocalFailure),
+        AxWriteResult::Confirmed => WriteOutcome::Confirmed,
+        AxWriteResult::Rejected(_) => WriteOutcome::Rejected,
         AxWriteResult::Indeterminate(_) => {
-            let current =
-                macos_selection_revalidation::read(element, expected.extraction_strategy)?;
-            let location = isize::try_from(expected.range.location)
-                .map_err(|_| VerbalixError::StaleSelection)?;
-            let length = isize::try_from(text.encode_utf16().count())
-                .map_err(|_| VerbalixError::StaleSelection)?;
+            let Ok(current) =
+                macos_selection_revalidation::read(element, expected.extraction_strategy)
+            else {
+                return WriteOutcome::Indeterminate;
+            };
+            let Ok(location) = isize::try_from(expected.range.location) else {
+                return WriteOutcome::Indeterminate;
+            };
+            let Ok(transformed_length) = isize::try_from(text.encode_utf16().count()) else {
+                return WriteOutcome::Indeterminate;
+            };
             if current.text == text
                 && current.range.location == location
-                && current.range.length == length
+                && current.range.length == transformed_length
             {
-                Ok(())
+                WriteOutcome::Confirmed
+            } else if current.text == expected.text
+                && current.range.location == location
+                && current.range.length == expected.range.length as isize
+            {
+                WriteOutcome::Rejected
             } else {
-                Err(VerbalixError::LocalFailure)
+                WriteOutcome::Indeterminate
             }
         }
     }

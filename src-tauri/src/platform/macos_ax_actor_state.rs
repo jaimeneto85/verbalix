@@ -68,6 +68,9 @@ impl ActorState {
     ) -> Result<MutationReceipt, VerbalixError> {
         let causal = has_no_identifier(&expected);
         let now = self.now();
+        if let Some(existing) = self.mutations.replay(&receipt, &expected, &text, now)? {
+            return projection_result(existing);
+        }
         let target = self
             .targets
             .get(expected.id, now)
@@ -94,10 +97,20 @@ impl ActorState {
                 .terminalize(receipt.id, MutationStatus::Rejected, self.now())?;
             return Err(VerbalixError::StaleSelection);
         }
-        ensure_current(&self.epoch, target.epoch)?;
-        let result =
+        if ensure_current(&self.epoch, target.epoch).is_err() {
+            self.mutations
+                .terminalize(receipt.id, MutationStatus::Rejected, self.now())?;
+            return Err(VerbalixError::StaleSelection);
+        }
+        let outcome =
             macos_replace::write_on_element(&expected, &text, target.element.as_ref().as_ref());
-        self.finish_receipt(&receipt, result, MutationStatus::Confirmed)
+        let status = match outcome {
+            macos_replace::WriteOutcome::Confirmed => MutationStatus::Confirmed,
+            macos_replace::WriteOutcome::Rejected => MutationStatus::Rejected,
+            macos_replace::WriteOutcome::Indeterminate => MutationStatus::Indeterminate,
+        };
+        let projection = self.mutations.terminalize(receipt.id, status, self.now())?;
+        projection_result(projection)
     }
 
     pub(super) fn restore(
@@ -145,10 +158,13 @@ impl ActorState {
                     let current_location = current.range.location as i64;
                     if current.text == record.projection.transformed_text
                         && current_location == expected_location
+                        && current.range.length as usize
+                            == record.projection.transformed_text.encode_utf16().count()
                     {
                         MutationStatus::Confirmed
                     } else if current.text == record.projection.original_text
                         && current_location == expected_location
+                        && current.range.length as i64 == record.projection.snapshot.range.length
                     {
                         MutationStatus::Rejected
                     } else {
@@ -167,26 +183,13 @@ impl ActorState {
     fn now(&self) -> u64 {
         self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
     }
+}
 
-    fn finish_receipt(
-        &mut self,
-        receipt: &MutationReceipt,
-        result: Result<(), VerbalixError>,
-        state: MutationStatus,
-    ) -> Result<MutationReceipt, VerbalixError> {
-        match result {
-            Ok(()) => {
-                self.mutations.terminalize(receipt.id, state, self.now())?;
-                Ok(receipt.clone())
-            }
-            Err(error) => {
-                self.mutations.terminalize(
-                    receipt.id,
-                    MutationStatus::Indeterminate,
-                    self.now(),
-                )?;
-                Err(error)
-            }
+fn projection_result(projection: MutationProjection) -> Result<MutationReceipt, VerbalixError> {
+    match projection.status {
+        MutationStatus::Confirmed => Ok(projection.receipt),
+        MutationStatus::Prepared | MutationStatus::Rejected | MutationStatus::Indeterminate => {
+            Err(VerbalixError::LocalFailure)
         }
     }
 }
@@ -244,9 +247,10 @@ mod tests {
         let source = include_str!("macos_ax_actor_state.rs");
         let replace = &source[source
             .find("pub(super) fn replace(")
-            .expect("replace boundary")..source
-            .find("pub(super) fn restore(")
-            .expect("restore boundary")];
+            .expect("replace boundary")
+            ..source
+                .find("pub(super) fn restore(")
+                .expect("restore boundary")];
         let replay_lookup = replace
             .find("self.mutations")
             .expect("mutation ledger lookup");
@@ -265,9 +269,8 @@ mod tests {
         let source = include_str!("macos_ax_actor_state.rs");
         let reconcile = &source[source
             .find("pub(super) fn reconcile(")
-            .expect("reconcile boundary")..source
-            .find("fn now(")
-            .expect("clock boundary")];
+            .expect("reconcile boundary")
+            ..source.find("fn now(").expect("clock boundary")];
 
         assert!(reconcile.contains("current.range.location"));
         assert!(

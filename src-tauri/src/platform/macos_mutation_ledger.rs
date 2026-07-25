@@ -63,6 +63,24 @@ impl<T> MutationLedger<T> {
         Ok(projection)
     }
 
+    pub(super) fn replay(
+        &mut self,
+        receipt: &MutationReceipt,
+        snapshot: &SelectionSnapshot,
+        transformed_text: &str,
+        now_ms: u64,
+    ) -> Result<Option<MutationProjection>, VerbalixError> {
+        self.prune(now_ms);
+        self.records
+            .get(&receipt.id)
+            .map(|record| {
+                matching(record, receipt, snapshot, transformed_text)
+                    .then(|| record.projection.clone())
+                    .ok_or(VerbalixError::StaleSelection)
+            })
+            .transpose()
+    }
+
     pub(super) fn get_mut(&mut self, id: Uuid) -> Option<&mut ActorMutationRecord<T>> {
         self.records.get_mut(&id)
     }
@@ -117,48 +135,5 @@ fn matching<T>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::{Rect, TextRange};
-
-    fn snapshot() -> SelectionSnapshot {
-        SelectionSnapshot::new(
-            7,
-            "pid:7".to_owned(),
-            "before".to_owned(),
-            TextRange {
-                location: 0,
-                length: 6,
-            },
-            Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 1.0,
-                height: 1.0,
-            },
-            true,
-        )
-    }
-
-    #[test]
-    fn prepared_survives_terminal_ttl_and_replay_is_idempotent() {
-        let selected = snapshot();
-        let receipt = MutationReceipt {
-            id: Uuid::new_v4(),
-            snapshot_id: selected.id,
-            request_id: Uuid::new_v4(),
-        };
-        let mut ledger = MutationLedger::new(1);
-        ledger
-            .prepare(receipt.clone(), selected.clone(), "after".to_owned(), (), 0)
-            .unwrap();
-        assert!(ledger.projection(receipt.id, TERMINAL_TTL_MS).is_some());
-        assert!(
-            ledger
-                .prepare(receipt, selected, "after".to_owned(), (), TERMINAL_TTL_MS)
-                .unwrap()
-                .status
-                == MutationStatus::Prepared
-        );
-    }
-}
+#[path = "macos_mutation_ledger_tests.rs"]
+mod tests;
