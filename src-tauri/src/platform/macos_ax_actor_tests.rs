@@ -93,3 +93,43 @@ fn stable_epoch_writes_once_before_pending_capture_runs() {
     assert_eq!(setters.load(Ordering::SeqCst), 1);
     capture_rx.recv().unwrap();
 }
+
+#[test]
+fn selected_change_without_exact_expectation_does_not_wait_for_actor_fifo() {
+    let actor = std::sync::Arc::new(AxActor::new());
+    let observed_epoch = actor.epoch.current();
+    let lease = std::sync::Arc::new(TransformLease::new(Uuid::new_v4(), Uuid::new_v4()));
+    let setters = std::sync::Arc::new(AtomicUsize::new(0));
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let (boundary_tx, _boundary_rx) = mpsc::channel();
+    actor
+        .sender
+        .send(Command::TestBoundary {
+            observed_epoch,
+            lease,
+            entered: entered_tx,
+            release: release_rx,
+            setters,
+            response: boundary_tx,
+        })
+        .unwrap();
+    entered_rx.recv().unwrap();
+
+    let (result_tx, result_rx) = mpsc::channel();
+    let observer_actor = actor.clone();
+    std::thread::spawn(move || {
+        let result = observer_actor
+            .observe_selection_change(AxElementToken { pid: 42, hash: 7 }, observed_epoch);
+        result_tx.send(result).unwrap();
+    });
+
+    assert_eq!(
+        result_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap()
+            .unwrap(),
+        ObservedSelectionChange::External
+    );
+    release_tx.send(()).unwrap();
+}

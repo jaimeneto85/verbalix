@@ -2,7 +2,7 @@ use super::{
     causal_epoch::CausalEpoch,
     causal_registry::CausalRegistry,
     macos_ax::{self, AxElementToken, OwnedAxElement},
-    macos_ax_actor_observation::{self, ExpectedSelfNotification},
+    macos_ax_actor_observation::{self, SelfNotificationSignal},
     macos_mutation_ledger::MutationLedger,
     macos_replace, macos_restore, macos_selection,
 };
@@ -28,17 +28,17 @@ pub(super) struct ActorState {
     pub(super) epoch: CausalEpoch,
     pub(super) targets: CausalRegistry<CapturedTarget>,
     pub(super) mutations: MutationLedger<CapturedTarget>,
-    pub(super) expected_self_notification: Option<ExpectedSelfNotification>,
+    pub(super) self_notifications: SelfNotificationSignal,
 }
 
 impl ActorState {
-    pub(super) fn new(epoch: CausalEpoch) -> Self {
+    pub(super) fn new(epoch: CausalEpoch, self_notifications: SelfNotificationSignal) -> Self {
         Self {
             started: Instant::now(),
             epoch,
             targets: CausalRegistry::new(REGISTRY_CAPACITY, REGISTRY_TTL_MS),
             mutations: MutationLedger::new(REGISTRY_CAPACITY),
-            expected_self_notification: None,
+            self_notifications,
         }
     }
 

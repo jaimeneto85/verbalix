@@ -1,6 +1,10 @@
 use super::{
-    causal_epoch::CausalEpoch, macos_ax::AxElementToken,
-    macos_ax_actor_observation::ObservedSelectionChange, macos_ax_actor_state::ActorState,
+    causal_epoch::CausalEpoch,
+    macos_ax::AxElementToken,
+    macos_ax_actor_observation::{
+        ExpectedSelfNotification, ObservedSelectionChange, SelfNotificationSignal,
+    },
+    macos_ax_actor_state::ActorState,
 };
 use crate::{
     application::{MutationProjection, MutationReceipt, PublicationGuard},
@@ -37,6 +41,7 @@ enum Command {
         response: mpsc::Sender<Option<MutationProjection>>,
     },
     ObserveSelectionChange {
+        expected: ExpectedSelfNotification,
         target: AxElementToken,
         generation: u64,
         response: mpsc::Sender<ObservedSelectionChange>,
@@ -59,15 +64,18 @@ pub(super) struct AxActor {
     sender: SyncSender<Command>,
     worker: Mutex<Option<JoinHandle<()>>>,
     epoch: CausalEpoch,
+    self_notifications: SelfNotificationSignal,
 }
 
 impl AxActor {
     pub(super) fn new() -> Self {
         let epoch = CausalEpoch::default();
         let worker_epoch = epoch.clone();
+        let self_notifications = SelfNotificationSignal::default();
+        let worker_notifications = self_notifications.clone();
         let (sender, receiver) = mpsc::sync_channel(64);
         let worker = std::thread::spawn(move || {
-            let mut state = ActorState::new(worker_epoch.clone());
+            let mut state = ActorState::new(worker_epoch.clone(), worker_notifications);
             while let Ok(command) = receiver.recv() {
                 match command {
                     Command::Capture(response) => {
@@ -102,11 +110,13 @@ impl AxActor {
                         let _ = response.send(state.reconcile(mutation_id));
                     }
                     Command::ObserveSelectionChange {
+                        expected,
                         target,
                         generation,
                         response,
                     } => {
-                        let _ = response.send(state.observe_selection_change(target, generation));
+                        let _ = response
+                            .send(state.observe_selection_change(expected, target, generation));
                     }
                     #[cfg(test)]
                     Command::TestBoundary {
@@ -142,6 +152,7 @@ impl AxActor {
             sender,
             worker: Mutex::new(Some(worker)),
             epoch,
+            self_notifications,
         }
     }
 
@@ -158,9 +169,13 @@ impl AxActor {
         target: AxElementToken,
         generation: u64,
     ) -> Result<ObservedSelectionChange, VerbalixError> {
+        let Some(expected) = self.self_notifications.take_exact(target, generation) else {
+            return Ok(ObservedSelectionChange::External);
+        };
         let (sender, receiver) = mpsc::channel();
         self.sender
             .send(Command::ObserveSelectionChange {
+                expected,
                 target,
                 generation,
                 response: sender,

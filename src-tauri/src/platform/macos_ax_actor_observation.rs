@@ -7,9 +7,13 @@ use crate::{
     application::MutationStatus,
     domain::{SelectionExtractionStrategy, SelectionSnapshot},
 };
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub(super) struct ExpectedSelfNotification {
     mutation_id: Uuid,
     target_snapshot_id: Uuid,
@@ -21,7 +25,38 @@ pub(super) struct ExpectedSelfNotification {
     strategy: SelectionExtractionStrategy,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Default)]
+pub(super) struct SelfNotificationSignal {
+    pending: Arc<Mutex<Option<ExpectedSelfNotification>>>,
+}
+
+impl SelfNotificationSignal {
+    fn arm(&self, expected: ExpectedSelfNotification) {
+        if let Ok(mut pending) = self.pending.lock() {
+            *pending = Some(expected);
+        }
+    }
+
+    pub(super) fn clear(&self) {
+        if let Ok(mut pending) = self.pending.lock() {
+            pending.take();
+        }
+    }
+
+    pub(super) fn take_exact(
+        &self,
+        target: AxElementToken,
+        generation: u64,
+    ) -> Option<ExpectedSelfNotification> {
+        self.pending
+            .lock()
+            .ok()?
+            .take()
+            .filter(|expected| expected.target == target && expected.generation == generation)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum ObservedSelectionChange {
     SelfGenerated,
     External,
@@ -36,7 +71,7 @@ impl ActorState {
         generation: u64,
         expected_text: String,
     ) {
-        self.expected_self_notification = Some(ExpectedSelfNotification {
+        self.self_notifications.arm(ExpectedSelfNotification {
             mutation_id,
             target_snapshot_id: snapshot.id,
             target: target.token,
@@ -49,21 +84,15 @@ impl ActorState {
     }
 
     pub(super) fn clear_self_notification(&mut self) {
-        self.expected_self_notification = None;
+        self.self_notifications.clear();
     }
 
     pub(super) fn observe_selection_change(
         &mut self,
+        expected: ExpectedSelfNotification,
         target: AxElementToken,
         generation: u64,
     ) -> ObservedSelectionChange {
-        let Some(expected) = take_expected_self_notification(
-            &mut self.expected_self_notification,
-            target,
-            generation,
-        ) else {
-            return ObservedSelectionChange::External;
-        };
         let Some((mutation_id, target_snapshot_id, status, current)) =
             self.mutations.get_mut(expected.mutation_id).map(|record| {
                 (
@@ -123,16 +152,6 @@ impl ActorState {
                 .reconcile_restore(id, MutationStatus::Restored, self.now());
         }
     }
-}
-
-fn take_expected_self_notification(
-    pending: &mut Option<ExpectedSelfNotification>,
-    target: AxElementToken,
-    generation: u64,
-) -> Option<ExpectedSelfNotification> {
-    pending
-        .take()
-        .filter(|expected| expected.target == target && expected.generation == generation)
 }
 
 pub(super) fn captured_target(

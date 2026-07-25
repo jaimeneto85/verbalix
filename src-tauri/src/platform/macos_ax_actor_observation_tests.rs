@@ -93,16 +93,15 @@ fn expectation(target: AxElementToken, generation: u64) -> ExpectedSelfNotificat
 #[test]
 fn self_notification_expectation_is_consumed_once_even_on_mismatch() {
     let target = AxElementToken { pid: 42, hash: 7 };
-    let mut exact = Some(expectation(target, 11));
-    assert!(take_expected_self_notification(&mut exact, target, 11).is_some());
-    assert!(take_expected_self_notification(&mut exact, target, 11).is_none());
+    let exact = SelfNotificationSignal::default();
+    exact.arm(expectation(target, 11));
+    assert!(exact.take_exact(target, 11).is_some());
+    assert!(exact.take_exact(target, 11).is_none());
 
-    let mut mismatch = Some(expectation(target, 11));
-    assert!(take_expected_self_notification(
-        &mut mismatch,
-        AxElementToken { pid: 42, hash: 8 },
-        11,
-    )
-    .is_none());
-    assert!(mismatch.is_none());
+    let mismatch = SelfNotificationSignal::default();
+    mismatch.arm(expectation(target, 11));
+    assert!(mismatch
+        .take_exact(AxElementToken { pid: 42, hash: 8 }, 11,)
+        .is_none());
+    assert!(mismatch.take_exact(target, 11).is_none());
 }
