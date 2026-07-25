@@ -16,7 +16,24 @@ impl AxWriteAuthorization {
     }
 
     pub(super) fn begin_setter(&self) -> bool {
-        self.phase.begin_setter() && self.epoch.is_current(self.expected)
+        self.begin_setter_with(|| {})
+    }
+
+    fn begin_setter_with(&self, after_authorizing: impl FnOnce()) -> bool {
+        if !self.phase.begin_authorizing() {
+            return false;
+        }
+        after_authorizing();
+        if !self.epoch.is_current(self.expected) {
+            self.phase.cancel_authorizing();
+            return false;
+        }
+        self.phase.enter_setter()
+    }
+
+    #[cfg(test)]
+    pub(super) fn begin_setter_after_authorizing(&self, after_authorizing: impl FnOnce()) -> bool {
+        self.begin_setter_with(after_authorizing)
     }
 
     pub(super) fn commit(&self) {

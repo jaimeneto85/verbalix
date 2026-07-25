@@ -4,9 +4,10 @@ use std::sync::{
 };
 
 const ARMED: u8 = 0;
-const IN_SETTER: u8 = 1;
-const COMMITTED: u8 = 2;
-const CANCELLED: u8 = 3;
+const AUTHORIZING: u8 = 1;
+const IN_SETTER: u8 = 2;
+const COMMITTED: u8 = 3;
+const CANCELLED: u8 = 4;
 
 #[derive(Clone)]
 pub(super) struct SelfNotificationPhase {
@@ -20,19 +21,38 @@ impl SelfNotificationPhase {
         }
     }
 
-    pub(super) fn begin_setter(&self) -> bool {
+    pub(super) fn begin_authorizing(&self) -> bool {
         self.state
-            .compare_exchange(ARMED, IN_SETTER, Ordering::AcqRel, Ordering::Acquire)
+            .compare_exchange(ARMED, AUTHORIZING, Ordering::AcqRel, Ordering::Acquire)
             .is_ok()
+    }
+
+    pub(super) fn enter_setter(&self) -> bool {
+        self.state
+            .compare_exchange(AUTHORIZING, IN_SETTER, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    pub(super) fn cancel_authorizing(&self) {
+        let _ = self.state.compare_exchange(
+            AUTHORIZING,
+            CANCELLED,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
     }
 
     pub(super) fn claim_observation(&self) -> bool {
         loop {
             match self.state.load(Ordering::Acquire) {
-                ARMED => {
+                ARMED | AUTHORIZING => {
+                    let observed = self.state.load(Ordering::Acquire);
+                    if !matches!(observed, ARMED | AUTHORIZING) {
+                        continue;
+                    }
                     if self
                         .state
-                        .compare_exchange(ARMED, CANCELLED, Ordering::AcqRel, Ordering::Acquire)
+                        .compare_exchange(observed, CANCELLED, Ordering::AcqRel, Ordering::Acquire)
                         .is_ok()
                     {
                         return false;
@@ -52,6 +72,20 @@ impl SelfNotificationPhase {
     }
 
     pub(super) fn cancel(&self) {
-        self.state.store(CANCELLED, Ordering::Release);
+        let mut observed = self.state.load(Ordering::Acquire);
+        loop {
+            if observed == CANCELLED {
+                return;
+            }
+            match self.state.compare_exchange(
+                observed,
+                CANCELLED,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => return,
+                Err(current) => observed = current,
+            }
+        }
     }
 }

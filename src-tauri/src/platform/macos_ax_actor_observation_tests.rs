@@ -86,7 +86,8 @@ fn self_notification_requires_exact_mutation_target_generation_and_utf16_selecti
 
 fn expectation(target: AxElementToken, generation: u64) -> ExpectedSelfNotification {
     let phase = SelfNotificationPhase::armed();
-    assert!(phase.begin_setter());
+    assert!(phase.begin_authorizing());
+    assert!(phase.enter_setter());
     ExpectedSelfNotification {
         mutation_id: Uuid::new_v4(),
         target_snapshot_id: Uuid::new_v4(),
@@ -161,7 +162,8 @@ fn exact_expectation_matches_actor_ledger_and_current_selection_once() {
     let projection = ledger.projection(receipt.id, 1).unwrap();
     let signal = SelfNotificationSignal::default();
     let phase = SelfNotificationPhase::armed();
-    assert!(phase.begin_setter());
+    assert!(phase.begin_authorizing());
+    assert!(phase.enter_setter());
     signal.arm(ExpectedSelfNotification {
         mutation_id: projection.receipt.id,
         target_snapshot_id: projection.target_snapshot_id,

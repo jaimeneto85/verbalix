@@ -212,6 +212,19 @@ mod tests {
     }
 
     #[test]
+    fn stale_epoch_cancels_authorizing_before_it_can_become_a_self_candidate() {
+        let epoch = crate::platform::causal_epoch::CausalEpoch::default();
+        let phase = crate::platform::macos_self_notification_phase::SelfNotificationPhase::armed();
+        let authorization =
+            AxWriteAuthorization::new(epoch.clone(), epoch.current(), phase.clone());
+
+        assert!(!authorization.begin_setter_after_authorizing(|| {
+            epoch.bump();
+        }));
+        assert!(!phase.claim_observation());
+    }
+
+    #[test]
     fn secure_after_prepare_rejects_replace_and_restore_without_a_setter() {
         let selected = snapshot();
         let receipt = MutationReceipt {
