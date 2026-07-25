@@ -44,7 +44,7 @@ impl MacAccessibility {
     }
 }
 
-fn route_observer_event(
+pub(super) fn route_observer_event(
     event: AccessibilityEvent,
     epoch: &CausalEpoch,
     classify: impl FnOnce(

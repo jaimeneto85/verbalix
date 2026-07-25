@@ -1,5 +1,9 @@
 use super::*;
 use crate::application::TransformLease;
+use crate::platform::{
+    macos_accessibility::route_observer_event,
+    macos_observer::{AccessibilityEvent, AccessibilityEventKind},
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
@@ -31,7 +35,14 @@ fn keyboard_focus_epoch_revokes_blocked_write_before_pending_capture_runs() {
         .unwrap();
     entered_rx.recv().unwrap();
 
-    actor.causal_epoch().bump();
+    assert!(route_observer_event(
+        AccessibilityEvent {
+            kind: AccessibilityEventKind::FocusChanged,
+            target: Some(AxElementToken { pid: 42, hash: 7 }),
+        },
+        &actor.causal_epoch(),
+        |_, _| panic!("focus events must bypass selection classification"),
+    ));
     let (capture_tx, capture_rx) = mpsc::channel();
     actor
         .sender
@@ -102,7 +113,7 @@ fn selected_change_without_exact_expectation_does_not_wait_for_actor_fifo() {
     let setters = std::sync::Arc::new(AtomicUsize::new(0));
     let (entered_tx, entered_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
-    let (boundary_tx, _boundary_rx) = mpsc::channel();
+    let (boundary_tx, boundary_rx) = mpsc::channel();
     actor
         .sender
         .send(Command::TestBoundary {
@@ -110,26 +121,35 @@ fn selected_change_without_exact_expectation_does_not_wait_for_actor_fifo() {
             lease,
             entered: entered_tx,
             release: release_rx,
-            setters,
+            setters: setters.clone(),
             response: boundary_tx,
         })
         .unwrap();
     entered_rx.recv().unwrap();
 
-    let (result_tx, result_rx) = mpsc::channel();
-    let observer_actor = actor.clone();
-    std::thread::spawn(move || {
-        let result = observer_actor
-            .observe_selection_change(AxElementToken { pid: 42, hash: 7 }, observed_epoch);
-        result_tx.send(result).unwrap();
-    });
-
-    assert_eq!(
-        result_rx
-            .recv_timeout(std::time::Duration::from_secs(1))
-            .unwrap()
-            .unwrap(),
-        ObservedSelectionChange::External
-    );
+    assert!(route_observer_event(
+        AccessibilityEvent {
+            kind: AccessibilityEventKind::SelectedTextChanged,
+            target: Some(AxElementToken { pid: 42, hash: 7 }),
+        },
+        &actor.causal_epoch(),
+        |target, generation| actor.observe_selection_change(target, generation),
+    ));
+    assert!(!actor.epoch.is_current(observed_epoch));
+    let (capture_tx, capture_rx) = mpsc::channel();
+    actor
+        .sender
+        .send(Command::TestPendingCapture(capture_tx))
+        .unwrap();
+    assert!(matches!(
+        capture_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
     release_tx.send(()).unwrap();
+    assert!(matches!(
+        boundary_rx.recv().unwrap(),
+        Err(VerbalixError::StaleSelection)
+    ));
+    capture_rx.recv().unwrap();
+    assert_eq!(setters.load(Ordering::SeqCst), 0);
 }
