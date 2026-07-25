@@ -12,55 +12,19 @@ use application::{
     JsonSettingsRepository, KeychainSessionRepository, PublicBackendConfig, RemoteAuthRepository,
     RemoteHistoryRepository, RemoteTransformer, RuntimePause, SelectionCoordinator,
 };
+use application::{PreferencesSyncStore, RemotePreferencesRepository};
 use commands::*;
 use commands_transform::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use overlay_commands::*;
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
-pub(crate) use runtime::AppRuntime;
+pub(crate) use runtime::{start_selection_observer, AppRuntime};
 use std::{sync::Arc, thread, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     AppHandle, Manager, RunEvent, WindowEvent,
 };
-
-fn start_selection_observer(runtime: Arc<AppRuntime>) {
-    thread::spawn(move || {
-        let mut candidate_id = None;
-        loop {
-            let settings = runtime.settings.load().unwrap_or_default();
-            let result = runtime.pause.run_polling(settings.automatic_toolbar, || {
-                diagnostics::detection("polling");
-                match runtime.coordinator.refresh_selection() {
-                    Ok(Some(snapshot)) if candidate_id != Some(snapshot.id) => {
-                        candidate_id = Some(snapshot.id);
-                        thread::sleep(Duration::from_millis(150));
-                        if !runtime.pause.is_paused() {
-                            let _ = runtime
-                                .coordinator
-                                .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
-                        }
-                    }
-                    Err(error @ VerbalixError::SelectionUnavailable)
-                    | Err(error @ VerbalixError::ProtectedField)
-                    | Err(error @ VerbalixError::PermissionDenied) => {
-                        diagnostics::capture_failure("polling", &error);
-                        candidate_id = None;
-                        let _ = runtime
-                            .coordinator
-                            .dispatch(SelectionEvent::TransientInvalidated);
-                    }
-                    _ => {}
-                }
-            });
-            if result.is_none() {
-                candidate_id = None;
-            }
-            thread::sleep(Duration::from_millis(120));
-        }
-    });
-}
 
 fn trigger_shortcut(runtime: &AppRuntime) {
     let _ = runtime
@@ -182,6 +146,9 @@ pub fn run() {
             let settings = Arc::new(JsonSettingsRepository::new(
                 config_dir.join("settings.json"),
             ));
+            let preferences_sync = Arc::new(PreferencesSyncStore::new(
+                config_dir.join("preferences_sync.json"),
+            ));
             let selection = Arc::new(MacAccessibility::new());
             let overlay = Arc::new(TauriOverlay::new(app.handle().clone()));
             let backend_config = PublicBackendConfig::resolve();
@@ -194,13 +161,19 @@ pub fn run() {
                 overlay.clone(),
                 provider,
             ));
-            use application::RemotePreferencesRepository as RP;
-            let (su, ak) = (supabase_url, anonymous_key);
+            let remote_preferences = backend_config.configured.then(|| {
+                Arc::new(RemotePreferencesRepository::new(
+                    supabase_url.clone(),
+                    anonymous_key.clone(),
+                ))
+            });
             let runtime = Arc::new(AppRuntime {
                 coordinator,
                 overlay,
                 selection,
                 settings,
+                preferences_sync,
+                synced_settings: std::sync::Mutex::new(None),
                 session: Arc::new(KeychainSessionRepository::new(
                     "com.verbalix.desktop",
                     "supabase-access-token",
@@ -209,9 +182,12 @@ pub fn run() {
                     let boxed: Box<dyn std::error::Error> = Box::new(error);
                     tauri::Error::Setup(boxed.into())
                 })?),
-                history: Arc::new(RemoteHistoryRepository::new(su.clone(), ak.clone())),
-                auth: Arc::new(RemoteAuthRepository::new(su.clone(), ak.clone())),
-                remote_preferences: backend_config.configured.then(|| Arc::new(RP::new(su, ak))),
+                history: Arc::new(RemoteHistoryRepository::new(
+                    supabase_url.clone(),
+                    anonymous_key.clone(),
+                )),
+                auth: Arc::new(RemoteAuthRepository::new(supabase_url, anonymous_key)),
+                remote_preferences,
                 backend_config,
                 pause: RuntimePause::default(),
             });
@@ -268,6 +244,7 @@ pub fn run() {
             accessibility_status,
             load_settings,
             save_settings,
+            current_synced_preferences,
             save_session,
             has_session,
             clear_session,
