@@ -1,7 +1,7 @@
 use crate::{
     application::{OverlayPort, PublicationGuard, SelectionPort, TransformLease},
     diagnostics,
-    domain::{AiProvider, SelectionEvent, SelectionSnapshot, SelectionState, VerbalixError},
+    domain::{AiProvider, Rect, SelectionEvent, SelectionSnapshot, SelectionState, VerbalixError},
 };
 use std::sync::{Arc, Mutex};
 
@@ -13,6 +13,7 @@ pub struct SelectionCoordinator {
     pub(super) presentation: Mutex<Option<SelectionPresentation>>,
     pub(super) active_transform: Mutex<Option<ActiveTransform>>,
     pub(super) mutation_journal: super::mutation_journal::MutationJournal,
+    pub(super) last_bounds: Mutex<Option<Rect>>,
 }
 
 pub(super) struct SelectionPresentation {
@@ -40,6 +41,23 @@ impl SelectionCoordinator {
             presentation: Mutex::new(None),
             active_transform: Mutex::new(None),
             mutation_journal: super::mutation_journal::MutationJournal::default(),
+            last_bounds: Mutex::new(None),
+        }
+    }
+
+    pub fn last_known_bounds(&self) -> Option<Rect> {
+        *self.last_bounds.lock().ok()?
+    }
+
+    pub(super) fn update_last_bounds(&self, bounds: Rect) {
+        if let Ok(mut guard) = self.last_bounds.lock() {
+            *guard = Some(bounds);
+        }
+    }
+
+    pub(super) fn clear_last_bounds(&self) {
+        if let Ok(mut guard) = self.last_bounds.lock() {
+            *guard = None;
         }
     }
 
@@ -82,6 +100,7 @@ impl SelectionCoordinator {
             }
             self.cancel_presentation()?;
             self.cancel_active_transform()?;
+            self.clear_last_bounds();
             diagnostics::coordinator(
                 if transient {
                     "transient_invalidation_applied"
@@ -119,6 +138,7 @@ impl SelectionCoordinator {
                 superseded
             }
         };
+        self.update_last_bounds(snapshot.bounds);
         if superseded && self.overlay.hide_all().is_err() {
             diagnostics::coordinator("candidate_supersede_hide_failed", Some(&snapshot));
         }

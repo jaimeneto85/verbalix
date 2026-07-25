@@ -21,23 +21,35 @@ pub(crate) fn current_ai_readiness(runtime: &AppRuntime) -> Result<AiReadiness, 
     Ok(evaluate_ai_readiness(true, has_session))
 }
 
+fn error_bounds(runtime: &AppRuntime) -> Option<crate::domain::Rect> {
+    runtime
+        .coordinator
+        .current_snapshot()
+        .map(|s| s.bounds)
+        .or_else(|| {
+            runtime
+                .pause
+                .is_action_in_flight()
+                .then(|| runtime.coordinator.last_known_bounds())
+                .flatten()
+        })
+}
+
 pub(crate) fn show_readiness(runtime: &AppRuntime, readiness: &AiReadiness) {
     crate::diagnostics::ai_readiness(readiness.status.as_str());
     if readiness.status == AiReadinessStatus::Ready {
         return;
     }
-    if let Some(snapshot) = runtime.coordinator.current_snapshot() {
-        let _ = runtime
-            .overlay
-            .show_error(snapshot.bounds, readiness.message);
+    if let Some(bounds) = error_bounds(runtime) {
+        let _ = runtime.overlay.show_error(bounds, readiness.message);
     }
 }
 
 pub(crate) fn show_provider_unavailable(runtime: &AppRuntime) {
     crate::diagnostics::ai_readiness("provider_unavailable");
-    if let Some(snapshot) = runtime.coordinator.current_snapshot() {
+    if let Some(bounds) = error_bounds(runtime) {
         let _ = runtime.overlay.show_error(
-            snapshot.bounds,
+            bounds,
             "O serviço de IA está indisponível. Tente novamente ou abra o Verbalix.",
         );
     }

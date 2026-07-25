@@ -154,15 +154,15 @@ fn error_bounds(runtime: &AppRuntime) -> Option<Rect> {
 ## 📝 TASKS
 
 ### Fase 1: Gate de ação em voo (core)
-- [ ] T1.1: [MEDIUM] `runtime_pause.rs`: `in_flight`, graça com clock injetável, `is_action_in_flight()`, `begin_action`/`ActionGuard`/`Drop`, `run_mouse_dismiss`; compor in-flight em `run_polling`/`run_ax_observer`.
-- [ ] T1.2: [LOW] `lib.rs`: rotear closure do mouse-dismiss por `run_mouse_dismiss`; confirmar que polling/AXObserver herdam a supressão pelo gate composto.
+- [x] T1.1: [MEDIUM] `runtime_pause.rs`: `in_flight`, graça com clock injetável, `is_action_in_flight()`, `begin_action`/`ActionGuard`/`Drop`, `run_mouse_dismiss`; compor in-flight em `run_polling`/`run_ax_observer`.
+- [x] T1.2: [LOW] `lib.rs`: rotear closure do mouse-dismiss por `run_mouse_dismiss`; confirmar que polling/AXObserver herdam a supressão pelo gate composto.
 
 ### Fase 2: Guarda em transform_selection
-- [ ] T2.1: [LOW] `commands.rs`: `let _guard = runtime.pause.begin_action();` no topo de `transform_selection`, antes da checagem de readiness/snapshot; liberação por RAII em todos os caminhos.
+- [x] T2.1: [LOW] `commands.rs`: `let _guard = runtime.pause.begin_action();` no topo de `transform_selection`, antes da checagem de readiness/snapshot; liberação por RAII em todos os caminhos.
 
 ### Fase 3: Fallback de geometria escopado
-- [ ] T3.1: [MEDIUM] `coordinator.rs`: `last_bounds` + atualização em candidate/toolbar/result + LIMPEZA em `Invalidated` + `last_known_bounds()`.
-- [ ] T3.2: [LOW] `commands.rs`: helper `error_bounds` (fallback escopado por `is_action_in_flight()`) usado por `show_readiness` e `show_provider_unavailable`.
+- [x] T3.1: [MEDIUM] `coordinator.rs`: `last_bounds` + atualização em candidate/toolbar/result + LIMPEZA em `Invalidated` + `last_known_bounds()`.
+- [x] T3.2: [LOW] `commands.rs`: helper `error_bounds` (fallback escopado por `is_action_in_flight()`) usado por `show_readiness` e `show_provider_unavailable`.
 
 ### Fase 4: Testes (test-engineer)
 - [ ] T4.1: [MEDIUM] Unit `runtime_pause`: supressão in-flight de polling/observer/mouse-dismiss; reentrância (contador); graça pós-Drop com clock injetável (CA01/CA02/CA06).

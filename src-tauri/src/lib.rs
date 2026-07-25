@@ -36,7 +36,7 @@ fn start_selection_observer(runtime: Arc<AppRuntime>) {
                     Ok(Some(snapshot)) if candidate_id != Some(snapshot.id) => {
                         candidate_id = Some(snapshot.id);
                         thread::sleep(Duration::from_millis(150));
-                        if !runtime.pause.is_paused() {
+                        if !runtime.pause.is_paused() && !runtime.pause.is_action_in_flight() {
                             let _ = runtime
                                 .coordinator
                                 .dispatch(SelectionEvent::DebounceElapsed(snapshot.id));
@@ -220,9 +220,11 @@ pub fn run() {
             install_mouse_dismiss_monitor(Arc::new(move || {
                 diagnostics::detection("mouse_dismiss");
                 dismiss_runtime.selection.signal_causal_change();
-                let _ = dismiss_runtime
-                    .coordinator
-                    .dispatch(SelectionEvent::TransientInvalidated);
+                let _ = dismiss_runtime.pause.run_mouse_dismiss(|| {
+                    dismiss_runtime
+                        .coordinator
+                        .dispatch(SelectionEvent::TransientInvalidated)
+                });
             }));
             let observer_runtime = runtime.clone();
             runtime.selection.start_observer(Arc::new(move || {

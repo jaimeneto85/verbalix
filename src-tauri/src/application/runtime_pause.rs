@@ -1,8 +1,46 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Default)]
+const GRACE_MS: u64 = 400;
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0) as u64
+}
+
+pub struct ActionGuard {
+    in_flight: Arc<AtomicUsize>,
+    grace_deadline_ms: Arc<AtomicU64>,
+    clock_ms: fn() -> u64,
+}
+
+impl Drop for ActionGuard {
+    fn drop(&mut self) {
+        self.grace_deadline_ms
+            .store((self.clock_ms)() + GRACE_MS, Ordering::Release);
+        self.in_flight.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 pub struct RuntimePause {
     paused: AtomicBool,
+    in_flight: Arc<AtomicUsize>,
+    grace_deadline_ms: Arc<AtomicU64>,
+    clock_ms: fn() -> u64,
+}
+
+impl Default for RuntimePause {
+    fn default() -> Self {
+        Self {
+            paused: AtomicBool::new(false),
+            in_flight: Arc::new(AtomicUsize::new(0)),
+            grace_deadline_ms: Arc::new(AtomicU64::new(0)),
+            clock_ms: now_ms,
+        }
+    }
 }
 
 impl RuntimePause {
@@ -15,12 +53,32 @@ impl RuntimePause {
         !was_paused
     }
 
+    pub fn is_action_in_flight(&self) -> bool {
+        if self.in_flight.load(Ordering::Acquire) > 0 {
+            return true;
+        }
+        (self.clock_ms)() < self.grace_deadline_ms.load(Ordering::Acquire)
+    }
+
+    pub fn begin_action(&self) -> ActionGuard {
+        self.in_flight.fetch_add(1, Ordering::AcqRel);
+        ActionGuard {
+            in_flight: self.in_flight.clone(),
+            grace_deadline_ms: self.grace_deadline_ms.clone(),
+            clock_ms: self.clock_ms,
+        }
+    }
+
     pub fn run_polling<T>(&self, automatic_toolbar: bool, action: impl FnOnce() -> T) -> Option<T> {
-        (automatic_toolbar && !self.is_paused()).then(action)
+        (automatic_toolbar && !self.is_paused() && !self.is_action_in_flight()).then(action)
     }
 
     pub fn run_ax_observer<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
-        (!self.is_paused()).then(action)
+        (!self.is_paused() && !self.is_action_in_flight()).then(action)
+    }
+
+    pub fn run_mouse_dismiss<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
+        (!self.is_action_in_flight()).then(action)
     }
 
     pub fn run_global_shortcut<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
@@ -30,6 +88,36 @@ impl RuntimePause {
     pub fn run_clipboard_fallback<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
         (!self.is_paused()).then(action)
     }
+}
+
+#[cfg(test)]
+impl RuntimePause {
+    #[allow(dead_code)]
+    pub(crate) fn with_clock(clock_ms: fn() -> u64) -> Self {
+        Self {
+            paused: AtomicBool::new(false),
+            in_flight: Arc::new(AtomicUsize::new(0)),
+            grace_deadline_ms: Arc::new(AtomicU64::new(0)),
+            clock_ms,
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static FAKE_CLOCK_MS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn test_clock_ms() -> u64 {
+    FAKE_CLOCK_MS.with(|t| t.get())
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn set_test_clock_ms(ms: u64) {
+    FAKE_CLOCK_MS.with(|t| t.set(ms));
 }
 
 #[cfg(test)]

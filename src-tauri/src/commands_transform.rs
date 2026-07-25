@@ -46,6 +46,7 @@ pub(crate) async fn transform_selection(
     operation: TransformOperation,
     preferences: Option<TransformPreferences>,
 ) -> Result<TransformResult, VerbalixError> {
+    let _guard = runtime.pause.begin_action();
     let snapshot = runtime
         .coordinator
         .current_snapshot()
