@@ -43,6 +43,10 @@
 - O gate global de role é testado em duas camadas: trace parametrizado exige somente `role` para secure/non-text e o contrato de source exige `validate` antes de identifier, conteúdo, range e bounds; roles textuais percorrem o trace completo.
 - Registry causal de handles precisa de relógio lógico injetado pelos próprios argumentos, sem sleeps: o boundary exato de TTL, eviction por inserção, substituição, remoção e `Drop` são observáveis. Um contrato separado proíbe qualquer re-resolução por PID quando o handle exato está ausente.
 - Receipt de mutação é a identidade do undo, não o texto transformado. Testes mantêm dois records com resultado idêntico e exigem que somente o `mutation_id` de `Applied` seja restaurado; falha de feedback após setter deve preservar o record no journal.
+- Secure text fields exigem classificação conjunta `AXRole + AXSubrole` antes de identifier, settable, conteúdo, range, marker ou bounds. O contrato de produção cobre tanto `capture` quanto `capture_with_strategy`; validação manual continua necessária para a chamada FFI real sob TCC.
+- O scheduler AX precisa de teste com o worker real: bloquear A no boundary anterior ao claim, avançar a epoch causal fora da FIFO, confirmar que Capture B fica pendente na fila, liberar A e exigir zero setter de A antes de B executar.
+- Recovery de mutation ledger é uma state machine persistente: o payload completo nasce em `Prepared` antes do setter; replay usa o mesmo ID; `Indeterminate` e `RestoreIndeterminate` reconciliam por leitura; estados reconciliados terminais recebem timestamp para TTL, ou o ledger fica permanentemente ocupado.
+- Commit failure depois de setter confirmado não pode apagar o receipt. O teste deve envenenar o commit de estado depois do claim, exigir uma única escrita e confirmar que o journal ainda permite reconciliação/undo exato.
 
 ## Estratégias de Mock
 - Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
@@ -61,9 +65,9 @@
 
 ## Cobertura & Métricas
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
-- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os 70 testes Rust e os gates `clippy -D warnings` são usados como evidência.
+- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - O frontend possui 50 testes Vitest e mantém 100% em statements, branches, functions e lines no escopo instrumentado (`native.ts`, `types.ts`); os 6 testes Playwright E2E também passam.
-- A suíte Rust possui 170 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, permits visuais reutilizáveis por ação, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX, fallback geométrico, matriz UTF-16/ValueRange, role gate, registry causal e receipt exato.
+- A suíte Rust possui 186 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, permits visuais reutilizáveis por ação, publicação cancelada durante preparação, histórico detached e insert/list, identidade AX, fallback geométrico, matriz UTF-16/ValueRange, role+subrole secure, scheduler AX causal, mutation ledger idempotente e receipt exato.
 - O frontend possui 55 testes Vitest com 100% de statements, branches, functions e lines no escopo instrumentado; os 6 testes Playwright continuam verdes.
 
 ## Observações

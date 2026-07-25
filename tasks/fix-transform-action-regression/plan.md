@@ -63,9 +63,9 @@
 - [x] RF20: Protected fields e roles fora da allowlist textual falham antes de qualquer leitura de `AXSelectedText`, `AXStringForRange` ou `AXValue`.
 - [x] RF21: Quando `AXIdentifier` não existe, captura, replace e restore usam a mesma referência AX retida causalmente por snapshot, com TTL/capacidade e cleanup; `role + frame` nunca substitui identidade forte.
 - [x] RF22: Toda mutação AX confirmada gera receipt lógico durável suficiente para `Applied + undo`; falha pós-setter não deixa alteração órfã nem reclassifica sucesso como ausência de write.
-- [ ] RF23: A classificação textual/protegida usa `AXRole + AXSubrole`; `AXTextField/AXSecureTextField` falha antes de identifier, bounds, settable ou qualquer leitura de conteúdo.
-- [ ] RF24: Mudança de seleção/foco revoga a lease por sinal causal não bloqueado atrás de Replace/Restore no actor; o setter revalida essa geração imediatamente antes do claim/write.
-- [ ] RF25: O actor registra antes do setter o mutation ID, snapshot, original, transformed, strategy, target e undo metadata completos; uma API idempotente reconcilia resposta perdida/commit falho.
+- [x] RF23: A classificação textual/protegida usa `AXRole + AXSubrole`; `AXTextField/AXSecureTextField` falha antes de identifier, bounds, settable ou qualquer leitura de conteúdo.
+- [x] RF24: Mudança de seleção/foco revoga a lease por sinal causal não bloqueado atrás de Replace/Restore no actor; o setter revalida essa geração imediatamente antes do claim/write.
+- [x] RF25: O actor registra antes do setter o mutation ID, snapshot, original, transformed, strategy, target e undo metadata completos; uma API idempotente reconcilia resposta perdida/commit falho.
 
 ### Requisitos não funcionais
 
@@ -98,9 +98,9 @@
 - [x] CA20: Trace prova zero APIs de conteúdo chamadas para secure/non-text roles, inclusive caminhos direct/CFRange/value/marker.
 - [x] CA21: Snapshot sem identifier substitui/restaura somente pelo handle AX original retido; handle ausente, expirado ou divergente produz zero setter.
 - [x] CA22: Setter bem-sucedido seguido de falha de commit/feedback mantém receipt, estado Applied recuperável e undo; setter rejeitado não cria receipt.
-- [ ] CA23: Trace de `AXTextField + AXSecureTextField` prova zero chamadas a identifier/bounds/settable/SelectedText/StringForRange/AXValue/marker.
-- [ ] CA24: Scheduler real prova que evento causal de Candidate B durante preparação de A cancela A antes do setter, mesmo com Capture B aguardando na fila AX.
-- [ ] CA25: Perda de response, expiração durante setter e falha de `finish_receipt`/commit são reconciliadas pelo mesmo mutation ID completo, sem sobrescrever Candidate B.
+- [x] CA23: Trace de `AXTextField + AXSecureTextField` prova zero chamadas a identifier/bounds/settable/SelectedText/StringForRange/AXValue/marker.
+- [x] CA24: Scheduler real prova que evento causal de Candidate B durante preparação de A cancela A antes do setter, mesmo com Capture B aguardando na fila AX.
+- [x] CA25: Perda de response, expiração durante setter e falha de `finish_receipt`/commit são reconciliadas pelo mesmo mutation ID completo, sem sobrescrever Candidate B.
 
 ### Edge cases
 
@@ -204,9 +204,9 @@
 - [x] T2.15 `[HIGH]` Mover a allowlist de role para antes de qualquer leitura de conteúdo e provar zero-read por adapter trace.
 - [x] T2.16 `[HIGH]` Implementar registry causal bounded/TTL do `OwnedAxElement` por snapshot e integrá-lo a capture/replace/restore sem unsafe identidade fraca.
 - [x] T2.17 `[HIGH]` Introduzir write receipt e reconciliação pós-setter para preservar Applied/undo fora do estado visual latest-wins.
-- [ ] T2.18 `[CRITICAL]` Classificar role+subrole seguro antes de qualquer leitura/probe de conteúdo ou identidade.
-- [ ] T2.19 `[HIGH]` Redesenhar revogação do actor com epoch/sinal causal fora da FIFO e rechecagem no boundary do setter, mantendo handle no owner thread.
-- [ ] T2.20 `[HIGH]` Persistir mutation record completo no actor antes do setter e expor lookup/reconcile idempotente para response/commit failure.
+- [x] T2.18 `[CRITICAL]` Classificar role+subrole seguro antes de qualquer leitura/probe de conteúdo ou identidade.
+- [x] T2.19 `[HIGH]` Redesenhar revogação do actor com epoch/sinal causal fora da FIFO e rechecagem no boundary do setter, mantendo handle no owner thread.
+- [x] T2.20 `[HIGH]` Persistir mutation record completo no actor antes do setter e expor lookup/reconcile idempotente para response/commit failure.
 
 ### Fase 3 — Testes
 
@@ -227,9 +227,9 @@
 - [x] T3.15 `[HIGH]` Cobrir trace zero-read para cada role bloqueada e ausência de regressão nos roles textuais suportados.
 - [x] T3.16 `[HIGH]` Cobrir registry: identifier presente/ausente, handle exato, TTL, capacidade, cleanup, divergência e zero setter sem receipt causal.
 - [x] T3.17 `[HIGH]` Cobrir setter success/failure/indeterminate, falha de commit/feedback, Candidate concorrente, receipt recuperável e undo sem sobrescrever seleção nova.
-- [ ] T3.18 `[CRITICAL]` Cobrir secure subrole real com trace zero-read e constantes compatíveis com SDK.
-- [ ] T3.19 `[HIGH]` Cobrir scheduler actor end-to-end: preparação bloqueada, sinal B fora da FIFO, capture B pendente, zero setter A.
-- [ ] T3.20 `[HIGH]` Cobrir mutation recovery completo em perda de response, expiry durante setter, commit failure, reconcile repetido e Candidate B preservado.
+- [x] T3.18 `[CRITICAL]` Cobrir secure subrole real com trace zero-read e constantes compatíveis com SDK.
+- [x] T3.19 `[HIGH]` Cobrir scheduler actor end-to-end: preparação bloqueada, sinal B fora da FIFO, capture B pendente, zero setter A.
+- [x] T3.20 `[HIGH]` Cobrir mutation recovery completo em perda de response, expiry durante setter, commit failure, reconcile repetido e Candidate B preservado.
 
 ### Fase 4 — QA real
 
