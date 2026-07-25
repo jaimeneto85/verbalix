@@ -22,7 +22,7 @@ pub(super) fn set_selected_text(
     })
 }
 
-fn set_after_role_validation(
+pub(super) fn set_after_role_validation(
     expected: &SelectionElementIdentity,
     current: macos_text_role::ValidatedTextRole,
     setter: impl FnOnce() -> AxWriteResult,

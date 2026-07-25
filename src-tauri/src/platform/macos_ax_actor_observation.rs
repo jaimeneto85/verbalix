@@ -1,6 +1,7 @@
 use super::{
     macos_ax::OwnedAxElement,
     macos_ax_actor_state::{ActorState, CapturedTarget},
+    macos_ax_target,
     macos_element_token::AxElementToken,
     macos_mutation_ledger::{ReplaceTerminalOutcome, RestoreTerminalOutcome},
     macos_selection_revalidation,
@@ -109,10 +110,7 @@ impl ActorState {
                     record.projection.receipt.id,
                     record.projection.target_snapshot_id,
                     record.projection.status,
-                    macos_selection_revalidation::read(
-                        record.target.element.as_ref().as_ref(),
-                        expected.strategy,
-                    ),
+                    record.target.target.read(expected.strategy),
                 )
             })
         else {
@@ -170,7 +168,7 @@ pub(super) fn captured_target(
     token: Option<AxElementToken>,
 ) -> CapturedTarget {
     CapturedTarget {
-        element,
+        target: macos_ax_target::native_target(element),
         epoch,
         token,
     }

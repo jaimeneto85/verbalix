@@ -28,6 +28,8 @@ mod macos_ax_actor_reconciliation;
 #[cfg(target_os = "macos")]
 mod macos_ax_actor_state;
 #[cfg(target_os = "macos")]
+mod macos_ax_target;
+#[cfg(target_os = "macos")]
 mod macos_classic_range;
 #[cfg(target_os = "macos")]
 mod macos_element_token;

@@ -1,8 +1,9 @@
 use super::{
     causal_epoch::CausalEpoch,
     causal_registry::CausalRegistry,
-    macos_ax::{self, OwnedAxElement},
+    macos_ax,
     macos_ax_actor_observation::{self, SelfNotificationSignal},
+    macos_ax_target::AxMutationTarget,
     macos_element_token::AxElementToken,
     macos_mutation_ledger::{MutationLedger, ReplaceTerminalOutcome, RestoreTerminalOutcome},
     macos_replace, macos_restore, macos_selection,
@@ -19,7 +20,7 @@ const REGISTRY_TTL_MS: u64 = 600_000;
 
 #[derive(Clone)]
 pub(super) struct CapturedTarget {
-    pub(super) element: Rc<OwnedAxElement>,
+    pub(super) target: Rc<dyn AxMutationTarget>,
     pub(super) epoch: u64,
     pub(super) token: Option<AxElementToken>,
 }
@@ -84,7 +85,9 @@ impl ActorState {
             .get(expected.id, now)
             .cloned()
             .ok_or(VerbalixError::StaleSelection)?;
-        macos_replace::prepare_on_element(&expected, &target.element, target.token.is_none())?;
+        target
+            .target
+            .prepare_replace(&expected, target.token.is_none())?;
         ensure_current(&self.epoch, target.epoch)?;
         self.mutations.prepare(
             receipt.clone(),
@@ -121,8 +124,7 @@ impl ActorState {
             return Err(VerbalixError::StaleSelection);
         }
         self.arm_self_notification(receipt.id, &expected, &target, target.epoch, text.clone());
-        let outcome =
-            macos_replace::write_on_element(&expected, &text, target.element.as_ref().as_ref());
+        let outcome = target.target.write_replace(&expected, &text);
         let terminal_outcome = match outcome {
             macos_replace::WriteOutcome::Confirmed => ReplaceTerminalOutcome::Confirmed,
             macos_replace::WriteOutcome::Rejected => ReplaceTerminalOutcome::Rejected,
@@ -166,12 +168,9 @@ impl ActorState {
             return Err(VerbalixError::StaleSelection);
         }
         let boundary_epoch = self.epoch.current();
-        macos_restore::prepare_on_element(
-            &expected,
-            &transformed,
-            &target.element,
-            target.token.is_none(),
-        )?;
+        target
+            .target
+            .prepare_restore(&expected, &transformed, target.token.is_none())?;
         self.mutations.begin_restore(mutation_id, self.now())?;
         if ensure_current(&self.epoch, boundary_epoch).is_err() {
             self.mutations.finish_restore(
@@ -209,7 +208,7 @@ impl ActorState {
             boundary_epoch,
             expected.text.clone(),
         );
-        let outcome = macos_restore::write_on_element(&expected, target.element.as_ref().as_ref());
+        let outcome = target.target.write_restore(&expected);
         let terminal_outcome = match outcome {
             macos_restore::RestoreWriteOutcome::Confirmed => RestoreTerminalOutcome::Restored,
             macos_restore::RestoreWriteOutcome::Rejected => RestoreTerminalOutcome::Rejected,
