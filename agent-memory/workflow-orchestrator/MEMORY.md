@@ -64,9 +64,37 @@
 
 ## Aprendizados de QA
 - Relatórios finais de sub-agentes podem chegar truncados/otimistas; o orquestrador DEVE re-rodar os gates
-  empiricamente (swift test, cargo test/clippy/fmt, npm test/build, deno) antes de aceitar qualquer verdict.
-  Nesta entrega um sub-agente reportou progresso mas deixou `Tests/` vazio e outro entregou teste que não
-  compilava (accuracy sobre Optional) — só a re-verificação direta pegou os dois.
+  empiricamente (swift test, cargo test/clippy/fmt, npm test/build, deno, e os 3 xcodebuild) antes de aceitar
+  qualquer verdict. Ao longo desta entrega os sub-agentes repetidamente: deixaram `Tests/` vazio; entregaram
+  teste que não compilava (accuracy sobre Optional); pararam com código quebrado NÃO-commitado (RefreshLock
+  com `flock` ambíguo; SessionRefresher lançando `.localFailure`); e terminaram sem commitar apesar de "tudo
+  verde". Padrão de mitigação que funcionou: (1) escopo por rodada com "pouse SEMPRE verde+commitado"; (2)
+  o orquestrador verifica git log/status + roda os gates a cada retorno; (3) preservar trabalho commitando
+  quando o sub-agente esquece.
+- Fase 2 (sync de prefs) tinha DEFEITO real de "remoto sempre vence": LWW exige timestamp local. Solução
+  aprovada: SIDECAR `preferences_sync.json` (`{updatedAt, syncedAt, sequence}`) fora do `AppSettings` (que
+  cruza IPC), com sequence-guard contra race entre `save_settings` síncrono e o spawn de `load_settings`;
+  `load_settings` retorna local na hora e emite evento `preferences-synced` (padrão listen/emit de
+  `note-result`, com comando de pull de fallback). No iOS, TODA edição local deve chamar `touch()` senão o
+  bug reaparece.
+
+## iOS App + Extensões (Fases 3-5)
+- Tooling: XcodeGen (`ios/project.yml` versionado → `ios/Verbalix.xcodeproj` gitignored). Targets: app
+  `Verbalix`, `VerbalixAction` (com.apple.ui-services), `VerbalixKeyboard` (com.apple.keyboard-service),
+  extensões embedadas, todos dependem do package local `ios/VerbalixKit`. Deployment iOS 17.0.
+- Build de simulador SEM Team: entitlements de App Group/Keychain quebram assinatura, então a config de
+  simulador usa `CODE_SIGNING_ALLOWED=NO`/`CODE_SIGNING_REQUIRED=NO`/`CODE_SIGN_IDENTITY=""` (em
+  `Config/Debug.xcconfig` e/ou na linha de comando do xcodebuild). `DEVELOPMENT_TEAM` via `ios/Local.xcconfig`
+  gitignored (`.example` versionado); vazio compila no simulador. Os 3 schemes buildam verdes assim.
+- Config Supabase: `ios/scripts/bootstrap.sh` gera `ios/Config/Supabase.xcconfig` (gitignored) do `.env` da
+  raiz e roda `xcodegen`. Em WORKTREE o `.env` (gitignored) não existe localmente; resolver a raiz do checkout
+  via `git rev-parse --git-common-dir` (pai do `.git` comum), NUNCA `ios/../..` fixo. O script deve falhar
+  loud se ausente e NUNCA ecoar URL/anon key.
+- supabase-swift entra só aqui (produto `Auth`, resolvido via SPM 2.53.0). `AuthLocalStorage`/`AuthService`
+  sobre `SharedSessionStore`; refresh serializado por `RefreshLock` (fcntl `F_SETLK`, NÃO `flock` — `flock`
+  colide com o `struct flock` do Darwin) com expiração de lock órfão. Para testar no host, o lock precisa ser
+  INJETÁVEL (init com `lockPath` em tmp); a versão de produção usa `containerURL(App Group)`, que no host
+  retorna URL inacessível (não-nil) e faz `open(O_CREAT)` falhar com `.localFailure` — mesmo trap do M3.
 - A matriz de compatibilidade precisa cobrir seleção por mouse e teclado, campos editáveis e somente leitura, múltiplos monitores e conteúdo Unicode.
 - Testar separadamente detecção, leitura, bounds e escrita evita mascarar incompatibilidades específicas dos aplicativos.
 - Pausar precisa bloquear todos os entrypoints: polling, AXObserver, atalho global e fallback de clipboard.

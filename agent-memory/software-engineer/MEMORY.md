@@ -34,6 +34,8 @@
 - Testes assíncronos Rust exigem `macros` e um runtime habilitados no Tokio.
 - Erros de setup Tauri precisam ser convertidos para `Box<dyn std::error::Error>`.
 - Bundles ad-hoc podem manter uma entrada TCC visualmente habilitada que não corresponde ao requisito designado do build atual; nunca resetar TCC automaticamente.
+- `SessionRefresher` expõe um init interno `init(config:store:lock:)` que aceita um `RefreshLock` pré-construído; em produção usa `init(config:store:appGroupID:)`. Testes injetam `RefreshLock(lockPath:)` com caminho único em `temporaryDirectory` (UUID suffix) para contornar a ausência de entitlement App Group no host.
+- `containerURL(forSecurityApplicationGroupIdentifier:)` no host sem entitlement retorna URL não-nil mas inacessível; o fallback `?? temporaryDirectory` nunca dispara porque o retorno não é nil, mas `open()` com `O_CREAT` falha porque o diretório pai não existe. Solução: injetar lock com caminho em `temporaryDirectory`.
 - Refresh de sessão deve separar autenticação inválida (`400/401/403`) de indisponibilidade transitória (`429/5xx`, transporte ou JSON inválido); somente a primeira rota abre o login.
 - Readiness de IA deve ter uma única autoridade no command Tauri; uma pré-checagem async no overlay cria uma janela de invalidação antes de `Processing`.
 - Depois que `SelectionPort::replace` retorna sucesso, `Applied` é o commit point. Feedback de undo é best-effort e não pode reclassificar a mutação.
