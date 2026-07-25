@@ -74,6 +74,7 @@
 - [ ] RF31: FocusChanged/Destroyed incrementam epoch antes de qualquer token/AX metadata I/O; somente SelectedTextChanged candidato pode construir token.
 - [ ] RF32: Replace/Restore revalidam `AXRole + AXSubrole` no handle retido imediatamente no boundary do setter, depois de ledger/claim/epoch.
 - [ ] RF33: A API de terminalização aceita outcome tipado exclusivo de replace; estados restore/Prepared semanticamente inválidos são rejeitados sem mutar status/TTL.
+- [ ] RF34: Idempotência é específica da fase/API; `finish_*` e `reconcile_*` não aceitam o mesmo outcome quando o predecessor exigido não corresponde.
 
 ### Requisitos não funcionais
 
@@ -117,6 +118,7 @@
 - [ ] CA31: Callback FFI-classifier instrumentado prova Focus/Destroyed zero token reads e bump anterior ao callback; Selected sem expectativa também bumpa sem metadata.
 - [ ] CA32: Teste actor/retained-handle muda subrole para secure depois de prepare e antes de setter, exigindo zero setter e terminal Rejected.
 - [ ] CA33: Matriz de terminalização inválida mantém status e TTL byte-for-byte; outcomes válidos continuam idempotentes.
+- [ ] CA34: Matriz cross-phase cobre mesmo outcome em API errada para replace/restore e preserva status, terminal_at e restore_attempted.
 
 ### Edge cases
 
@@ -189,6 +191,7 @@
 - O callback classifica primeiro pelo nome da notificação. Focus/Destroyed e Selected sem expectativa não executam qualquer leitura AX auxiliar antes do bump.
 - O último passo anterior ao setter é o secure gate no mesmo handle retido; nenhuma operação falível ou yield separa esse gate do setter.
 - Terminalização expõe enums distintos de replace/restore, tornando transições cruzadas não representáveis na API pública do ledger.
+- Idempotência não é apenas igualdade de outcome: ela exige que o registro já tenha sido terminalizado pela mesma fase/API, com provenance explícita.
 - Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
@@ -236,6 +239,7 @@
 - [ ] T2.24 `[HIGH]` Remover AXIdentifier de serde/IPC/Debug mantendo-o no registry/token nativo interno.
 - [ ] T2.25 `[HIGH]` Refatorar callback observer para fast-path Focus/Destroyed/Selected-sem-expectativa antes de token reads.
 - [ ] T2.26 `[HIGH]` Revalidar secure no write boundary e tipar APIs de terminalização replace/restore.
+- [ ] T2.27 `[HIGH]` Registrar provenance de terminalização por fase, corrigir cross-phase same-outcome e extrair `macos_selection` abaixo de 300 linhas.
 
 ### Fase 3 — Testes
 
@@ -262,6 +266,7 @@
 - [x] T3.21 `[HIGH]` Cobrir behavioralmente focus keyboard, self-notification versus external notification e zero setter stale.
 - [x] T3.22 `[HIGH]` Cobrir restore setter count, estados monotônicos e secure transition zero-read com fakes instrumentados; `include_str!` não satisfaz.
 - [ ] T3.23 `[HIGH]` Cobrir behavioralmente serde/IPC redaction, callback pre-I/O ordering, secure-after-prepare actor path e invalid terminal outcomes/status/TTL.
+- [ ] T3.24 `[HIGH]` Cobrir ActorState real replace+restore secure-after-prepare e matriz ledger cross-phase same-outcome.
 
 ### Fase 4 — QA real
 
@@ -293,6 +298,7 @@
 - O QA RF20 mostrou que secure é subrole, que Capture e Replace na mesma FIFO ainda atrasam latest-wins e que IDs pré-setter sem payload completo não permitem recovery; RF23–RF25 fecham esses três pontos.
 - O QA RF23 mostrou ausência de focus notification, autocancelamento por self-notification, restore não monotônico e reconcile sem secure gate; RF26–RF29 tornam os quatro comportamentos verificáveis.
 - O QA RF26 mostrou identifier no DTO, bump posterior a token reads, secure race no setter e terminalização permissiva; RF30–RF33 fecham esses boundaries reais.
+- O test-engineer RF30 encontrou idempotência cross-phase, teste do helper sem ActorState real e arquivo acima do limite; RF34/T2.27/T3.24 fecham o gate de integração.
 
 ### 🟢 Oportunidades incorporadas
 
