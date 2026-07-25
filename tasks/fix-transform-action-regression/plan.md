@@ -66,6 +66,10 @@
 - [x] RF23: A classificação textual/protegida usa `AXRole + AXSubrole`; `AXTextField/AXSecureTextField` falha antes de identifier, bounds, settable ou qualquer leitura de conteúdo.
 - [x] RF24: Mudança de seleção/foco revoga a lease por sinal causal não bloqueado atrás de Replace/Restore no actor; o setter revalida essa geração imediatamente antes do claim/write.
 - [x] RF25: O actor registra antes do setter o mutation ID, snapshot, original, transformed, strategy, target e undo metadata completos; uma API idempotente reconcilia resposta perdida/commit falho.
+- [ ] RF26: Mudança de foco por teclado (`AXFocusedUIElementChanged`) incrementa o epoch fora da FIFO antes que polling/capture possa atrasar a detecção.
+- [ ] RF27: Notificação `AXSelectedTextChanged` causada pelo próprio mutation ID é correlacionada/suprimida sem esconder mudanças externas reais.
+- [ ] RF28: Estados de restore são monotônicos e tipados; `Rejected` nunca vira `Indeterminate/Confirmed` e o mesmo mutation ID executa no máximo um restore setter.
+- [ ] RF29: Toda leitura de reconciliação revalida `AXRole + AXSubrole` antes de conteúdo, inclusive em handles retidos que mudaram para secure.
 
 ### Requisitos não funcionais
 
@@ -101,6 +105,10 @@
 - [x] CA23: Trace de `AXTextField + AXSecureTextField` prova zero chamadas a identifier/bounds/settable/SelectedText/StringForRange/AXValue/marker.
 - [x] CA24: Scheduler real prova que evento causal de Candidate B durante preparação de A cancela A antes do setter, mesmo com Capture B aguardando na fila AX.
 - [x] CA25: Perda de response, expiração durante setter e falha de `finish_receipt`/commit são reconciliadas pelo mesmo mutation ID completo, sem sobrescrever Candidate B.
+- [ ] CA26: Teste comportamental move foco por teclado durante preparação A e prova epoch revogado/zero setter, com Capture B ainda pendente.
+- [ ] CA27: Self-notification exata mantém Applied/undo/feedback; notificação externa subsequente cancela normalmente.
+- [ ] CA28: Restore Rejected/Indeterminate/Confirmed e retry/reconcile provam setter count máximo 1 por mutation ID.
+- [ ] CA29: Handle que muda para secure antes de reconcile produz trace zero-read e terminal Rejected.
 
 ### Edge cases
 
@@ -166,6 +174,9 @@
 - `AXSecureTextField` é subrole no SDK macOS. Role e subrole devem ser lidos/classificados antes de qualquer outra propriedade potencialmente sensível.
 - A revogação latest-wins não pode depender de uma Capture FIFO atrás do write. Observer/focus/input emite geração atômica ou sinal equivalente fora da fila bloqueada; o actor lê essa geração na preparação e novamente imediatamente antes do setter.
 - O actor mantém o registro completo em estado `Prepared → Confirmed | Rejected | Indeterminate`; coordinator consulta/reconcilia por mutation ID após timeout, perda de resposta ou falha de commit.
+- Focus change deve ser observado no nível apropriado fora da fila de writes; seleção e foco são sinais causais distintos.
+- Supressão de self-notification é por mutation ID/target/generation e consumo único; janela temporal ou supressão global é proibida.
+- Restore e reconcile usam a mesma máquina monotônica e o secure gate compartilhado; nenhum caminho de recuperação pode reler conteúdo diretamente.
 - Erros são roteados por classe: auth/config, provider, seleção stale, permissão/AX e overlay.
 
 ### Componentes reutilizáveis
@@ -207,6 +218,9 @@
 - [x] T2.18 `[CRITICAL]` Classificar role+subrole seguro antes de qualquer leitura/probe de conteúdo ou identidade.
 - [x] T2.19 `[HIGH]` Redesenhar revogação do actor com epoch/sinal causal fora da FIFO e rechecagem no boundary do setter, mantendo handle no owner thread.
 - [x] T2.20 `[HIGH]` Persistir mutation record completo no actor antes do setter e expor lookup/reconcile idempotente para response/commit failure.
+- [ ] T2.21 `[HIGH]` Observar focus-changed fora da FIFO e integrar ao CausalEpoch sem depender do polling.
+- [ ] T2.22 `[HIGH]` Correlacionar self-notification ao mutation record e consumir exatamente uma notificação esperada.
+- [ ] T2.23 `[HIGH]` Tornar restore terminal monotônico/idempotente e compartilhar secure-gated revalidation no reconcile.
 
 ### Fase 3 — Testes
 
@@ -230,6 +244,8 @@
 - [x] T3.18 `[CRITICAL]` Cobrir secure subrole real com trace zero-read e constantes compatíveis com SDK.
 - [x] T3.19 `[HIGH]` Cobrir scheduler actor end-to-end: preparação bloqueada, sinal B fora da FIFO, capture B pendente, zero setter A.
 - [x] T3.20 `[HIGH]` Cobrir mutation recovery completo em perda de response, expiry durante setter, commit failure, reconcile repetido e Candidate B preservado.
+- [ ] T3.21 `[HIGH]` Cobrir behavioralmente focus keyboard, self-notification versus external notification e zero setter stale.
+- [ ] T3.22 `[HIGH]` Cobrir restore setter count, estados monotônicos e secure transition zero-read com fakes instrumentados; `include_str!` não satisfaz.
 
 ### Fase 4 — QA real
 
@@ -259,6 +275,7 @@
 - Capacidade deve ser diagnosticada uma vez por transição/categoria no build de smoke, sem texto, range concreto ou identificador.
 - O QA RF16 encontrou que a allowlist era aplicada tarde, que o handle causal não sobrevivia à captura e que o commit lógico ocorria depois do setter sem receipt independente; RF20–RF22 tornam esses pontos gates explícitos.
 - O QA RF20 mostrou que secure é subrole, que Capture e Replace na mesma FIFO ainda atrasam latest-wins e que IDs pré-setter sem payload completo não permitem recovery; RF23–RF25 fecham esses três pontos.
+- O QA RF23 mostrou ausência de focus notification, autocancelamento por self-notification, restore não monotônico e reconcile sem secure gate; RF26–RF29 tornam os quatro comportamentos verificáveis.
 
 ### 🟢 Oportunidades incorporadas
 
