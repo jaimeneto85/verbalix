@@ -75,7 +75,9 @@
 - A estratégia de extração (`SelectedText`, `StringForRange`, `ValueRange` ou `TextMarker`) faz parte do snapshot e de `same_target`; replace e restore revalidam exclusivamente pela estratégia original.
 - O fallback `ValueRange` é autorizado somente após falha de capacidade de `AXStringForRange`, executa `range₁ → AXValue → range₂`, exige ranges iguais e copia apenas o trecho selecionado por offsets UTF-16.
 - `AXValue` é limitado a 262.144 code units, precisa ser CFString e nunca é convertido integralmente, logado, persistido, enviado ou usado como writer. Writability continua independente e depende somente do setter `AXSelectedText`.
-- Roles protegidas falham antes da extração. A allowlist textual restringe apenas o acesso ao fallback `AXValue`; não deve bloquear globalmente rotas direct, CFRange ou text marker de editores complexos.
+- O adapter lê `AXRole` e aplica uma allowlist textual global antes de identifier, conteúdo, range ou bounds. Secure/non-text falham sem alcançar direct, CFRange, `AXValue` ou marker; roles textuais suportados seguem a cadeia normal.
+- `OwnedAxElement` fica confinado ao worker `AxActor`. O registry causal guarda o handle exato por `snapshot.id`, com TTL/capacidade/drop determinísticos; replace/restore falham stale se o handle estiver ausente ou expirado e nunca re-resolvem por PID, identifier, role ou frame.
+- Toda escrita confirmada retorna `MutationReceipt` e entra no journal antes da promoção visual falível. `Applied` referencia o receipt por UUID, Candidate mais novo não é sobrescrito e undo resolve o record exato mesmo quando mutações distintas produzem o mesmo texto.
 - Diagnósticos de capacidade registram apenas estágio/origem/categoria e presença de identifier, sem valor, identifier concreto ou range. A consulta de `AXSelectedTextRange` settable é somente um probe sanitizado quando diagnósticos estão habilitados.
 
 ## Observações
