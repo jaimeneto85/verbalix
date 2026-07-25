@@ -116,6 +116,31 @@ fn self_notification_expectation_is_consumed_once_even_on_mismatch() {
 }
 
 #[test]
+fn causal_signal_preserves_promoted_setter_and_one_self_candidate() {
+    let target = token("editor");
+    let generation = 11;
+    let signal = SelfNotificationSignal::default();
+    let phase = SelfNotificationPhase::armed();
+    let mut expected = expectation(target.clone(), generation);
+    expected.phase = phase.clone();
+    signal.arm(expected);
+    let epoch = crate::platform::causal_epoch::CausalEpoch::default();
+    let authorization =
+        crate::platform::macos_write_authorization::AxWriteAuthorization::new(epoch, 0, phase);
+    assert!(authorization.begin_setter());
+
+    assert!(!signal.cancel_pending_before_setter());
+    assert!(signal.has_pending());
+    let setters = std::cell::Cell::new(0);
+    setters.set(setters.get() + 1);
+    authorization.commit();
+
+    assert_eq!(setters.get(), 1);
+    assert!(signal.take_exact(target, generation).is_some());
+    assert!(!signal.has_pending());
+}
+
+#[test]
 fn exact_expectation_matches_actor_ledger_and_current_selection_once() {
     let selected = SelectionSnapshot::new(
         42,

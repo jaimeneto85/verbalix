@@ -25,20 +25,29 @@ use std::{
     },
 };
 #[derive(Clone, Copy)]
-enum MutationKind {
+pub(super) enum MutationKind {
     Replace,
     Restore,
 }
 #[derive(Clone, Copy)]
-enum Interruption {
+pub(super) enum Interruption {
     ExactEvent,
     StaleEpoch,
+    FocusChanged,
+    ElementDestroyed,
+    DirectSignal,
+}
+#[derive(Clone, Copy)]
+pub(super) enum BarrierPoint {
+    Armed,
+    Authorizing,
+    EpochValid,
 }
 struct ArmedBlockingTarget {
     entered: mpsc::Sender<()>,
     release: RefCell<Option<mpsc::Receiver<()>>>,
     setters: Arc<AtomicUsize>,
-    after_authorizing: bool,
+    barrier: BarrierPoint,
 }
 impl ArmedBlockingTarget {
     fn authorize(&self, authorization: &AxWriteAuthorization) -> bool {
@@ -46,11 +55,13 @@ impl ArmedBlockingTarget {
             let _ = self.entered.send(());
             let _ = self.release.borrow_mut().take().unwrap().recv();
         };
-        let authorized = if self.after_authorizing {
-            authorization.begin_setter_after_authorizing(wait)
-        } else {
-            wait();
-            authorization.begin_setter()
+        let authorized = match self.barrier {
+            BarrierPoint::Armed => {
+                wait();
+                authorization.begin_setter()
+            }
+            BarrierPoint::Authorizing => authorization.begin_setter_after_authorizing(wait),
+            BarrierPoint::EpochValid => authorization.begin_setter_after_epoch_valid(wait),
         };
         if authorized {
             self.setters.fetch_add(1, Ordering::SeqCst);
@@ -138,10 +149,10 @@ fn snapshot() -> SelectionSnapshot {
     .with_native_element_identifier(Some("editor".to_owned()))
 }
 
-fn assert_interruption_revokes_write(
+pub(super) fn assert_interruption_revokes_write(
     kind: MutationKind,
     interruption: Interruption,
-    after_authorizing: bool,
+    barrier: BarrierPoint,
 ) {
     let actor = AxActor::new();
     let selected = snapshot();
@@ -169,7 +180,7 @@ fn assert_interruption_revokes_write(
                     entered: entered_tx,
                     release: RefCell::new(Some(release_rx)),
                     setters: setters_worker,
-                    after_authorizing,
+                    barrier,
                 }),
                 epoch,
                 token: AxElementToken::new(selected_worker.pid, "editor"),
@@ -234,21 +245,39 @@ fn assert_interruption_revokes_write(
         Err(mpsc::TryRecvError::Empty)
     ));
     let generation = actor.epoch.current();
-    if matches!(interruption, Interruption::ExactEvent) {
-        assert!(route_observer_event(
+    match interruption {
+        Interruption::ExactEvent => assert!(route_observer_event(
             AccessibilityEvent {
                 kind: AccessibilityEventKind::SelectedTextChanged,
                 target: Some(AxElementToken::new(selected.pid, "editor").unwrap()),
             },
             &actor,
             |target, generation| actor.observe_selection_change(target, generation),
-        ));
-        assert!(!actor.has_pending_self_notification());
-    } else {
-        actor.epoch.bump();
-        assert!(actor.has_pending_self_notification());
+        )),
+        Interruption::StaleEpoch => actor.epoch.bump(),
+        Interruption::FocusChanged | Interruption::ElementDestroyed => {
+            let kind = if matches!(interruption, Interruption::FocusChanged) {
+                AccessibilityEventKind::FocusChanged
+            } else {
+                AccessibilityEventKind::ElementDestroyed
+            };
+            assert!(route_observer_event(
+                AccessibilityEvent { kind, target: None },
+                &actor,
+                |_, _| panic!("causal event must bypass classification"),
+            ));
+        }
+        Interruption::DirectSignal => actor.signal_causal_change(),
     }
+    assert_eq!(
+        actor.has_pending_self_notification(),
+        matches!(interruption, Interruption::StaleEpoch)
+    );
     assert!(!actor.epoch.is_current(generation));
+    assert!(matches!(
+        capture_rx.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
     release_tx.send(()).unwrap();
     let (result, status, phase, pending) = result_rx.recv().unwrap();
     assert!(matches!(result, Err(VerbalixError::LocalFailure)));
@@ -266,28 +295,4 @@ fn assert_interruption_revokes_write(
         }
     }
     capture_rx.recv().unwrap();
-}
-#[test]
-fn exact_external_selection_revokes_armed_replace_outside_actor_fifo() {
-    assert_interruption_revokes_write(MutationKind::Replace, Interruption::ExactEvent, false);
-}
-#[test]
-fn exact_external_selection_revokes_armed_restore_outside_actor_fifo() {
-    assert_interruption_revokes_write(MutationKind::Restore, Interruption::ExactEvent, false);
-}
-#[test]
-fn exact_external_selection_cancels_authorizing_replace_outside_actor_fifo() {
-    assert_interruption_revokes_write(MutationKind::Replace, Interruption::ExactEvent, true);
-}
-#[test]
-fn exact_external_selection_cancels_authorizing_restore_outside_actor_fifo() {
-    assert_interruption_revokes_write(MutationKind::Restore, Interruption::ExactEvent, true);
-}
-#[test]
-fn stale_epoch_cancels_authorizing_replace_before_setter() {
-    assert_interruption_revokes_write(MutationKind::Replace, Interruption::StaleEpoch, true);
-}
-#[test]
-fn stale_epoch_cancels_authorizing_restore_before_setter() {
-    assert_interruption_revokes_write(MutationKind::Restore, Interruption::StaleEpoch, true);
 }

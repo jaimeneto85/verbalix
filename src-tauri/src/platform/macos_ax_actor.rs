@@ -285,9 +285,11 @@ impl Drop for AxActor {
 mod tests;
 
 #[cfg(test)]
-#[path = "macos_ax_actor_restore_epoch_tests.rs"]
-mod restore_epoch_tests;
-
+#[path = "macos_ax_actor_notification_phase_cases.rs"]
+mod notification_phase_cases;
 #[cfg(test)]
 #[path = "macos_ax_actor_notification_phase_tests.rs"]
 mod notification_phase_tests;
+#[cfg(test)]
+#[path = "macos_ax_actor_restore_epoch_tests.rs"]
+mod restore_epoch_tests;
