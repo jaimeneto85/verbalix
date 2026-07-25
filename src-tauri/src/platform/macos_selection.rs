@@ -3,12 +3,15 @@ use super::{
     macos_ax::{self, AXUIElementRef, OwnedAxElement},
     macos_classic_range::{self, CFRange},
     macos_focus::{marker_fallback, AxCategory, AxFailure, AxStage, ExtractionOrigin},
-    macos_geometry, macos_text_marker, macos_text_role, macos_value_range,
+    macos_geometry,
+    macos_selection_identity::{captured_element_identity, CapturedElementIdentity},
+    macos_text_marker, macos_text_role, macos_value_range,
 };
 use crate::domain::{
-    GeometrySource, SelectionElementIdentity, SelectionExtractionStrategy, SelectionSnapshot,
-    TextRange, VerbalixError,
+    GeometrySource, SelectionExtractionStrategy, SelectionSnapshot, TextRange, VerbalixError,
 };
+
+pub(super) use super::macos_selection_identity::{element_identity, native_identifier, text_role};
 
 struct ExtractedSelection {
     text: String,
@@ -17,12 +20,6 @@ struct ExtractedSelection {
     geometry_source: GeometrySource,
     writable: bool,
     strategy: SelectionExtractionStrategy,
-}
-
-#[derive(PartialEq)]
-struct CapturedElementIdentity {
-    metadata: SelectionElementIdentity,
-    native_identifier: Option<String>,
 }
 
 pub(super) fn capture(element: &OwnedAxElement) -> Result<SelectionSnapshot, VerbalixError> {
@@ -100,68 +97,6 @@ fn snapshot(
     .with_extraction_strategy(extracted.strategy)
     .with_element_identity(identity.metadata)
     .with_native_element_identifier(identity.native_identifier))
-}
-
-pub(super) fn element_identity(
-    element: AXUIElementRef,
-    text_role: &macos_text_role::ValidatedTextRole,
-) -> Result<SelectionElementIdentity, VerbalixError> {
-    let frame = macos_geometry::element_frame(element).ok_or(VerbalixError::StaleSelection)?;
-    Ok(SelectionElementIdentity {
-        role: text_role.role.clone(),
-        subrole: text_role.subrole.clone(),
-        frame,
-    })
-}
-
-pub(super) fn native_identifier(element: AXUIElementRef) -> Result<Option<String>, VerbalixError> {
-    let origin = ExtractionOrigin::SelectedText;
-    let identifier =
-        macos_ax::optional_string_attribute(element, "AXIdentifier", AxStage::Role, origin)
-            .map_err(|_| VerbalixError::StaleSelection)?;
-    crate::diagnostics::ax_resolution(
-        AxStage::Identifier,
-        origin,
-        if identifier
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            AxCategory::Success
-        } else {
-            AxCategory::NoValue
-        },
-    );
-    Ok(identifier.filter(|value| !value.trim().is_empty()))
-}
-
-fn captured_element_identity(
-    element: AXUIElementRef,
-    text_role: &macos_text_role::ValidatedTextRole,
-) -> Result<CapturedElementIdentity, VerbalixError> {
-    Ok(CapturedElementIdentity {
-        metadata: element_identity(element, text_role)?,
-        native_identifier: native_identifier(element)?,
-    })
-}
-
-pub(super) fn text_role(
-    element: AXUIElementRef,
-) -> Result<macos_text_role::ValidatedTextRole, VerbalixError> {
-    let role = macos_ax::string_attribute(
-        element,
-        "AXRole",
-        AxStage::Role,
-        ExtractionOrigin::SelectedText,
-    )
-    .map_err(|_| VerbalixError::SelectionUnavailable)?;
-    let subrole = macos_ax::optional_string_attribute(
-        element,
-        "AXSubrole",
-        AxStage::Role,
-        ExtractionOrigin::SelectedText,
-    )
-    .map_err(|_| VerbalixError::SelectionUnavailable)?;
-    macos_text_role::validate(role, subrole)
 }
 
 fn extract(

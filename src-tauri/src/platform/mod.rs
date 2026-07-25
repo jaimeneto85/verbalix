@@ -49,6 +49,8 @@ mod macos_restore;
 #[cfg(target_os = "macos")]
 mod macos_selection;
 #[cfg(target_os = "macos")]
+mod macos_selection_identity;
+#[cfg(target_os = "macos")]
 mod macos_selection_revalidation;
 #[cfg(target_os = "macos")]
 mod macos_text_marker;
