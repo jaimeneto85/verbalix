@@ -47,8 +47,11 @@ fi
 CONFIG_DIR="$IOS_DIR/Config"
 mkdir -p "$CONFIG_DIR"
 
+ESCAPED_SUPABASE_URL="${SUPABASE_URL//\/\//\$(VERBALIX_SLASH)\$(VERBALIX_SLASH)}"
+
 cat > "$CONFIG_DIR/Supabase.xcconfig" <<XCCONFIG
-VerbalixSupabaseURL = $SUPABASE_URL
+VERBALIX_SLASH = /
+VerbalixSupabaseURL = $ESCAPED_SUPABASE_URL
 VerbalixSupabaseAnonKey = $SUPABASE_ANON_KEY
 XCCONFIG
 
