@@ -78,6 +78,28 @@
   `note-result`, com comando de pull de fallback). No iOS, TODA edição local deve chamar `touch()` senão o
   bug reaparece.
 
+## iOS — Prontidão para App Store
+- Em `.xcconfig`, `//` inicia COMENTÁRIO: gravar `VerbalixSupabaseURL = https://x.supabase.co` faz o valor
+  resolver para `https:` (sem host). O build passa; só o Info.plist COMPILADO revela. `bootstrap.sh` escapa
+  a barra (VERBALIX_SLASH). LIÇÃO GERAL: onde valores atravessam camadas (xcconfig→Info.plist→BackendConfig),
+  verificar o VALOR FINAL COMPILADO com `plutil -p "<Verbalix.app>/Info.plist"`, não só que compila.
+- Versões: `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` no `settings.base` do project.yml SÓ têm efeito se os
+  Info.plist referenciam `$(MARKETING_VERSION)`/`$(CURRENT_PROJECT_VERSION)` — literais `1.0`/`1` ignoram a
+  build setting. Centralizar em settings.base garante paridade app↔extensões (divergência = rejeição no upload).
+- AppIcon: bloqueio duro. Asset catalog single-size (Xcode 14+): um PNG 1024x1024 com
+  `Contents.json {idiom: universal, platform: ios, size: 1024x1024}` + `ASSETCATALOG_COMPILER_APPICON_NAME`.
+  Ícone da App Store NÃO pode ter alpha: achatar com `magick "<src>" -background white -alpha remove -alpha off`
+  (ImageMagick em /opt/homebrew; `sips` só zera alpha via round-trip JPEG lossy; PIL/pngcrush ausentes) e
+  validar `sips -g hasAlpha` == no. COMMITAR o PNG achatado no appiconset para o build não depender de
+  ImageMagick. Provar no `.app`: `AppIcon60x60@2x.png` presente e `Assets.car` gerado.
+- `UILaunchScreen` (dict vazio basta) é bloqueio duro (SDK iOS 14+); provar no Info.plist compilado.
+- Release signing: `CODE_SIGN_STYLE = Automatic` no `Release.xcconfig` (aplica aos 3 targets, pois `configFiles`
+  é por-projeto) + `DEVELOPMENT_TEAM` via `Local.xcconfig` gitignored. NÃO mexer no `CODE_SIGNING_ALLOWED = NO`
+  do Debug (é o que permite build de simulador sem Team). Build de simulador verde NÃO valida signing de
+  Release/device — isso é gate manual.
+- Simulador: há `iPhone 17 Pro` duplicados e runtimes 26.3/26.4/26.5 (SDK 26.5); fixar `OS=26.5` no
+  `-destination` evita casar com runtime indisponível.
+
 ## iOS App + Extensões (Fases 3-5)
 - Tooling: XcodeGen (`ios/project.yml` versionado → `ios/Verbalix.xcodeproj` gitignored). Targets: app
   `Verbalix`, `VerbalixAction` (com.apple.ui-services), `VerbalixKeyboard` (com.apple.keyboard-service),
