@@ -58,11 +58,11 @@ Todo aceite que envolve config lê o ARTEFATO COMPILADO:
 `plutil -p "$(find DerivedData -name 'Verbalix.app' -type d | head -1)/Info.plist"` e `find .../Verbalix.app -name 'AppIcon*'` + `ls Assets.car`.
 
 ## 📝 TASKS
-- [ ] T1: [MEDIUM] AppIcon asset catalog (arte da raiz via git-common-dir, achatar alpha, Contents.json single-size, registrar no project.yml).
-- [ ] T2: [LOW] `UILaunchScreen` no Info.plist do app via project.yml.
-- [ ] T3: [MEDIUM] Release.xcconfig signing automático + `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` coerentes nos 3 targets; simulador segue verde com Team vazio.
-- [ ] T4: [LOW] `docs/011-verbalix-ios-submissao.md` (checklist honesto código × usuário).
-- [ ] T5: [LOW] Verificação dos artefatos COMPILADOS (CA4/CA5) e regeneração limpa (CA1).
+- [x] T1: [MEDIUM] AppIcon asset catalog (arte da raiz via git-common-dir, achatar alpha, Contents.json single-size, registrar no project.yml).
+- [x] T2: [LOW] `UILaunchScreen` no Info.plist do app via project.yml.
+- [x] T3: [MEDIUM] Release.xcconfig signing automático + `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` coerentes nos 3 targets; simulador segue verde com Team vazio.
+- [x] T4: [LOW] `docs/011-verbalix-ios-submissao.md` (checklist honesto código × usuário).
+- [x] T5: [LOW] Verificação dos artefatos COMPILADOS (CA4/CA5) e regeneração limpa (CA1).
 
 ## Análise Dual
 
