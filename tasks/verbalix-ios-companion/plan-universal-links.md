@@ -78,6 +78,26 @@
 - [ ] T4: [LOW] `docs/011` passo a passo (hospedar → AASA → privacy → allow-list Supabase mantendo `verbalix://` → Site URL fallback → validação/device).
 - [ ] T5: [LOW] Verificação dos artefatos COMPILADOS (CA5) + AASA (CA4).
 
+## CORREÇÃO CIRÚRGICA (pós-entrega) — callback de EMISSÃO configurável
+> Motivo: a EMISSÃO virou https-only (`AuthService.callbackURL` hardcoded), então o fallback do custom scheme
+> só existia no PARSING. Com o domínio ainda sem TLS, o usuário fica SEM caminho de login e a allow-list do
+> custom scheme não adianta (esse valor nunca é emitido). Simplificação de processo justificada: mudança
+> cirúrgica e bem-especificada sobre plano já aprovado; sem dual-analysis nova.
+- [x] CF1: Nova chave Info.plist `VerbalixAuthCallback` no target `Verbalix`, injetada pelo `project.yml` a partir
+  de uma build setting com DEFAULT `verbalix-ios://auth/callback`. IMPORTANTE: definir o default como build
+  setting no `settings` do `project.yml` (vai para o `.pbxproj`, NÃO para xcconfig) — em xcconfig o `//`
+  iniciaria comentário (o mesmo bug do `//`); documentar que o opt-in https, se feito via xcconfig, precisa
+  escapar as barras como o `bootstrap.sh` já faz.
+- [x] CF2: `BackendConfig` expõe `authCallbackURL: URL` lido de `VerbalixAuthCallback`, com FALLBACK para
+  `verbalix-ios://auth/callback` quando ausente OU inválida (nunca crashar).
+- [x] CF3: `AuthService.callbackURL` deixa de ser `static let` hardcoded e passa a vir da config na init.
+- [x] CF4: `AuthCallback.parse` INTOCADO (aceita as duas formas).
+- [x] CF5: docs/011 — como virar para Universal Links por CONFIG (sem tocar Swift) quando o domínio estiver
+  hospedado; deixar explícito que a URL EMITIDA precisa estar na allow-list do Supabase (as duas durante a transição).
+- Testes: default = custom scheme quando a chave ausente; chave https válida respeitada; chave INVÁLIDA cai no
+  default (sem crash); `parse` continua aceitando as duas formas (regressão).
+- Gate que importa: do Info.plist COMPILADO no `.app`, `VerbalixAuthCallback` == custom scheme (default).
+
 ## Análise Dual
 
 ### 🟢 Oportunidades incorporadas (downsideup)

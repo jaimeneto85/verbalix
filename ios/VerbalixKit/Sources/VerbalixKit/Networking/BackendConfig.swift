@@ -3,11 +3,17 @@ import Foundation
 public struct BackendConfig: Sendable {
     public let supabaseURL: URL
     public let anonKey: String
+    public let authCallbackURL: URL
 
-    public init?(supabaseURL: URL, anonKey: String) {
+    public init?(
+        supabaseURL: URL,
+        anonKey: String,
+        authCallback: URL = URL(string: "verbalix-ios://auth/callback")!
+    ) {
         guard !anonKey.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         self.supabaseURL = supabaseURL
         self.anonKey = anonKey
+        self.authCallbackURL = authCallback
     }
 
     public init?(infoPlist: [String: Any]) {
@@ -20,6 +26,14 @@ public struct BackendConfig: Sendable {
 
         self.supabaseURL = url
         self.anonKey = key
+
+        if let callbackString = infoPlist["VerbalixAuthCallback"] as? String,
+           !callbackString.trimmingCharacters(in: .whitespaces).isEmpty,
+           let callbackURL = URL(string: callbackString) {
+            self.authCallbackURL = callbackURL
+        } else {
+            self.authCallbackURL = URL(string: "verbalix-ios://auth/callback")!
+        }
     }
 }
 

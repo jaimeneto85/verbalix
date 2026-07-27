@@ -2,11 +2,11 @@ import Auth
 import Foundation
 
 public final class AuthService: @unchecked Sendable {
-    public static let callbackURL = URL(string: "https://app.verbali.xyz/auth/callback")!
-
     private let client: AuthClient
+    private let callbackURL: URL
 
     public init(config: BackendConfig, storage: VerbalixAuthStorage) {
+        self.callbackURL = config.authCallbackURL
         client = AuthClient(
             url: config.supabaseURL.appendingPathComponent("auth/v1"),
             headers: ["apikey": config.anonKey],
@@ -19,7 +19,7 @@ public final class AuthService: @unchecked Sendable {
     public func sendMagicLink(email: String) async throws {
         try await client.signInWithOTP(
             email: email,
-            redirectTo: Self.callbackURL
+            redirectTo: callbackURL
         )
     }
 

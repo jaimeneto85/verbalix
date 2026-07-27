@@ -42,6 +42,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>VerbalixAuthCallback</key>
+	<string>$(VERBALIX_AUTH_CALLBACK)</string>
 	<key>VerbalixSupabaseAnonKey</key>
 	<string>$(VerbalixSupabaseAnonKey)</string>
 	<key>VerbalixSupabaseURL</key>

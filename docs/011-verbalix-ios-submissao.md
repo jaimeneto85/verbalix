@@ -26,7 +26,9 @@ signing de Release/device, nem integração real com Supabase. Veja "Gates e o q
 | Universal Links (`applinks:app.verbali.xyz`) no entitlement do target Verbalix | Entregue | `ios/project.yml` → `ios/Verbalix/Verbalix.entitlements` |
 | Custom scheme `verbalix-ios://` mantido como fallback de parsing | Entregue | `ios/project.yml` (`CFBundleURLTypes`) |
 | `AuthCallback.swift` — classificador puro (host/path/erro/code, query+fragment) | Entregue | `ios/VerbalixKit/Sources/VerbalixKit/Session/AuthCallback.swift` |
-| `AuthService.callbackURL` → `https://app.verbali.xyz/auth/callback` | Entregue | `ios/VerbalixKit/Sources/VerbalixKit/Session/AuthService.swift` |
+| `AuthService.callbackURL` lida de `BackendConfig.authCallbackURL` (configurável, default custom scheme) | Entregue | `ios/VerbalixKit/Sources/VerbalixKit/Session/AuthService.swift` |
+| `BackendConfig.authCallbackURL` lê `VerbalixAuthCallback` do Info.plist (fallback: `verbalix-ios://auth/callback`) | Entregue | `ios/VerbalixKit/Sources/VerbalixKit/Networking/BackendConfig.swift` |
+| `VerbalixAuthCallback` injetado no Info.plist via build setting `VERBALIX_AUTH_CALLBACK` (default no `.pbxproj`) | Entregue | `ios/project.yml` |
 | `AppSession` expõe `callbackError` (remove `catch {}` silencioso) | Entregue | `ios/Verbalix/AppSession.swift` |
 | `VerbalixApp` — `.onOpenURL` fora do `if let` (corrige race de cold start) | Entregue | `ios/Verbalix/VerbalixApp.swift` |
 | `AuthCallbackTests` (EC1-EC7) | Entregue | `ios/VerbalixKit/Tests/VerbalixKitTests/AuthCallbackTests.swift` |
@@ -35,18 +37,69 @@ signing de Release/device, nem integração real com Supabase. Veja "Gates e o q
 
 ---
 
+## Callback de Emissão Configurável (sem recompilar Swift)
+
+O `AuthService` emite a callback URL lida de `BackendConfig.authCallbackURL`, que por sua vez
+lê `VerbalixAuthCallback` do Info.plist. O valor padrão é `verbalix-ios://auth/callback`
+(build setting `VERBALIX_AUTH_CALLBACK` no `.pbxproj`).
+
+### Trocar para Universal Links quando o domínio estiver hospedado
+
+**Opção A — via build setting no Xcode** (recomendado para CI/Release):
+
+No scheme ou no xcconfig de Release, defina:
+
+```
+VERBALIX_AUTH_CALLBACK = https://app.verbali.xyz/auth/callback
+```
+
+> Atenção: se fizer via xcconfig, o `//` não é comentário porque o valor é uma URL (o `//`
+> inicia comentário apenas quando aparece no início da linha ou como separador de chave/valor).
+> Verifique no Info.plist compilado que o valor está correto (como o bootstrap já faz com
+> `VerbalixSupabaseURL`).
+
+**Opção B — via `ios/Local.xcconfig`** (desenvolvimento local):
+
+Adicione ao `Local.xcconfig` (gitignored):
+
+```
+VERBALIX_AUTH_CALLBACK = https://app.verbali.xyz/auth/callback
+```
+
+### Gate obrigatório após trocar
+
+Após alterar o build setting, verifique no Info.plist do `.app` compilado:
+
+```bash
+plutil -p "<Verbalix.app>/Info.plist" | grep VerbalixAuthCallback
+# Deve mostrar: "VerbalixAuthCallback" => "https://app.verbali.xyz/auth/callback"
+```
+
+### URL Emitida deve estar na allow-list do Supabase
+
+Durante a transição, **ambas** as URLs devem estar na allow-list:
+
+- `verbalix-ios://auth/callback` (custom scheme, desenvolvimento / fallback)
+- `https://app.verbali.xyz/auth/callback` (Universal Link, produção)
+
+A URL emitida pelo `sendMagicLink` é a URL do build instalado. Se o build em uso emite
+`verbalix-ios://auth/callback` mas ela não está na allow-list, o login falha. Se emite
+`https://app.verbali.xyz/auth/callback` mas o domínio não está hospedado com TLS e AASA
+válidos, o link abre no Safari em vez de no app.
+
+---
+
 ## BLOQUEIO DE RELEASE — não distribua antes de completar esta lista
 
-> M3: O `AuthService.callbackURL` já emite `https://app.verbali.xyz/auth/callback` no link
-> enviado por e-mail. Se o domínio não estiver hospedado com TLS válido, AASA válido e a URL
-> na allow-list do Supabase, **o login fica 100% quebrado**. Não há fallback de emissão —
-> o fallback custom scheme (`verbalix-ios://`) é só de **parsing** (para URLs recebidas pelo app),
-> não de emissão. NÃO distribua via TestFlight ou App Store até os itens 1–4 abaixo estarem
-> confirmados.
+> O build de Debug/simulador usa o default `verbalix-ios://auth/callback`.
+> O build de Release para TestFlight/App Store **deve** usar `https://app.verbali.xyz/auth/callback`
+> (trocar via build setting conforme seção acima). Se o domínio não estiver hospedado com TLS
+> válido, AASA válido e a URL na allow-list do Supabase, **o login fica 100% quebrado** em
+> produção. NÃO distribua via TestFlight ou App Store até os itens 1–4 abaixo estarem confirmados.
 
 **Desbloqueio imediato para desenvolvimento local / testes:** adicione
-`verbalix-ios://auth/callback` na allow-list do Supabase (e depois a URL https). Isso permite
-testar o fluxo antes de hospedar o domínio.
+`verbalix-ios://auth/callback` na allow-list do Supabase. Com o default (custom scheme),
+o fluxo funciona sem hospedar o domínio.
 
 ---
 
