@@ -11,6 +11,8 @@ public enum VerbalixError: Error {
     case rateLimited
     case localFailure
     case transport(Error)
+    case authLinkExpired
+    case authLinkAlreadyUsed
 }
 
 extension VerbalixError {

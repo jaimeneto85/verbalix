@@ -23,7 +23,10 @@ let package = Package(
         ),
         .testTarget(
             name: "VerbalixKitTests",
-            dependencies: ["VerbalixKit"],
+            dependencies: [
+                "VerbalixKit",
+                .product(name: "Auth", package: "supabase-swift")
+            ],
             path: "Tests/VerbalixKitTests"
         )
     ]

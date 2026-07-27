@@ -13,7 +13,9 @@ extension VerbalixError: Equatable {
              (.providerRejected, .providerRejected),
              (.rateLimited, .rateLimited),
              (.localFailure, .localFailure),
-             (.transport, .transport):
+             (.transport, .transport),
+             (.authLinkExpired, .authLinkExpired),
+             (.authLinkAlreadyUsed, .authLinkAlreadyUsed):
             return true
         default:
             return false

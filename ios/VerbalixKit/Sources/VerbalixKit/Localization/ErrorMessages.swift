@@ -23,6 +23,10 @@ public enum ErrorMessages {
             return "Falha ao acessar dados locais."
         case .transport:
             return "Erro de conexão com o servidor."
+        case .authLinkExpired:
+            return "O link de acesso expirou ou é inválido. Solicite um novo link."
+        case .authLinkAlreadyUsed:
+            return "Este link de acesso já foi utilizado. Solicite um novo link."
         }
     }
 }

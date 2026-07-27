@@ -2,7 +2,7 @@ import Auth
 import Foundation
 
 public final class AuthService: @unchecked Sendable {
-    public static let callbackURL = URL(string: "verbalix-ios://auth/callback")!
+    public static let callbackURL = URL(string: "https://app.verbali.xyz/auth/callback")!
 
     private let client: AuthClient
 
@@ -24,8 +24,19 @@ public final class AuthService: @unchecked Sendable {
     }
 
     public func handleDeepLink(_ url: URL) async throws -> StoredSession {
-        let session = try await client.session(from: url)
-        return StoredSession(accessToken: session.accessToken, refreshToken: session.refreshToken)
+        switch AuthCallback.parse(url) {
+        case .failure(let error):
+            throw error
+        case .proceed(let callbackURL):
+            do {
+                let session = try await client.session(from: callbackURL)
+                return StoredSession(accessToken: session.accessToken, refreshToken: session.refreshToken)
+            } catch let authError as AuthError {
+                throw AuthCallback.classifyPKCEError(authError)
+            } catch {
+                throw VerbalixError.transport(error)
+            }
+        }
     }
 
     public func currentSession() async -> StoredSession? {
