@@ -1,6 +1,8 @@
 # Agent Memory — test-engineer
 
 ## Padrões de Teste
+- iOS Swift: testes em `ios/VerbalixKit/Tests/VerbalixKitTests/` usando XCTest + Swift Testing; `swift test --package-path ios/VerbalixKit` roda ambos os frameworks (XCTest e Swift Testing) na mesma invocação. Arquivos nomeados `*Tests.swift` sob o target `VerbalixKitTests`. Classificadores puros (sem rede) são testados com instâncias diretas; BackendConfig usa plist fakado `[String: Any]`.
+- iOS BackendConfig: fallback de `authCallbackURL` exige testar (a) chave ausente, (b) string vazia, (c) whitespace-only, (d) URL https válida, (e) init direto com `authCallback:` param — 6 casos cobre os dois inits públicos.
 - O domínio Rust usa testes inline com fakes de `SelectionPort`, `OverlayPort` e `AiProvider`.
 - O frontend usa Vitest; contratos IPC são testados com mock hoisted de `invoke`.
 - Contratos da Edge Function usam `deno test` sem dependências externas.
@@ -83,6 +85,7 @@
 - A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os testes Rust e os gates `clippy -D warnings` são usados como evidência.
 - A suíte Rust possui 229 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, revogação AX fora da FIFO, router real nas fases Armed/Authorizing e pós-epoch/pré-CAS, ownership após promoção, seam FFI com payload preparado, replay terminal expirado, restore monotônico, secure-after-prepare, histórico detached e receipt exato.
 - O frontend possui 55 testes Vitest com 100% de statements, branches, functions e lines no escopo instrumentado; os 6 testes Playwright continuam verdes.
+- A suíte iOS (VerbalixKit) possui 87 testes (69 XCTest + 18 Swift Testing), todos verdes — inclui BackendConfigAuthCallbackTests (6), AuthCallbackRegressionTests (1), AuthCallbackTests (10), SessionRefresherTests (8), RefreshLockTests (10), e demais suítes de preferências/transform/error.
 
 ## Observações
 - Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
