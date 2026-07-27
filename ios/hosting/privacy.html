@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Política de Privacidade — Verbalix</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      color: #1a1a1a;
+      background: #fff;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; }
+    h2 { font-size: 1.25rem; font-weight: 600; margin-top: 40px; margin-bottom: 12px; }
+    p { margin-bottom: 16px; }
+    ul { margin-bottom: 16px; padding-left: 24px; }
+    li { margin-bottom: 8px; }
+    .updated { font-size: 0.875rem; color: #666; margin-bottom: 40px; }
+    a { color: #0066cc; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #121212; color: #e8e8e8; }
+      a { color: #4da6ff; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Política de Privacidade</h1>
+  <p class="updated">Última atualização: julho de 2026</p>
+
+  <p>
+    Esta política descreve como o aplicativo Verbalix trata os seus dados. Leia com atenção
+    antes de utilizar o serviço.
+  </p>
+
+  <h2>O que é coletado e quando</h2>
+  <p>
+    O Verbalix <strong>não coleta dados em segundo plano</strong>. O texto que você deseja
+    transformar só é enviado ao servidor quando você realiza uma ação explícita (toque em
+    "Traduzir" ou "Melhorar"). Nenhuma outra informação é capturada automaticamente.
+  </p>
+  <ul>
+    <li>
+      <strong>Endereço de e-mail:</strong> coletado no momento do cadastro para autenticação
+      via link mágico. Utilizado exclusivamente para identificar a sua conta.
+    </li>
+    <li>
+      <strong>Texto enviado para transformação:</strong> enviado sob ação explícita do usuário
+      à Edge Function própria do Verbalix (<code>supabase/functions/transform</code>), que
+      repassa o texto à OpenAI para processamento. A chave da OpenAI nunca é exposta ao
+      dispositivo.
+    </li>
+    <li>
+      <strong>Histórico de transformações:</strong> armazenado somente quando a opção
+      "Salvar histórico" está ativada nas preferências. O histórico fica restrito à sua conta
+      (política owner-only via RLS no banco de dados) e é excluído automaticamente após 30 dias.
+      Se o histórico estiver desativado, nenhum texto transformado é persistido.
+    </li>
+  </ul>
+
+  <h2>O que nunca é coletado</h2>
+  <ul>
+    <li>O texto selecionado não é registrado em logs de diagnóstico — este é um invariante
+        verificado por testes automatizados no código-fonte (<code>diagnostics.rs</code>).</li>
+    <li>Senhas, dados de campos sensíveis ou histórico de digitação não são capturados
+        pelo teclado personalizado.</li>
+    <li>Dados de localização, contatos ou arquivos do dispositivo não são acessados.</li>
+  </ul>
+
+  <h2>Teclado com Acesso Total</h2>
+  <p>
+    O teclado personalizado do Verbalix solicita Acesso Total (Full Access) exclusivamente
+    para permitir o envio de texto à Edge Function via rede. Sem acesso à rede, a
+    funcionalidade de tradução e melhoria de texto não pode ser executada a partir do teclado.
+    O teclado não registra nem armazena o que é digitado.
+  </p>
+
+  <h2>Compartilhamento de dados</h2>
+  <p>
+    O texto enviado para transformação trafega pela infraestrutura do Supabase (banco de dados
+    e Edge Functions) e é repassado à OpenAI para geração da resposta. Não compartilhamos seus
+    dados com nenhum outro terceiro.
+  </p>
+  <p>
+    A OpenAI trata os dados conforme a
+    <a href="https://openai.com/policies/privacy-policy" target="_blank" rel="noopener">
+      política de privacidade da OpenAI</a>.
+  </p>
+
+  <h2>Como excluir seus dados</h2>
+  <ul>
+    <li>
+      <strong>Histórico:</strong> exclua os itens individualmente pelo app. O histórico expira
+      automaticamente em 30 dias.
+    </li>
+    <li>
+      <strong>Exclusão de conta:</strong> entre em contato pelo e-mail abaixo solicitando a
+      exclusão completa dos seus dados. Removemos a conta e todos os dados associados em até
+      30 dias úteis.
+    </li>
+  </ul>
+
+  <h2>Segurança</h2>
+  <p>
+    A autenticação utiliza links mágicos com fluxo PKCE. Tokens de sessão são armazenados
+    no Keychain do dispositivo. A comunicação entre o app e o servidor ocorre exclusivamente
+    via HTTPS.
+  </p>
+
+  <h2>Alterações nesta política</h2>
+  <p>
+    Alterações significativas serão comunicadas por e-mail ou notificação no app. O uso
+    continuado do serviço após a publicação de uma nova versão implica aceitação das
+    mudanças.
+  </p>
+
+  <h2>Contato</h2>
+  <p>
+    Dúvidas, solicitações de exclusão ou qualquer questão sobre privacidade:
+    <a href="mailto:[SEU-EMAIL-DE-CONTATO]">[SEU-EMAIL-DE-CONTATO]</a>
+  </p>
+</body>
+</html>

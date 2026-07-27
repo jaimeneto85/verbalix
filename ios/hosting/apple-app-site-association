@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["GNVWRB9T3G.com.verbalix.ios"],
+        "components": [
+          {
+            "/": "/auth/callback",
+            "comment": "Restringe Universal Links ao endpoint de callback de autenticacao"
+          }
+        ]
+      }
+    ]
+  }
+}
