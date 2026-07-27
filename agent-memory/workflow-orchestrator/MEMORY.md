@@ -95,8 +95,15 @@
 - `catch {}` em handlers de deep link é falha silenciosa: o caso `otp_expired` não mostrava nada. Sempre
   superficializar erro tipado numa `@Published`/observável (`callbackError`) exibida na tela de login.
 - Migração para Universal Links é ADITIVA: manter `verbalix-ios://` no `CFBundleURLTypes` como fallback de
-  PARSING, mas a EMISSÃO (`sendMagicLink redirectTo`) vira https-only — por isso há BLOQUEIO DE RELEASE:
-  não distribuir build até domínio hospedado (TLS válido), AASA verificado pela Apple e allow-list atualizada.
+  PARSING. A EMISSÃO (`sendMagicLink redirectTo`) NÃO pode ser https-only hardcoded — isso deixou o usuário
+  sem NENHUM caminho de login (domínio sem TLS + allow-list do custom scheme inútil porque nunca é emitido).
+  CORRIGIDO: callback de emissão CONFIGURÁVEL via chave Info.plist `VerbalixAuthCallback`, injetada de uma
+  build setting `VERBALIX_AUTH_CALLBACK` (default `verbalix-ios://auth/callback` no `settings` do project.yml →
+  pbxproj, NÃO xcconfig por causa do `//`). `BackendConfig.authCallbackURL` lê a chave com FALLBACK seguro ao
+  custom scheme quando ausente OU inválida (nunca crashar); `AuthService.callbackURL` vem da config (não é mais
+  `static let`). Virar para Universal Links quando o domínio subir = mudança de CONFIG, sem tocar Swift. Durante
+  a transição, AMBAS as URLs emitidas devem estar na allow-list do Supabase. Gate que importa: valor de
+  `VerbalixAuthCallback` no Info.plist COMPILADO do `.app`.
 - Associated Domains: chave `com.apple.developer.associated-domains: ["applinks:app.verbali.xyz"]` no
   `entitlements.properties` do target no `project.yml` (o `.entitlements` é REGENERADO por xcodegen — fonte da
   verdade é o project.yml). Em build de SIMULADOR (unsigned, `CODE_SIGNING_ALLOWED=NO`), `codesign -d
