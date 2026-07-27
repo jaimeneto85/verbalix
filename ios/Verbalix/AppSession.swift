@@ -7,6 +7,7 @@ import VerbalixKit
 final class AppSession {
     private(set) var accessToken: String? = nil
     private(set) var isLoading: Bool = true
+    private(set) var callbackError: String? = nil
 
     let authService: AuthService
 
@@ -33,10 +34,19 @@ final class AppSession {
     }
 
     func handleDeepLink(_ url: URL) async {
+        callbackError = nil
         do {
             let stored = try await authService.handleDeepLink(url)
             accessToken = stored.accessToken
-        } catch {}
+        } catch let error as VerbalixError {
+            callbackError = ErrorMessages.message(for: error)
+        } catch {
+            callbackError = "Não foi possível processar o link de acesso. Tente novamente."
+        }
+    }
+
+    func clearCallbackError() {
+        callbackError = nil
     }
 
     func signOut() async {

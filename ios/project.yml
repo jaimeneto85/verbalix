@@ -55,6 +55,8 @@ targets:
           - group.com.verbalix.shared
         keychain-access-groups:
           - $(AppIdentifierPrefix)com.verbalix.shared
+        com.apple.developer.associated-domains:
+          - applinks:app.verbali.xyz
     sources:
       - path: Verbalix
         excludes:

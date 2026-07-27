@@ -19,6 +19,15 @@ struct AuthView: View {
             VStack(spacing: 32) {
                 headerSection
 
+                if let callbackError = session.callbackError {
+                    Text(callbackError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(12)
+                        .background(Color.red.opacity(0.1), in: .rect(cornerRadius: 8))
+                        .onTapGesture { session.clearCallbackError() }
+                }
+
                 switch state {
                 case .idle, .error:
                     inputSection

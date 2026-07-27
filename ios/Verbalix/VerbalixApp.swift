@@ -4,6 +4,7 @@ import VerbalixKit
 @main
 struct VerbalixApp: App {
     @State private var appSession: AppSession? = nil
+    @State private var pendingURL: URL? = nil
 
     var body: some Scene {
         WindowGroup {
@@ -11,11 +12,15 @@ struct VerbalixApp: App {
                 if let session = appSession {
                     RootView()
                         .environment(session)
-                        .onOpenURL { url in
-                            Task { await session.handleDeepLink(url) }
-                        }
                 } else {
                     ProgressView()
+                }
+            }
+            .onOpenURL { url in
+                if let session = appSession {
+                    Task { await session.handleDeepLink(url) }
+                } else {
+                    pendingURL = url
                 }
             }
             .task {
@@ -29,6 +34,10 @@ struct VerbalixApp: App {
                 let session = AppSession(config: config)
                 appSession = session
                 await session.checkSession()
+                if let url = pendingURL {
+                    pendingURL = nil
+                    await session.handleDeepLink(url)
+                }
             }
         }
     }
