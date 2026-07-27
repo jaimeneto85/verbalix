@@ -78,6 +78,34 @@
   `note-result`, com comando de pull de fallback). No iOS, TODA edição local deve chamar `touch()` senão o
   bug reaparece.
 
+## iOS — Auth deep link / Universal Links
+- Bug de produção: magic link caiu em `http://localhost:3000/?error=access_denied&error_code=otp_expired`
+  porque o `redirect_to` (`verbalix-ios://auth/callback`) NÃO estava na allow-list do Supabase → o serviço
+  descarta o redirect e usa o Site URL. Allow-list é ação de OPS (dashboard), não de código.
+- supabase-swift 2.x `AuthClient.session(from:)` (.pkce) JÁ trata `error`/`error_code`/`error_description`,
+  lança `AuthError.pkceGrantCodeExchange(message:error:code:)` (inclui `otp_expired`) e faz o
+  `exchangeCodeForSession` internamente com o `code_verifier` single-use do próprio storage. NÃO reimplementar
+  o exchange manualmente. Padrão adotado: classificador PURO `AuthCallback.parse(url) -> .proceed(URL)|.failure`
+  (valida host/path das 2 formas, lê query E fragment, mapeia error→VerbalixError pt-BR) e, no `.proceed`,
+  delegar a `session(from:)`, mapeando `AuthError` lançado como 2ª rede. Isso torna os edge cases testáveis
+  SEM rede e não duplica a lógica PKCE da lib.
+- Race de cold start: em SwiftUI, `.onOpenURL` DENTRO de `if let appSession` PERDE o link quando o app é
+  aberto fechado pelo e-mail (caminho mais comum). Anexar `.onOpenURL` no nível do `WindowGroup` e guardar
+  `pendingURL` processada quando a sessão estiver pronta.
+- `catch {}` em handlers de deep link é falha silenciosa: o caso `otp_expired` não mostrava nada. Sempre
+  superficializar erro tipado numa `@Published`/observável (`callbackError`) exibida na tela de login.
+- Migração para Universal Links é ADITIVA: manter `verbalix-ios://` no `CFBundleURLTypes` como fallback de
+  PARSING, mas a EMISSÃO (`sendMagicLink redirectTo`) vira https-only — por isso há BLOQUEIO DE RELEASE:
+  não distribuir build até domínio hospedado (TLS válido), AASA verificado pela Apple e allow-list atualizada.
+- Associated Domains: chave `com.apple.developer.associated-domains: ["applinks:app.verbali.xyz"]` no
+  `entitlements.properties` do target no `project.yml` (o `.entitlements` é REGENERADO por xcodegen — fonte da
+  verdade é o project.yml). Em build de SIMULADOR (unsigned, `CODE_SIGNING_ALLOWED=NO`), `codesign -d
+  --entitlements` NÃO mostra nada (entitlements embutem no signing de device); verificar o `.entitlements`
+  GERADO. Universal Links não funcionam de forma confiável no simulador — teste é gate de DEVICE.
+- AASA: arquivo `apple-app-site-association` SEM extensão, servido em `/.well-known/`, `Content-Type:
+  application/json`, SEM redirect, TLS válido, sem auth; `appIDs=["<TeamID>.com.verbalix.ios"]` (Team ID é
+  público — pode ir versionado no AASA), `components` restritos a `/auth/callback` (nunca `*`).
+
 ## iOS — Prontidão para App Store
 - Em `.xcconfig`, `//` inicia COMENTÁRIO: gravar `VerbalixSupabaseURL = https://x.supabase.co` faz o valor
   resolver para `https:` (sem host). O build passa; só o Info.plist COMPILADO revela. `bootstrap.sh` escapa
