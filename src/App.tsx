@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { AuthPanel } from "./components/AuthPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
@@ -24,14 +25,31 @@ export function App() {
   useEffect(() => {
     let authSubscription: { unsubscribe: () => void } | undefined;
     let active = true;
+
+    const syncUnlisten = listen<AppSettings>("preferences-synced", (event) => {
+      if (active) {
+        setSettings(event.payload);
+      }
+    }).then(async (dispose) => {
+      if (!active) {
+        dispose();
+        return () => undefined;
+      }
+      const synced = await native.currentSyncedPreferences().catch(() => null);
+      if (synced) setSettings(synced);
+      return dispose;
+    });
+
     Promise.all([
       native.loadSettings(),
       native.accessibilityStatus(),
       native.hasSession()
     ]).then(([loadedSettings, granted, hasSession]) => {
-      setSettings(loadedSettings);
-      setPermission(granted);
-      setAuthenticated(hasSession);
+      if (active) {
+        setSettings(loadedSettings);
+        setPermission(granted);
+        setAuthenticated(hasSession);
+      }
     });
 
     getSupabase()
@@ -61,6 +79,7 @@ export function App() {
       active = false;
       authSubscription?.unsubscribe();
       deepLink.then((dispose) => dispose());
+      syncUnlisten.then((dispose) => dispose());
     };
   }, []);
 

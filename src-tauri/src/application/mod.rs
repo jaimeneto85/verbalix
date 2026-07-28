@@ -8,6 +8,8 @@ mod coordinator_transform;
 mod mutation;
 mod mutation_journal;
 mod ports;
+pub(crate) mod preferences_sync_store;
+pub(crate) mod remote_preferences;
 mod runtime_pause;
 mod settings_file;
 mod supabase;
@@ -21,6 +23,8 @@ pub use auth_refresh::RemoteAuthRepository;
 pub use coordinator::SelectionCoordinator;
 pub use mutation::{MutationProjection, MutationReceipt, MutationStatus};
 pub use ports::{ClipboardPort, OverlayPort, SelectionPort};
+pub use preferences_sync_store::{epoch_secs_now, PreferencesSyncStore};
+pub use remote_preferences::{merge_preferences, RemotePreferencesRepository};
 pub use runtime_pause::RuntimePause;
 #[cfg(test)]
 pub(crate) use runtime_pause::{set_test_clock_ms, test_clock_ms};

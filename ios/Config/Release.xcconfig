@@ -1,0 +1,4 @@
+#include? "Supabase.xcconfig"
+#include? "../Local.xcconfig"
+
+CODE_SIGN_STYLE = Automatic

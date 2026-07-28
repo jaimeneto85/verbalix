@@ -5,11 +5,13 @@ import { defaultSettings } from "./types";
 
 const mocks = vi.hoisted(() => ({
   accessibilityStatus: vi.fn(),
+  currentSyncedPreferences: vi.fn(),
   deleteHistory: vi.fn(),
   deepLinkHandler: undefined as undefined | ((urls: string[]) => Promise<void>),
   exchangeCodeForSession: vi.fn(),
   hasSession: vi.fn(),
   listHistory: vi.fn(),
+  listenDispose: vi.fn(),
   loadSettings: vi.fn(),
   onAuthStateChange: vi.fn(),
   saveSession: vi.fn(),
@@ -19,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./native", () => ({
   native: {
     accessibilityStatus: mocks.accessibilityStatus,
+    currentSyncedPreferences: mocks.currentSyncedPreferences,
     deleteHistory: mocks.deleteHistory,
     hasSession: mocks.hasSession,
     listHistory: mocks.listHistory,
@@ -26,6 +29,10 @@ vi.mock("./native", () => ({
     saveSession: mocks.saveSession,
     saveSettings: mocks.saveSettings
   }
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(() => Promise.resolve(mocks.listenDispose))
 }));
 
 vi.mock("./supabase", () => ({
@@ -51,8 +58,10 @@ describe("application authentication and history flows", () => {
     vi.clearAllMocks();
     mocks.deepLinkHandler = undefined;
     mocks.accessibilityStatus.mockResolvedValue(true);
+    mocks.currentSyncedPreferences.mockResolvedValue(null);
     mocks.hasSession.mockResolvedValue(false);
     mocks.listHistory.mockResolvedValue([]);
+    mocks.listenDispose.mockReturnValue(undefined);
     mocks.loadSettings.mockResolvedValue(defaultSettings);
     mocks.saveSession.mockResolvedValue(undefined);
     mocks.saveSettings.mockResolvedValue(undefined);

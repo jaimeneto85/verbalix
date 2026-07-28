@@ -14,6 +14,7 @@ type NoteEvent = {
 const mocks = vi.hoisted(() => ({
   applyPreview: vi.fn(),
   currentNoteResult: vi.fn(),
+  currentSyncedPreferences: vi.fn(),
   dismissOverlays: vi.fn(),
   listener: undefined as undefined | ((event: NoteEvent) => void),
   loadSettings: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("./native", () => ({
   native: {
     applyPreview: mocks.applyPreview,
     currentNoteResult: mocks.currentNoteResult,
+    currentSyncedPreferences: mocks.currentSyncedPreferences,
     dismissOverlays: mocks.dismissOverlays,
     loadSettings: mocks.loadSettings,
     openMainWindow: mocks.openMainWindow,
@@ -55,6 +57,7 @@ describe("selection overlays", () => {
     mocks.overlaySurfaceReady.mockResolvedValue(true);
     mocks.applyPreview.mockResolvedValue("Improved");
     mocks.currentNoteResult.mockResolvedValue(null);
+    mocks.currentSyncedPreferences.mockResolvedValue(null);
     mocks.transformSelection.mockResolvedValue({});
     mocks.undoReplacement.mockResolvedValue(undefined);
   });

@@ -2,9 +2,9 @@ use crate::{
     application::{
         classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
         HistoryItem, PublicBackendConfig, RefreshFailureRoute, RuntimePause, SelectionCoordinator,
-        SessionRepository, StoredSession,
+        SessionRepository,
     },
-    domain::{AppSettings, SelectionEvent, SettingsRepository, VerbalixError},
+    domain::{SelectionEvent, VerbalixError},
     AppRuntime,
 };
 use std::sync::Arc;
@@ -108,52 +108,6 @@ pub(crate) fn accessibility_status(
         .permission_granted(prompt.unwrap_or(false));
     crate::diagnostics::accessibility(trusted);
     trusted
-}
-
-#[tauri::command]
-pub(crate) fn load_settings(
-    runtime: State<'_, Arc<AppRuntime>>,
-) -> Result<AppSettings, VerbalixError> {
-    runtime.settings.load()
-}
-
-#[tauri::command]
-pub(crate) fn save_settings(
-    app: AppHandle,
-    runtime: State<'_, Arc<AppRuntime>>,
-    settings: AppSettings,
-) -> Result<(), VerbalixError> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    runtime.settings.save(&settings)?;
-    let shortcut = normalized_shortcut(&settings.shortcut);
-    app.global_shortcut()
-        .unregister_all()
-        .map_err(|_| VerbalixError::LocalFailure)?;
-    app.global_shortcut()
-        .register(shortcut.as_str())
-        .map_err(|_| VerbalixError::LocalFailure)
-}
-
-#[tauri::command]
-pub(crate) fn save_session(
-    runtime: State<'_, Arc<AppRuntime>>,
-    access_token: String,
-    refresh_token: String,
-) -> Result<(), VerbalixError> {
-    runtime.session.save(&StoredSession {
-        access_token,
-        refresh_token,
-    })
-}
-
-#[tauri::command]
-pub(crate) fn has_session(runtime: State<'_, Arc<AppRuntime>>) -> Result<bool, VerbalixError> {
-    runtime.session.load().map(|session| session.is_some())
-}
-
-#[tauri::command]
-pub(crate) fn clear_session(runtime: State<'_, Arc<AppRuntime>>) -> Result<(), VerbalixError> {
-    runtime.session.clear()
 }
 
 #[tauri::command]

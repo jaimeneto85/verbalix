@@ -22,33 +22,52 @@ export function Overlay({
   const [settingsReady, setSettingsReady] = useState(false);
 
   useEffect(() => {
-    native
-      .loadSettings()
-      .then(setSettings)
-      .catch(() => undefined)
-      .finally(() => setSettingsReady(true));
-    if (kind !== "note") return;
     let active = true;
-    const showResult = (payload: NoteResult) => {
-      if (!active) return;
-      setResult(payload.text);
-      setNoteMode(payload.mode);
-      setRequestId(payload.requestId ?? "");
-    };
-    const unlisten = listen<NoteResult>("note-result", (event) => {
-      showResult(event.payload);
+
+    const syncUnlisten = listen<AppSettings>("preferences-synced", (event) => {
+      if (active) setSettings(event.payload);
     }).then(async (dispose) => {
       if (!active) {
         dispose();
         return () => undefined;
       }
-      const current = await native.currentNoteResult().catch(() => null);
-      if (current) showResult(current);
+      const synced = await native.currentSyncedPreferences().catch(() => null);
+      if (synced && active) setSettings(synced);
       return dispose;
     });
+
+    native
+      .loadSettings()
+      .then((s) => { if (active) setSettings(s); })
+      .catch(() => undefined)
+      .finally(() => { if (active) setSettingsReady(true); });
+
+    let noteUnlisten: Promise<() => void> | undefined;
+
+    if (kind === "note") {
+      const showResult = (payload: NoteResult) => {
+        if (!active) return;
+        setResult(payload.text);
+        setNoteMode(payload.mode);
+        setRequestId(payload.requestId ?? "");
+      };
+      noteUnlisten = listen<NoteResult>("note-result", (event) => {
+        showResult(event.payload);
+      }).then(async (dispose) => {
+        if (!active) {
+          dispose();
+          return () => undefined;
+        }
+        const current = await native.currentNoteResult().catch(() => null);
+        if (current) showResult(current);
+        return dispose;
+      });
+    }
+
     return () => {
       active = false;
-      unlisten.then((dispose) => dispose());
+      syncUnlisten.then((dispose) => dispose());
+      noteUnlisten?.then((dispose) => dispose());
     };
   }, [kind]);
 

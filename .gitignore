@@ -12,3 +12,11 @@ playwright-report/
 supabase/.temp/
 
 .worktrees/
+
+# iOS build artifacts
+ios/Verbalix.xcodeproj/
+ios/Local.xcconfig
+ios/Config/Supabase.xcconfig
+ios/**/DerivedData/
+ios/VerbalixKit/.swiftpm/
+.claude/

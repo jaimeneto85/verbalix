@@ -76,5 +76,8 @@ export const native = {
   },
   deleteHistory(id?: string) {
     return invoke<void>("delete_history", { id: id ?? null });
+  },
+  currentSyncedPreferences() {
+    return invoke<AppSettings | null>("current_synced_preferences");
   }
 };

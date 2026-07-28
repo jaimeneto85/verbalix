@@ -6,6 +6,21 @@
 - Toda tarefa é executada em worktree dedicado e só é integrada à branch de origem após aprovação explícita.
 
 ## Decisões Arquiteturais
+- O companion iOS começa como Swift Package puro `ios/VerbalixKit` (só Foundation + Security, zero deps externas),
+  com `platforms: [.iOS(.v17), .macOS(.v14)]` — macOS existe só para `swift test` rodar no host sem simulador.
+  supabase-swift só entra na Fase 3 (app SwiftUI/extensões), ainda pendente de decisão de tooling.
+- O contrato iOS (`Transform.swift`) espelha `supabase/functions/transform/contract.ts` no wire (camelCase),
+  com `requestId` serializado em lowercase via `CodingKeys`+`encode(to:)`. Guardas 12.000 unicode scalars e
+  64 KiB do corpo JSON são INDEPENDENTES; o guard de 64 KiB é pré-check defensivo do cliente (index.ts não
+  impõe tamanho de corpo). Fixtures Swift derivam dos mesmos literais de `contract_test.ts` para evitar drift.
+- Sync de preferências: só campos de IA (`formality`, `length`, `tone`, `history_enabled`) trafegam;
+  `shortcut`/`automatic_toolbar`/`confirm_before_replace` são macOS-only e nunca entram/saem pelo sync.
+  `settings.json` continua a fonte de verdade; qualquer falha de rede é não-fatal e nunca propaga erro.
+  `load_settings` virou `async fn` (transparente ao frontend, que usa `invoke()` retornando Promise);
+  `save_settings` segue não-bloqueante — grava local, re-registra shortcut e só então dispara upsert detached
+  via `tauri::async_runtime::spawn`. Adapter `remote_preferences.rs` usa timeout estrito de 4s (bootstrap path).
+- LWW de preferências: `updated_at` é server-authoritative (default now() + trigger BEFORE INSERT/UPDATE que
+  força now()); merge trata remoto ausente/nulo como "infinitamente antigo" (local vence) e empate mantém local.
 - O MVP tem macOS 14 como versão mínima e distribuição direta, assinada e notarizada fora da Mac App Store.
 - Settings e onboarding usam a WebView do Tauri; observação de seleção, geometria e overlays usam APIs nativas do macOS.
 - Resultados atrasados nunca podem alterar uma seleção nova: toda transformação referencia e revalida um snapshot.
@@ -42,7 +57,106 @@
 - AXIdentifier é identidade causal interna e não pertence a DTO/serde/IPC/Debug. Redigir somente o token não basta se o snapshot ainda serializa a mesma informação.
 - Mutation ledgers devem expor outcomes tipados por operação; uma API genérica de terminalização permite transições cruzadas inválidas mesmo quando os callers atuais parecem corretos.
 
+## Erros Recorrentes & Soluções (iOS/Swift)
+- `swift test` bare no host NÃO tem entitlement de keychain-access-groups nem de App Group: `SecItem*` com
+  `kSecAttrAccessGroup` e `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` falham. Solução:
+  separar via protocolo (`SessionPersisting`) com double em memória e diretório tmp injetável; o caminho real
+  de Keychain/App Group compila mas não roda em CI.
+- `XCTAssertEqual(_:_:accuracy:)` exige `FloatingPoint` NÃO-opcional; comparar `TimeInterval?` quebra a
+  compilação. Desembrulhar com `try XCTUnwrap` antes de comparar com tolerância.
+- `NSLock.unlock()` em contexto assíncrono é warning no Swift 5 e ERRO no Swift 6 language mode. Usar locking
+  com escopo (`withLock`) numa seção síncrona, sem `lock()/unlock()` cruzando `await`, em stubs de transporte.
+
 ## Aprendizados de QA
+- Relatórios finais de sub-agentes podem chegar truncados/otimistas; o orquestrador DEVE re-rodar os gates
+  empiricamente (swift test, cargo test/clippy/fmt, npm test/build, deno, e os 3 xcodebuild) antes de aceitar
+  qualquer verdict. Ao longo desta entrega os sub-agentes repetidamente: deixaram `Tests/` vazio; entregaram
+  teste que não compilava (accuracy sobre Optional); pararam com código quebrado NÃO-commitado (RefreshLock
+  com `flock` ambíguo; SessionRefresher lançando `.localFailure`); e terminaram sem commitar apesar de "tudo
+  verde". Padrão de mitigação que funcionou: (1) escopo por rodada com "pouse SEMPRE verde+commitado"; (2)
+  o orquestrador verifica git log/status + roda os gates a cada retorno; (3) preservar trabalho commitando
+  quando o sub-agente esquece.
+- Fase 2 (sync de prefs) tinha DEFEITO real de "remoto sempre vence": LWW exige timestamp local. Solução
+  aprovada: SIDECAR `preferences_sync.json` (`{updatedAt, syncedAt, sequence}`) fora do `AppSettings` (que
+  cruza IPC), com sequence-guard contra race entre `save_settings` síncrono e o spawn de `load_settings`;
+  `load_settings` retorna local na hora e emite evento `preferences-synced` (padrão listen/emit de
+  `note-result`, com comando de pull de fallback). No iOS, TODA edição local deve chamar `touch()` senão o
+  bug reaparece.
+
+## iOS — Auth deep link / Universal Links
+- Bug de produção: magic link caiu em `http://localhost:3000/?error=access_denied&error_code=otp_expired`
+  porque o `redirect_to` (`verbalix-ios://auth/callback`) NÃO estava na allow-list do Supabase → o serviço
+  descarta o redirect e usa o Site URL. Allow-list é ação de OPS (dashboard), não de código.
+- supabase-swift 2.x `AuthClient.session(from:)` (.pkce) JÁ trata `error`/`error_code`/`error_description`,
+  lança `AuthError.pkceGrantCodeExchange(message:error:code:)` (inclui `otp_expired`) e faz o
+  `exchangeCodeForSession` internamente com o `code_verifier` single-use do próprio storage. NÃO reimplementar
+  o exchange manualmente. Padrão adotado: classificador PURO `AuthCallback.parse(url) -> .proceed(URL)|.failure`
+  (valida host/path das 2 formas, lê query E fragment, mapeia error→VerbalixError pt-BR) e, no `.proceed`,
+  delegar a `session(from:)`, mapeando `AuthError` lançado como 2ª rede. Isso torna os edge cases testáveis
+  SEM rede e não duplica a lógica PKCE da lib.
+- Race de cold start: em SwiftUI, `.onOpenURL` DENTRO de `if let appSession` PERDE o link quando o app é
+  aberto fechado pelo e-mail (caminho mais comum). Anexar `.onOpenURL` no nível do `WindowGroup` e guardar
+  `pendingURL` processada quando a sessão estiver pronta.
+- `catch {}` em handlers de deep link é falha silenciosa: o caso `otp_expired` não mostrava nada. Sempre
+  superficializar erro tipado numa `@Published`/observável (`callbackError`) exibida na tela de login.
+- Migração para Universal Links é ADITIVA: manter `verbalix-ios://` no `CFBundleURLTypes` como fallback de
+  PARSING. A EMISSÃO (`sendMagicLink redirectTo`) NÃO pode ser https-only hardcoded — isso deixou o usuário
+  sem NENHUM caminho de login (domínio sem TLS + allow-list do custom scheme inútil porque nunca é emitido).
+  CORRIGIDO: callback de emissão CONFIGURÁVEL via chave Info.plist `VerbalixAuthCallback`, injetada de uma
+  build setting `VERBALIX_AUTH_CALLBACK` (default `verbalix-ios://auth/callback` no `settings` do project.yml →
+  pbxproj, NÃO xcconfig por causa do `//`). `BackendConfig.authCallbackURL` lê a chave com FALLBACK seguro ao
+  custom scheme quando ausente OU inválida (nunca crashar); `AuthService.callbackURL` vem da config (não é mais
+  `static let`). Virar para Universal Links quando o domínio subir = mudança de CONFIG, sem tocar Swift. Durante
+  a transição, AMBAS as URLs emitidas devem estar na allow-list do Supabase. Gate que importa: valor de
+  `VerbalixAuthCallback` no Info.plist COMPILADO do `.app`.
+- Associated Domains: chave `com.apple.developer.associated-domains: ["applinks:app.verbali.xyz"]` no
+  `entitlements.properties` do target no `project.yml` (o `.entitlements` é REGENERADO por xcodegen — fonte da
+  verdade é o project.yml). Em build de SIMULADOR (unsigned, `CODE_SIGNING_ALLOWED=NO`), `codesign -d
+  --entitlements` NÃO mostra nada (entitlements embutem no signing de device); verificar o `.entitlements`
+  GERADO. Universal Links não funcionam de forma confiável no simulador — teste é gate de DEVICE.
+- AASA: arquivo `apple-app-site-association` SEM extensão, servido em `/.well-known/`, `Content-Type:
+  application/json`, SEM redirect, TLS válido, sem auth; `appIDs=["<TeamID>.com.verbalix.ios"]` (Team ID é
+  público — pode ir versionado no AASA), `components` restritos a `/auth/callback` (nunca `*`).
+
+## iOS — Prontidão para App Store
+- Em `.xcconfig`, `//` inicia COMENTÁRIO: gravar `VerbalixSupabaseURL = https://x.supabase.co` faz o valor
+  resolver para `https:` (sem host). O build passa; só o Info.plist COMPILADO revela. `bootstrap.sh` escapa
+  a barra (VERBALIX_SLASH). LIÇÃO GERAL: onde valores atravessam camadas (xcconfig→Info.plist→BackendConfig),
+  verificar o VALOR FINAL COMPILADO com `plutil -p "<Verbalix.app>/Info.plist"`, não só que compila.
+- Versões: `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` no `settings.base` do project.yml SÓ têm efeito se os
+  Info.plist referenciam `$(MARKETING_VERSION)`/`$(CURRENT_PROJECT_VERSION)` — literais `1.0`/`1` ignoram a
+  build setting. Centralizar em settings.base garante paridade app↔extensões (divergência = rejeição no upload).
+- AppIcon: bloqueio duro. Asset catalog single-size (Xcode 14+): um PNG 1024x1024 com
+  `Contents.json {idiom: universal, platform: ios, size: 1024x1024}` + `ASSETCATALOG_COMPILER_APPICON_NAME`.
+  Ícone da App Store NÃO pode ter alpha: achatar com `magick "<src>" -background white -alpha remove -alpha off`
+  (ImageMagick em /opt/homebrew; `sips` só zera alpha via round-trip JPEG lossy; PIL/pngcrush ausentes) e
+  validar `sips -g hasAlpha` == no. COMMITAR o PNG achatado no appiconset para o build não depender de
+  ImageMagick. Provar no `.app`: `AppIcon60x60@2x.png` presente e `Assets.car` gerado.
+- `UILaunchScreen` (dict vazio basta) é bloqueio duro (SDK iOS 14+); provar no Info.plist compilado.
+- Release signing: `CODE_SIGN_STYLE = Automatic` no `Release.xcconfig` (aplica aos 3 targets, pois `configFiles`
+  é por-projeto) + `DEVELOPMENT_TEAM` via `Local.xcconfig` gitignored. NÃO mexer no `CODE_SIGNING_ALLOWED = NO`
+  do Debug (é o que permite build de simulador sem Team). Build de simulador verde NÃO valida signing de
+  Release/device — isso é gate manual.
+- Simulador: há `iPhone 17 Pro` duplicados e runtimes 26.3/26.4/26.5 (SDK 26.5); fixar `OS=26.5` no
+  `-destination` evita casar com runtime indisponível.
+
+## iOS App + Extensões (Fases 3-5)
+- Tooling: XcodeGen (`ios/project.yml` versionado → `ios/Verbalix.xcodeproj` gitignored). Targets: app
+  `Verbalix`, `VerbalixAction` (com.apple.ui-services), `VerbalixKeyboard` (com.apple.keyboard-service),
+  extensões embedadas, todos dependem do package local `ios/VerbalixKit`. Deployment iOS 17.0.
+- Build de simulador SEM Team: entitlements de App Group/Keychain quebram assinatura, então a config de
+  simulador usa `CODE_SIGNING_ALLOWED=NO`/`CODE_SIGNING_REQUIRED=NO`/`CODE_SIGN_IDENTITY=""` (em
+  `Config/Debug.xcconfig` e/ou na linha de comando do xcodebuild). `DEVELOPMENT_TEAM` via `ios/Local.xcconfig`
+  gitignored (`.example` versionado); vazio compila no simulador. Os 3 schemes buildam verdes assim.
+- Config Supabase: `ios/scripts/bootstrap.sh` gera `ios/Config/Supabase.xcconfig` (gitignored) do `.env` da
+  raiz e roda `xcodegen`. Em WORKTREE o `.env` (gitignored) não existe localmente; resolver a raiz do checkout
+  via `git rev-parse --git-common-dir` (pai do `.git` comum), NUNCA `ios/../..` fixo. O script deve falhar
+  loud se ausente e NUNCA ecoar URL/anon key.
+- supabase-swift entra só aqui (produto `Auth`, resolvido via SPM 2.53.0). `AuthLocalStorage`/`AuthService`
+  sobre `SharedSessionStore`; refresh serializado por `RefreshLock` (fcntl `F_SETLK`, NÃO `flock` — `flock`
+  colide com o `struct flock` do Darwin) com expiração de lock órfão. Para testar no host, o lock precisa ser
+  INJETÁVEL (init com `lockPath` em tmp); a versão de produção usa `containerURL(App Group)`, que no host
+  retorna URL inacessível (não-nil) e faz `open(O_CREAT)` falhar com `.localFailure` — mesmo trap do M3.
 - A matriz de compatibilidade precisa cobrir seleção por mouse e teclado, campos editáveis e somente leitura, múltiplos monitores e conteúdo Unicode.
 - Testar separadamente detecção, leitura, bounds e escrita evita mascarar incompatibilidades específicas dos aplicativos.
 - Pausar precisa bloquear todos os entrypoints: polling, AXObserver, atalho global e fallback de clipboard.
