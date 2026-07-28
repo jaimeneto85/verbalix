@@ -68,6 +68,11 @@
 - O limite de Keychain é verificado pelo payload IPC; testes não gravam credenciais reais.
 - Wiring com efeitos Tauri pode ser testado por callbacks `FnOnce` que contam separadamente abertura de janela e publicação de nota, mantendo o mesmo branch usado por produção sem construir `AppHandle`.
 
+## Padrões de Teste (Swift/iOS)
+- `ios/VerbalixKit` usa `swift-tools-version: 5.9`, plataformas `.iOS(.v17)`/`.macOS(.v14)`; testes rodam via `swift test --package-path ios/VerbalixKit` no host macOS, sem simulador.
+- Suíte Swift atual: `TransformContractTests`, `TransformGuardsTests`, `VerbalixErrorTests`, `TransformClientTests`, `PreferencesStoreTests` + `PreferencesSyncSerializationTests` + `MergePreferencesTests`, todas em `Tests/VerbalixKitTests/`; stub compartilhado `Support/StubHTTPTransport.swift` implementa `HTTPTransport` injetável (sem rede real), `Support/VerbalixErrorMatching.swift` ajuda a comparar erros.
+- `TransformRequest.requestId` precisa de `encode(to:)` manual (com `CodingKeys` privado) para serializar `UUID` em lowercase (`uuidString.lowercased()`), pois `JSONEncoder` padrão do Foundation emite UUID em uppercase e o contrato espelha `contract.ts`'s `isUuid()/randomUUID()` (sempre lowercase). Decodificação continua sintetizada automaticamente — implementar só `encode(to:)` não desativa a síntese de `init(from:)`.
+
 ## Erros Recorrentes & Soluções
 - Factories de `vi.mock` são hoisted; mocks compartilhados devem usar `vi.hoisted`.
 - Clipboard e Accessibility reais não devem ser acionados em testes automatizados, pois alteram estado global do macOS.
@@ -77,6 +82,8 @@
 - O analyzer QA considera linhas efetivas e impõe máximo de 300 por arquivo modificado; os boundaries macOS foram divididos e devem permanecer abaixo desse limite.
 - Em sandbox restrito, o teste de histórico HTTP pode falhar ao criar `TcpListener` com `PermissionDenied`; isso não deve ser confundido com regressão quando todos os demais testes passam. O gate completo precisa de execução com socket loopback permitido.
 - Em sandbox restrito, o web server do Playwright pode falhar com `listen EPERM` em `127.0.0.1:4173`; repita o mesmo `npm run test:e2e` com permissão de loopback antes de classificar como regressão.
+- `XCTAssertEqual(_:_:accuracy:)` exige operandos `FloatingPoint` NÃO-opcionais; comparar `TimeInterval?` (ex.: `Date?.timeIntervalSince1970`) direto nesse overload falha em "no exact matches". Desembrulhe cada lado com `try XCTUnwrap(...)` (tornando o teste `throws`) antes da comparação com `accuracy:`.
+- Em Swift 6 language mode, `NSLock.lock()/unlock()` cruzando um `await` vira erro ("instance method 'unlock' is unavailable from asynchronous contexts"). Use `NSLock.withLock { ... }` (disponível iOS 16+/macOS 13+) envolvendo só a seção síncrona (ex.: mutação de estado + `removeFirst()`), retornando o valor necessário para fora do closure antes de qualquer `await` subsequente.
 
 ## Cobertura & Métricas
 - O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.

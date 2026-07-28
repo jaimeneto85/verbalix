@@ -3,10 +3,13 @@
 ## Padrões do Projeto
 - O domínio é isolado de Tauri, macOS e Supabase por ports pequenos.
 - Snapshots de seleção são imutáveis e toda escrita exige revalidação.
+- iOS companion usa Swift Package `ios/VerbalixKit` com zero dependências externas (só Foundation + Security).
 
 ## Stack & Configuração
 - Tauri 2, React, TypeScript, Vite e Rust.
 - O MVP requer macOS 14+; integrações específicas usam `cfg(target_os = "macos")`.
+- iOS companion: Swift Package targeting iOS 17 + macOS 14 (macOS para `swift test` no host).
+- Swift 6.3 compiler mas Package.swift usa tools-version 5.9 (Swift 5 language mode por padrão).
 
 ## Padrões de Código
 - Tipos compartilhados Rust são serializáveis em camelCase para consumo da WebView.
@@ -19,11 +22,19 @@
 - Mutexes do coordinator protegem apenas snapshots e commits de estado. Chamadas ao provider, AX e overlay ficam fora do lock; o commit posterior compara request, alvo e identidade do mesmo lease.
 - Publicações de note, preview, undo e erro carregam `PublicationGuard` até o executor de overlay. Guarda cancelada é no-op e feedback nunca relê o snapshot global para escolher bounds.
 - Implementações macOS extensas ficam separadas por responsabilidade: acessibilidade, observer, restauração e overlay.
-- `RuntimePause` é o gate único para polling, AXObserver, atalho e fallback de clipboard; callbacks revalidam a pausa após o debounce.
+- `RuntimePause` é o gate único para polling, AXObserver, atalho e fallback de clipboard; callbacks revalidam a pausa após o debounce. Agora tem também `in_flight: Arc<AtomicUsize>` + `grace_deadline_ms` com relógio injetável (`clock_ms: fn() -> u64`); `begin_action() -> ActionGuard` (RAII) e `is_action_in_flight()` compõem `!is_action_in_flight()` em `run_polling`/`run_ax_observer`; mouse-dismiss usa `run_mouse_dismiss` (gated só por in-flight, não por is_paused). Clock injetável via `RuntimePause::with_clock(fn)` disponível apenas em `#[cfg(test)]`. Polling e AXObserver são simétricos: ambos checam `!is_paused() && !is_action_in_flight()` no guard interno pós-sleep de 150ms.
 - Resultados da nota usam evento mais state pull: o backend publica o estado antes de emitir e o frontend registra o listener antes de consultar `current_note_result`.
 - Recapturas AX equivalentes devem devolver o snapshot ativo do coordinator; retornar o UUID recém-capturado quebra `DebounceElapsed`.
 - Diagnóstico do pipeline usa `VERBALIX_DIAGNOSTICS=1` e metadados estruturados sem texto, tokens ou credenciais.
 - Boundaries macOS e seus testes ficam em módulos separados quando necessário para manter responsabilidade única e o hard gate de 300 linhas por arquivo.
+
+## Padrões de Código (adicionais)
+- `coordinator.rs` expõe `last_known_bounds() -> Option<Rect>` como fallback de geometria de nível aplicação; atualizado no `store_candidate`, limpo em `invalidate`. Helper `error_bounds(runtime)` em `commands.rs` usa esse fallback apenas quando `is_action_in_flight()` — protege contra nota fantasma em `ai_readiness` standalone. O branch fallback (`current_snapshot == None && is_action_in_flight == true && last_bounds presente`) é genuinamente inalcançável pela API pública do coordinator (invalidate sempre limpa last_bounds antes de ir a Idle). Para testar diretamente, usa-se `force_last_bounds_for_test` (pub fn gateada por `#[cfg(test)]`) que injeta o estado sem passar pelo ciclo de vida normal.
+- Worktrees ficam em `.worktrees/<branch-name>/`; nunca trabalhar no checkout principal quando uma sessão de worktree está em curso.
+- Swift Package `VerbalixKit`: `HTTPTransport` protocol injetável em `TransformClient`/`HistoryClient`/`PreferencesSync`; `SessionPersisting` protocol em `SharedSessionStore`; testes usam `InMemorySessionStore` + `tmp` dir, nunca Keychain ou App Group.
+- `InMemorySessionStore` usa `@unchecked Sendable` pois é class com var mutável (test double).
+- `PreferencesStore` usa escrita atômica via `.tmp` + rename, espelhando Rust `settings_file.rs`.
+- `mergePreferences(local:remote:)` é função pura: remote nil → local wins; remote.updatedAt nil → local wins (infinitely old); tie → local wins.
 
 ## Erros Recorrentes & Soluções
 - A Accessibility API é incompleta em alguns aplicativos; ausência de atributos deve produzir degradação segura.
@@ -39,6 +50,7 @@
 - Depois que `SelectionPort::replace` retorna sucesso, `Applied` é o commit point. Feedback de undo é best-effort e não pode reclassificar a mutação.
 - Nunca usar o mutex de state para linearizar I/O AX: isso bloqueia Candidate/Invalidated e derrota o cancelamento. O ponto de linearização da escrita é o CAS do lease imediatamente antes do setter; `Applied` é um commit condicional posterior.
 - Restore conserva o `epoch` do retained target e nunca adota `epoch.current()` como autorização. Correlação precede replay/reconcile, lookups terminais aplicam TTL antes do early return, e a autorização causal final ocorre dentro do write boundary após claim/self-arm: comparação atômica seguida imediatamente pelo setter, sem lock ou operação falível intermediária.
+- Swift Package em Swift 6 compiler: `final class` com mutable var e `Sendable` conformance gera erro; usar `@unchecked Sendable` para test doubles.
 
 ## Dependências & Integrações
 - Transformações passam exclusivamente pela Edge Function autenticada.
@@ -59,7 +71,9 @@
 - Rotas `?overlay=` sem um UUID v4 Rust válido preservam a superfície transparente, mas renderizam root vazio e nunca a aplicação principal.
 - Criação de overlay é transacional: a geração aberta por `build` só permanece válida após `configure`; qualquer falha invalida o documento e executa rollback `destroy → hide`, com diagnóstico de todas as etapas. Uma janela parcialmente configurada nunca pode ser reutilizada.
 - Toda invalidação de documento usa compare-and-invalidate com a geração esperada. Callbacks e rollbacks stale retornam `false`, são diagnosticados e nunca removem a geração atual.
-- `AppRuntime` vive em `runtime.rs`; o registro de comandos em `lib.rs` não deve voltar a ultrapassar o hard gate de 300 linhas.
+- `AppRuntime` vive em `runtime.rs`; o registro de comandos em `lib.rs` não deve ultrapassar o hard gate de `split("\n").length ≤ 301` (equivalente a `wc -l ≤ 300`). O gate é verificado em `src/bundle-smoke.test.ts`.
+- rustfmt expande cadeias de métodos quando a cadeia em si tem ≥ 60 chars (heurística padrão), mesmo que a linha total fique abaixo de 100 chars. Para reduzir linhas em `lib.rs`, prefira extrair funções de responsabilidade coesa ou inline de wrappers single-use em vez de colapsar cadeias manualmente.
+- rustfmt expande `use X::{a, b, ...};` para forma multilinha quando a linha ≥ 100 chars; o threshold efetivo é 99 chars para manter em 1 linha.
 - Durante o MVP diagnosticável, `ActivationPolicy::Regular`, fechamento da janela principal como hide e reabertura centralizada por Dock/tray mantêm o processo observável.
 - Configuração pública do backend usa pares completos na ordem processo `VITE_*`, processo legado `VERBALIX_*`, embedded `VITE_*`, embedded legado; o build gera constantes em `OUT_DIR` para não transportar valores por stdout.
 - Edge Functions mantêm `Deno.serve` apenas no entrypoint; handler, autenticação, provider factory, secrets e scheduler são injetáveis para testes sem rede ou efeitos colaterais.
@@ -90,9 +104,17 @@
 - Toda escrita confirmada retorna `MutationReceipt` e entra no journal antes da promoção visual falível. `Applied` referencia o receipt por UUID, Candidate mais novo não é sobrescrito e undo resolve o record exato mesmo quando mutações distintas produzem o mesmo texto.
 - Diagnósticos de capacidade registram apenas estágio/origem/categoria e presença de identifier, sem valor, identifier concreto ou range. A consulta de `AXSelectedTextRange` settable é somente um probe sanitizado quando diagnósticos estão habilitados.
 - Self-notification usa `Armed→Authorizing→InSetter→Committed|Cancelled`. Todo sinal causal produtivo cancela/remove `Armed|Authorizing` sob mutex curto antes de `epoch.bump`; `InSetter|Committed` preserva ownership/self one-shot. O payload CF é construído antes da autorização final, seguida diretamente pelo seam FFI.
+- iOS/Swift: `HistoryClient` usa snake_case CodingKeys para mapear colunas REST; transform usa camelCase (padrão Codable).
+- iOS/Swift: `PreferencesSync.upsert` omite `updated_at` do body — servidor seta via trigger BEFORE INSERT/UPDATE.
 
 ## Observações
 - A validação manual AX exige um app assinado/em execução com permissão de Acessibilidade e não pode ser substituída por testes unitários.
 - O fluxo toolbar → transformação → preview → apply → undo é coberto por integração com adapters; a versão desktop real permanece gate manual por exigir AX, app externo focado e sessão remota.
 - `npm test`, `npm run test:coverage`, `npm run build`, `cargo test`, `cargo clippy` e o bundle smoke são os gates mínimos antes do handoff.
 - Identidade TCC estável entre builds exige Apple Development ou Developer ID; assinatura ad-hoc e mudança de caminho exigem reautorizar o bundle exato.
+- Adapters remotos de preferências em `application/remote_preferences.rs` seguem o padrão de `supabase.rs`: `Client::builder().timeout(...)`, headers `apikey` + `bearer_auth`, `error_for_status()`, enum de erros `VerbalixError`. Upsert usa `?on_conflict=<unique_col>` na URL com `Prefer: resolution=merge-duplicates,return=minimal`.
+- `pub(crate) mod remote_preferences;` (em vez de `mod`) permite que módulos de teste do crate acessem `RemotePreferences` via `crate::application::remote_preferences::RemotePreferences` sem re-exportação desnecessária que cause avisos de unused import no clippy.
+- Comandos Tauri `async fn` coexistem com `fn` sync no mesmo `invoke_handler!` sem alteração no frontend (Promise é transparente a ambos). `load_settings` tornou-se async; `save_settings` permanece sync e dispara upsert com `tauri::async_runtime::spawn`.
+- O `AppRuntime` em `runtime.rs` contém campos `Option<Arc<...>>` para adapters que dependem de configuração (`remote_preferences: Option<Arc<RemotePreferencesRepository>>`), criados condicionalmente em `lib.rs` com base em `backend_config.configured`.
+- `swift build --package-path ios/VerbalixKit` é o gate de build para o Swift Package.
+- `swift test --package-path ios/VerbalixKit` requer entitlement-free test doubles (InMemorySessionStore, tmp dir).
