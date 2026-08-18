@@ -258,6 +258,23 @@ pub trait VoiceEnrollmentPort: Send + Sync {
 - [ ] T7.2: Verificar `Info.plist` compilado tem `NSMicrophoneUsageDescription`.
 - [ ] T7.3: Doc de entrega `docs/NNN-*.md` (pt-BR) com gates manuais listados.
 
+## Correções QA — Iteração 1 (veredito REJECTED_CODE)
+Bloqueadores a corrigir (software-engineer):
+- [ ] C1 [CRITICAL]: `voice-enroll/handler.ts:~81` — idempotência compara `previous.voiceProfileId` (coluna `id`) com `enrollReq.requestId` (coluna `request_id`) — espaços de UUID distintos, condição sempre verdadeira → dedup nunca dispara e todo retry recria voz. `getPreviousProfile` deve retornar `request_id`; comparar `previous.requestId !== enrollReq.requestId`. Corrigir também `handler_test.ts:101-111` para usar `previousProfile.requestId = requestId` (cenário atual é impossível em produção).
+- [ ] C2 [MAJOR]: `voice-enroll/handler.ts:142-154` — se `setReady` falha após a ElevenLabs criar a voz, voz órfã billada + perfil preso em `enrolling`. Envolver em try-catch: best-effort `provider.deleteVoice(providerVoiceId)` + `setFailed(voiceProfileId)` e então erro (EC10).
+- [ ] C3 [FILE_SIZE]: `voice-enroll/handler.ts` tem 339 linhas efetivas (>300). Extrair `createSupabaseServiceClient` para `voice-enroll/service_client.ts` (SRP).
+- [ ] C4 [SECURITY]: migration `20260818000000_voice_profiles.sql:23-26` — policy `"owners can read voice profiles"` concede SELECT de todas as colunas a `authenticated`, expondo `provider_voice_id` via PostgREST. Remover a policy SELECT (as 3 functions usam service role); manter INSERT/UPDATE/DELETE como defesa em profundidade. Adicionar teste/validação de que `authenticated` não faz SELECT na base.
+- [ ] C5 [HIGH]: race concorrente cria dois perfis por usuário. Adicionar partial unique index `UNIQUE (user_id) WHERE status NOT IN ('deleting','failed')` na migration.
+
+Não-bloqueadores (endereçar nesta reentrada):
+- [ ] C6 [MED]: `voice-delete/handler.ts` — `markDeleting`/`resolveProviderVoiceId` ignoram `_userId`; usar `userId` nos filtros (defesa contra escalada).
+- [ ] C7 [MED]: `audio_capture.rs:44-116` — `start()` retorna `Ok(())` mesmo sem device/config/formato; erro só aparece em `stop()`. Adicionar canal de reply síncrono confirmando abertura do stream.
+- [ ] C8 [LOW]: `voice-delete/contract.ts` — `requestId` validado mas não usado; remover ou implementar dedup.
+- [ ] C9 [LOW]: inconsistência de caps — `contract.ts:50` usa `MAX_SAMPLE_BYTES*1.5` (15MB), `handler.ts:9` usa 14MB; alinhar ao cap real de 10MB binário documentado.
+- [ ] C10 [LOW]: `domain/voice.rs` — `EnrollmentSample.duration_secs` com `#[allow(dead_code)]`, nunca validado; validar duração (server e/ou client) ou justificar.
+
+Pós-correção: re-rodar TODOS os gates (incl. `deno test` e `tauri build --debug` com verificação de Info.plist), test-engineer ajusta/adiciona testes, re-submeter ao qa-reviewer.
+
 ## Gates Manuais (NÃO alegar como verificados por testes automatizados)
 - Permissão real de microfone / TCC (bundle assinado + concessão do usuário).
 - Enrollment real na ElevenLabs (chave setada via `supabase secrets set ELEVEN_LABS_KEY=...` + `SUPABASE_SERVICE_ROLE_KEY` disponível às functions; voz aparece/some no dashboard).
