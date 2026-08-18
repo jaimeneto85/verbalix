@@ -216,36 +216,36 @@ pub trait VoiceEnrollmentPort: Send + Sync {
 ## 📝 TASKS
 
 ### Fase 1: Backend Supabase (Deno + SQL)
-- [ ] T1.1: [MEDIUM] Migration `voice_profiles` (com `request_id`) + RLS owner-only (defesa em profundidade) + trigger `set_updated_at` (REUSA função existente, só `create trigger`) + índice unique `(user_id, request_id)`. SEM view/revoke (Opção A). Teste de grant/RLS provando não-vazamento de `provider_voice_id` a terceiros.
-- [ ] T1.2: [HIGH] `voice-enroll`: `contract.ts` (parse/validate, cap 10 MB, ErrorCodes; REUSA `isUuid`) + `provider.ts` (ElevenLabs IVC multipart, fetcher injetável) + `handler.ts` (auth REUSA `../transform/auth.ts`; `readBoundedBody`/`TimeoutScheduler` REUSADOS/parametrizados; service-role; idempotência por request_id; cleanup de órfão; replace de perfil existente; timeout 60 s) + `index.ts`.
-- [ ] T1.3: [MEDIUM] `voice-delete`: contract + provider (DELETE ElevenLabs, idempotente) + handler (status `deleting`, reconciliação, service-role) + index.
-- [ ] T1.4: [MEDIUM] `voice-status`: contract + handler (service-role, escopado por user_id, retorna `VoiceProfileView | null`) + index.
-- [ ] T1.5: [LOW] `supabase/config.toml`: entradas das TRÊS functions com `verify_jwt = true`.
+- [x] T1.1: [MEDIUM] Migration `voice_profiles` (com `request_id`) + RLS owner-only (defesa em profundidade) + trigger `set_updated_at` (REUSA função existente, só `create trigger`) + índice unique `(user_id, request_id)`. SEM view/revoke (Opção A). Teste de grant/RLS provando não-vazamento de `provider_voice_id` a terceiros.
+- [x] T1.2: [HIGH] `voice-enroll`: `contract.ts` (parse/validate, cap 10 MB, ErrorCodes; REUSA `isUuid`) + `provider.ts` (ElevenLabs IVC multipart, fetcher injetável) + `handler.ts` (auth REUSA `../transform/auth.ts`; `readBoundedBody`/`TimeoutScheduler` REUSADOS/parametrizados; service-role; idempotência por request_id; cleanup de órfão; replace de perfil existente; timeout 60 s) + `index.ts`.
+- [x] T1.3: [MEDIUM] `voice-delete`: contract + provider (DELETE ElevenLabs, idempotente) + handler (status `deleting`, reconciliação, service-role) + index.
+- [x] T1.4: [MEDIUM] `voice-status`: contract + handler (service-role, escopado por user_id, retorna `VoiceProfileView | null`) + index.
+- [x] T1.5: [LOW] `supabase/config.toml`: entradas das TRÊS functions com `verify_jwt = true`.
 
 ### Fase 2: Domínio + Ports + Erros (Rust)
-- [ ] T2.1: [LOW] `domain/voice.rs`: `VoiceProfileStatus`, `VoiceProfileView`, `EnrollmentSample`, `MicrophonePermission` (serde camelCase) + export em `domain/mod.rs`.
-- [ ] T2.2: [LOW] `domain/error.rs`: novas variantes sanitizadas + mensagens pt-BR.
-- [ ] T2.3: [LOW] `domain/settings.rs`: `voice_profile_id: Option<Uuid>` com `#[serde(default)]`; `remote_preferences::apply_remote` preserva o campo.
-- [ ] T2.4: [MEDIUM] `application/ports.rs`: `AudioCapturePort` + `VoiceEnrollmentPort` (+ exports em `application/mod.rs`).
+- [x] T2.1: [LOW] `domain/voice.rs`: `VoiceProfileStatus`, `VoiceProfileView`, `EnrollmentSample`, `MicrophonePermission` (serde camelCase) + export em `domain/mod.rs`.
+- [x] T2.2: [LOW] `domain/error.rs`: novas variantes sanitizadas + mensagens pt-BR.
+- [x] T2.3: [LOW] `domain/settings.rs`: `voice_profile_id: Option<Uuid>` com `#[serde(default)]`; `remote_preferences::apply_remote` preserva o campo.
+- [x] T2.4: [MEDIUM] `application/ports.rs`: `AudioCapturePort` + `VoiceEnrollmentPort` (+ exports em `application/mod.rs`).
 
 ### Fase 3: Adapters (Rust)
-- [ ] T3.1: [MEDIUM] `application/voice_enrollment.rs`: `RemoteVoiceEnrollment` (enroll/delete/status) via `reqwest`, base64 do sample, mapeamento de erro sem conteúdo.
-- [ ] T3.2: [MEDIUM] `application/enrollment_session.rs`: estado in-memory (Mutex) da gravação — begin/finish/cancel, guarda `EnrollmentSample`, expõe metering (padrão `NoteResultState` publish-then-emit). Guard contra `begin` duplo (EC06).
-- [ ] T3.3: [HIGH] `platform/audio_capture.rs` (cfg macos, `cpal`): **thread de captura dedicada** possuindo o `cpal::Stream` (não-Send); surface Send-safe (`mpsc` + `Arc<AtomicU32>` de nível); reamostragem/encode mono 16 kHz 16-bit WAV; cap de duração. `platform/audio_permission.rs` (objc2-av-foundation): `authorizationStatus` síncrono + `requestAccess` async emitindo evento.
-- [ ] T3.4: [LOW] `platform/mod.rs`: stub não-macOS retornando `UnsupportedPlatform`/estado neutro (mantém compilação).
-- [ ] T3.5: [LOW] `Cargo.toml`: adicionar `cpal` + `objc2-av-foundation` (cfg macos) — validar clippy.
+- [x] T3.1: [MEDIUM] `application/voice_enrollment.rs`: `RemoteVoiceEnrollment` (enroll/delete/status) via `reqwest`, base64 do sample, mapeamento de erro sem conteúdo.
+- [x] T3.2: [MEDIUM] `application/enrollment_session.rs`: estado in-memory (Mutex) da gravação — begin/finish/cancel, guarda `EnrollmentSample`, expõe metering (padrão `NoteResultState` publish-then-emit). Guard contra `begin` duplo (EC06).
+- [x] T3.3: [HIGH] `platform/audio_capture.rs` (cfg macos, `cpal`): **thread de captura dedicada** possuindo o `cpal::Stream` (não-Send); surface Send-safe (`mpsc` + `Arc<AtomicU32>` de nível); reamostragem/encode mono 16 kHz 16-bit WAV; cap de duração. `platform/audio_permission.rs` (objc2-av-foundation): `authorizationStatus` síncrono + `requestAccess` async emitindo evento.
+- [x] T3.4: [LOW] `platform/mod.rs`: stub não-macOS retornando `UnsupportedPlatform`/estado neutro (mantém compilação).
+- [x] T3.5: [LOW] `Cargo.toml`: adicionar `cpal` + `objc2-av-foundation` (cfg macos) — validar clippy.
 
 ### Fase 4: Comandos + Wiring (Rust)
-- [ ] T4.1: [MEDIUM] `commands_voice.rs`: os 7 comandos, IPC camelCase, erros tipados, sem conteúdo em logs. `finish` refaz refresh de token (EC09).
-- [ ] T4.2: [MEDIUM] `runtime.rs`: novos campos em `AppRuntime` + **helper de construção do wiring de voz** (mantém `lib.rs` enxuto).
-- [ ] T4.3: [MEDIUM] `lib.rs`: `mod commands_voice;`, registro dos 7 comandos no `generate_handler!`, 1 chamada ao helper de wiring. **⚠️ GATE DE LINHAS: `lib.rs` está em 278/301** — orçamento apertado. Gerir ativamente: mover wiring para `runtime.rs`; se necessário, extrair código existente de `lib.rs`. Rodar `bundle-smoke.test.ts` para confirmar ≤301.
-- [ ] T4.4: [LOW] `tauri.conf.json` (infoPlist mic) + `Entitlements.plist` (audio-input).
+- [x] T4.1: [MEDIUM] `commands_voice.rs`: os 7 comandos, IPC camelCase, erros tipados, sem conteúdo em logs. `finish` refaz refresh de token (EC09).
+- [x] T4.2: [MEDIUM] `runtime.rs`: novos campos em `AppRuntime` + **helper de construção do wiring de voz** (mantém `lib.rs` enxuto).
+- [x] T4.3: [MEDIUM] `lib.rs`: `mod commands_voice;`, registro dos 7 comandos no `generate_handler!`, 1 chamada ao helper de wiring. **⚠️ GATE DE LINHAS: `lib.rs` está em 278/301** — orçamento apertado. Gerir ativamente: mover wiring para `runtime.rs`; se necessário, extrair código existente de `lib.rs`. Rodar `bundle-smoke.test.ts` para confirmar ≤301.
+- [x] T4.4: [LOW] `tauri.conf.json` (infoPlist mic) + `Entitlements.plist` (audio-input).
 
 ### Fase 5: Frontend
-- [ ] T5.1: [LOW] `types.ts`: tipos de voz + `voiceProfileId?` em `AppSettings`.
-- [ ] T5.2: [LOW] `native.ts`: 7 wrappers IPC.
-- [ ] T5.3: [MEDIUM] `components/InterpretationPanel.tsx`: consentimento, status/solicitação de permissão, medidor de nível (via `listen`), gravar/parar/re-gravar/enviar/excluir. Áudio nunca no React.
-- [ ] T5.4: [LOW] `App.tsx`: aba "Interpretação" + `styles/panels.css`.
+- [x] T5.1: [LOW] `types.ts`: tipos de voz + `voiceProfileId?` em `AppSettings`.
+- [x] T5.2: [LOW] `native.ts`: 7 wrappers IPC.
+- [x] T5.3: [MEDIUM] `components/InterpretationPanel.tsx`: consentimento, status/solicitação de permissão, medidor de nível (via `listen`), gravar/parar/re-gravar/enviar/excluir. Áudio nunca no React.
+- [x] T5.4: [LOW] `App.tsx`: aba "Interpretação" + `styles/panels.css`.
 
 ### Fase 6: Testes (test-engineer)
 - [ ] T6.1: Deno contract/provider/handler tests das duas functions (cap, auth, parse, sucesso, reconciliação de delete).
