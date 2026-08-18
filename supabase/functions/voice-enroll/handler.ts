@@ -65,7 +65,19 @@ export function createEnrollHandler(deps: EnrollHandlerDeps) {
       const enrollReq = parseEnrollRequest(parsed);
 
       const previous = await deps.serviceClient.getPreviousProfile(user.id);
-      if (previous && previous.requestId !== enrollReq.requestId) {
+      if (previous && previous.requestId === enrollReq.requestId) {
+        const view = await deps.serviceClient.getProfile(
+          user.id,
+          previous.voiceProfileId,
+        );
+        if (!view) return errorResponse("INTERNAL_ERROR", 500);
+        return new Response(JSON.stringify(view), {
+          status: 200,
+          headers: responseHeaders,
+        });
+      }
+
+      if (previous) {
         try {
           await deps.provider.deleteVoice(previous.providerVoiceId);
         } catch {
@@ -78,18 +90,6 @@ export function createEnrollHandler(deps: EnrollHandlerDeps) {
         enrollReq.requestId,
         enrollReq.displayName,
       );
-
-      if (upserted.alreadyDone) {
-        const view = await deps.serviceClient.getProfile(
-          user.id,
-          upserted.voiceProfileId,
-        );
-        if (!view) return errorResponse("INTERNAL_ERROR", 500);
-        return new Response(JSON.stringify(view), {
-          status: 200,
-          headers: responseHeaders,
-        });
-      }
 
       const { voiceProfileId } = upserted;
 

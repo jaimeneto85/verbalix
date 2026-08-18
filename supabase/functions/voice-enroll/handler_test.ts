@@ -70,7 +70,11 @@ Deno.test("handler rejects malformed json payload", async () => {
 
 Deno.test("handler is idempotent for a request_id already processed", async () => {
   const state = createState({
-    upsertResult: { voiceProfileId: "profile-1", alreadyDone: true },
+    previousProfile: {
+      voiceProfileId: "profile-1",
+      requestId: requestId,
+      providerVoiceId: "provider-voice-id",
+    },
   });
   const response = await createEnrollHandler(state.dependencies)(
     validRequest(),
