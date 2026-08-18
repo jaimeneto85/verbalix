@@ -254,9 +254,9 @@ pub trait VoiceEnrollmentPort: Send + Sync {
 - [x] T6.4: Playwright e2e: roteamento da aba + sequência de invoke (declara não-cobertura de mic/TCC/real).
 
 ### Fase 7: Gates + Entrega
-- [ ] T7.1: Rodar suíte completa: `npm test`, `npm run test:coverage`, `npm run test:e2e`, `npm run build`, `cargo test`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --check`, `deno test` das functions novas, `npm run tauri -- build --debug --bundles app`.
-- [ ] T7.2: Verificar `Info.plist` compilado tem `NSMicrophoneUsageDescription`.
-- [ ] T7.3: Doc de entrega `docs/NNN-*.md` (pt-BR) com gates manuais listados.
+- [x] T7.1: Rodar suíte completa: `npm test`, `npm run test:coverage`, `npm run test:e2e`, `npm run build`, `cargo test`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --check`, `deno test` das functions novas, `npm run tauri -- build --debug --bundles app`.
+- [x] T7.2: Verificar `Info.plist` compilado tem `NSMicrophoneUsageDescription`.
+- [x] T7.3: Doc de entrega `docs/012-verbalix-enrollment-de-voz.md` (pt-BR) com gates manuais listados.
 
 ## Correções QA — Iteração 1 (veredito REJECTED_CODE)
 Bloqueadores a corrigir (software-engineer):
