@@ -1,8 +1,9 @@
 use crate::{
     application::{
-        JsonSettingsRepository, KeychainSessionRepository, PreferencesSyncStore,
-        PublicBackendConfig, RemoteAuthRepository, RemoteHistoryRepository,
-        RemotePreferencesRepository, RuntimePause, SelectionCoordinator,
+        AudioCapturePort, EnrollmentSession, JsonSettingsRepository, KeychainSessionRepository,
+        PreferencesSyncStore, PublicBackendConfig, RemoteAuthRepository, RemoteHistoryRepository,
+        RemotePreferencesRepository, RemoteVoiceEnrollment, RuntimePause, SelectionCoordinator,
+        VoiceEnrollmentPort,
     },
     domain::{AppSettings, SelectionEvent, SettingsRepository, VerbalixError},
     platform::{MacAccessibility, SystemClipboard, TauriOverlay},
@@ -24,6 +25,30 @@ pub(crate) struct AppRuntime {
     pub backend_config: PublicBackendConfig,
     pub pause: RuntimePause,
     pub remote_preferences: Option<Arc<RemotePreferencesRepository>>,
+    pub voice_enrollment: Arc<dyn VoiceEnrollmentPort>,
+    pub audio_capture: Arc<dyn AudioCapturePort>,
+    pub enrollment_session: Arc<EnrollmentSession>,
+}
+
+pub(crate) fn build_voice_components(
+    base_url: &str,
+    anonymous_key: &str,
+) -> (
+    Arc<dyn VoiceEnrollmentPort>,
+    Arc<dyn AudioCapturePort>,
+    Arc<EnrollmentSession>,
+) {
+    let enrollment = Arc::new(RemoteVoiceEnrollment::new(base_url, anonymous_key));
+
+    #[cfg(target_os = "macos")]
+    let capture = Arc::new(crate::platform::MacAudioCapture::new()) as Arc<dyn AudioCapturePort>;
+
+    #[cfg(not(target_os = "macos"))]
+    let capture = Arc::new(crate::platform::StubAudioCapture) as Arc<dyn AudioCapturePort>;
+
+    let session = Arc::new(EnrollmentSession::new());
+
+    (enrollment, capture, session)
 }
 
 pub(crate) fn start_selection_observer(runtime: Arc<AppRuntime>) {

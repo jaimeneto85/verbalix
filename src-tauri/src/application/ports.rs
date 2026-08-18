@@ -1,6 +1,9 @@
 use crate::{
     application::{MutationProjection, MutationReceipt, PublicationGuard},
-    domain::{Rect, SelectionSnapshot, VerbalixError},
+    domain::{
+        EnrollmentSample, MicrophonePermission, Rect, SelectionSnapshot, VerbalixError,
+        VoiceProfileView,
+    },
 };
 
 pub trait SelectionPort: Send + Sync {
@@ -136,4 +139,42 @@ pub trait OverlayPort: Send + Sync {
 
 pub trait ClipboardPort: Send + Sync {
     fn read_text(&self) -> Result<Option<String>, VerbalixError>;
+}
+
+pub trait AudioCapturePort: Send + Sync {
+    fn start(&self) -> Result<(), VerbalixError>;
+    fn stop(&self) -> Result<EnrollmentSample, VerbalixError>;
+    fn cancel(&self);
+    fn level(&self) -> f32;
+    fn permission_status(&self) -> MicrophonePermission;
+}
+
+pub trait VoiceEnrollmentPort: Send + Sync {
+    fn enroll<'a>(
+        &'a self,
+        sample: &'a EnrollmentSample,
+        display_name: &'a str,
+        request_id: uuid::Uuid,
+        token: &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<VoiceProfileView, VerbalixError>> + Send + 'a>,
+    >;
+
+    fn delete<'a>(
+        &'a self,
+        id: uuid::Uuid,
+        token: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), VerbalixError>> + Send + 'a>>;
+
+    fn status<'a>(
+        &'a self,
+        id: uuid::Uuid,
+        token: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Option<VoiceProfileView>, VerbalixError>>
+                + Send
+                + 'a,
+        >,
+    >;
 }

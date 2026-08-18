@@ -213,6 +213,7 @@ fn apply_remote(remote: RemotePreferences, local: &AppSettings) -> AppSettings {
         confirm_before_replace: local.confirm_before_replace,
         automatic_toolbar: local.automatic_toolbar,
         shortcut: local.shortcut.clone(),
+        voice_profile_id: local.voice_profile_id,
     }
 }
 

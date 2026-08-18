@@ -2,6 +2,7 @@ mod application;
 mod commands;
 mod commands_settings;
 mod commands_transform;
+mod commands_voice;
 mod diagnostics;
 mod domain;
 mod lifecycle;
@@ -17,6 +18,7 @@ use application::{PreferencesSyncStore, RemotePreferencesRepository};
 use commands::*;
 use commands_settings::*;
 use commands_transform::*;
+use commands_voice::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use overlay_commands::*;
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
@@ -163,6 +165,8 @@ pub fn run() {
                     anonymous_key.clone(),
                 ))
             });
+            let (voice_enrollment, audio_capture, enrollment_session) =
+                runtime::build_voice_components(&supabase_url, &anonymous_key);
             let runtime = Arc::new(AppRuntime {
                 coordinator,
                 overlay,
@@ -186,6 +190,9 @@ pub fn run() {
                 remote_preferences,
                 backend_config,
                 pause: RuntimePause::default(),
+                voice_enrollment,
+                audio_capture,
+                enrollment_session,
             });
             app.manage(runtime.clone());
             let dismiss_runtime = runtime.clone();
@@ -262,7 +269,17 @@ pub fn run() {
             overlay_surface_ready,
             dismiss_overlays,
             list_history,
-            delete_history
+            delete_history,
+            microphone_permission_status,
+            request_microphone_permission,
+            begin_voice_enrollment,
+            cancel_voice_enrollment,
+            finish_voice_enrollment,
+            delete_voice_profile,
+            voice_profile_status,
+            enrollment_level,
+            microphone_permission_status,
+            request_microphone_permission
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Verbalix");
