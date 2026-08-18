@@ -3,10 +3,12 @@ import type {
   AppSettings,
   AiReadiness,
   HistoryItem,
+  MicrophonePermission,
   NoteResult,
   PublicBackendConfig,
   SelectionSnapshot,
-  TransformResult
+  TransformResult,
+  VoiceProfileView
 } from "./types";
 
 export const native = {
@@ -79,5 +81,26 @@ export const native = {
   },
   currentSyncedPreferences() {
     return invoke<AppSettings | null>("current_synced_preferences");
+  },
+  microphonePermissionStatus() {
+    return invoke<MicrophonePermission>("microphone_permission_status");
+  },
+  requestMicrophonePermission() {
+    return invoke<MicrophonePermission>("request_microphone_permission");
+  },
+  beginVoiceEnrollment() {
+    return invoke<void>("begin_voice_enrollment");
+  },
+  finishVoiceEnrollment(displayName: string) {
+    return invoke<VoiceProfileView>("finish_voice_enrollment", { displayName });
+  },
+  cancelVoiceEnrollment() {
+    return invoke<void>("cancel_voice_enrollment");
+  },
+  deleteVoiceProfile(voiceProfileId: string) {
+    return invoke<void>("delete_voice_profile", { voiceProfileId });
+  },
+  voiceProfileStatus(voiceProfileId: string) {
+    return invoke<VoiceProfileView | null>("voice_profile_status", { voiceProfileId });
   }
 };

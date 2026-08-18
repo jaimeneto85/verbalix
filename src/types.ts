@@ -1,6 +1,16 @@
 export type LengthPreference = "concise" | "balanced" | "detailed";
 export type TonePreference = "neutral" | "friendly" | "assertive" | "technical";
 
+export type VoiceProfileStatus = "enrolling" | "ready" | "failed" | "deleting";
+
+export type VoiceProfileView = {
+  voiceProfileId: string;
+  status: VoiceProfileStatus;
+  displayName: string;
+};
+
+export type MicrophonePermission = "authorized" | "denied" | "notDetermined" | "restricted";
+
 export type AppSettings = {
   formality: number;
   length: LengthPreference;
@@ -9,6 +19,7 @@ export type AppSettings = {
   historyEnabled: boolean;
   automaticToolbar: boolean;
   shortcut: string;
+  voiceProfileId?: string;
 };
 
 export type SelectionSnapshot = {

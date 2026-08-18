@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { AuthPanel } from "./components/AuthPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
+import { InterpretationPanel } from "./components/InterpretationPanel";
 import { PermissionCard } from "./components/PermissionCard";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { native } from "./native";
@@ -11,7 +12,7 @@ import type { AppSettings, HistoryItem } from "./types";
 import { defaultSettings } from "./types";
 import brandMark from "../branding/verbalix-mark.svg";
 
-type Tab = "settings" | "history";
+type Tab = "settings" | "history" | "interpretation";
 
 export function App() {
   const [settings, setSettings] = useState(defaultSettings);
@@ -132,6 +133,12 @@ export function App() {
           >
             <span>↺</span> Histórico
           </button>
+          <button
+            className={tab === "interpretation" ? "active" : ""}
+            onClick={() => setTab("interpretation")}
+          >
+            <span>♪</span> Interpretação
+          </button>
         </nav>
         <div className="shortcut-card">
           <span>Atalho rápido</span>
@@ -176,12 +183,22 @@ export function App() {
               </section>
             </div>
           </div>
-        ) : (
+        ) : tab === "history" ? (
           <HistoryPanel
             items={history}
             enabled={settings.historyEnabled}
             onDelete={deleteItem}
             onDeleteAll={deleteAll}
+          />
+        ) : (
+          <InterpretationPanel
+            authenticated={authenticated}
+            voiceProfileId={settings.voiceProfileId}
+            onVoiceProfileChange={(id) => {
+              const updated = { ...settings, voiceProfileId: id };
+              setSettings(updated);
+              native.saveSettings(updated).catch(() => {});
+            }}
           />
         )}
       </div>
