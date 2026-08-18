@@ -280,6 +280,7 @@ Pós-correção: re-rodar TODOS os gates (incl. `deno test` e `tauri build --deb
 - Enrollment real na ElevenLabs (chave setada via `supabase secrets set ELEVEN_LABS_KEY=...` + `SUPABASE_SERVICE_ROLE_KEY` disponível às functions; voz aparece/some no dashboard).
 - Deploy das Edge Functions `voice-enroll`/`voice-delete`.
 - Diagnostics sem amostras/tokens/voice_id (auditoria manual do output com `VERBALIX_DIAGNOSTICS=1`).
+- **C7 — `audio_capture.rs` start() sem device disponível**: `MacAudioCapture` usa `cpal::default_host()` e `cpal::traits::HostTrait::default_input_device()` diretamente sem injeção de dependência; não é possível injetar um host/device falso sem refatorar a estrutura para aceitar um `HostTrait` genérico (o que exigiria mudanças de assinatura em toda a cadeia). O caminho de erro (Err(VerbalixError::AudioCaptureFailed) enviado pelo canal de reply quando `default_input_device()` retorna None) foi verificado por inspeção de código. Teste automatizado requereria hardware sem microfone ou um mock de cpal — não disponível no CI atual. Validar manualmente executando em máquina sem dispositivo de áudio configurado.
 
 ## Análise Dual
 

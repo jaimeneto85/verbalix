@@ -163,11 +163,37 @@ Deno.test("handler persists the ready profile and returns the safe view only", a
   assertEquals(state.setReadyCalls, 1);
 });
 
+Deno.test("handler cleans up orphan voice and marks failed when setReady fails after provider success", async () => {
+  const state = createState({ setReadyError: new Error("db write failed") });
+  const response = await createEnrollHandler(state.dependencies)(
+    validRequest(),
+  );
+  await assertError(response, 500, "INTERNAL_ERROR");
+  assertEquals(state.enrollCalls, 1);
+  assertEquals(state.setReadyCalls, 1);
+  assertEquals(state.setFailedCalls, 1);
+  assertEquals(state.deletedProviderVoiceIds, ["provider-voice-id"]);
+});
+
+Deno.test("handler returns internal error when upsertEnrolling fails due to concurrent conflict", async () => {
+  const state = createState({
+    upsertEnrollingError: new Error("INTERNAL_ERROR"),
+  });
+  const response = await createEnrollHandler(state.dependencies)(
+    validRequest(),
+  );
+  await assertError(response, 500, "INTERNAL_ERROR");
+  assertEquals(state.enrollCalls, 0);
+  assertEquals(state.setReadyCalls, 0);
+});
+
 type StateOptions = {
   authenticated?: boolean;
   enroll?: VoiceProvider["enroll"];
   providerError?: Error;
   upsertResult?: UpsertResult;
+  upsertEnrollingError?: Error;
+  setReadyError?: Error;
   previousProfile?: {
     voiceProfileId: string;
     requestId: string;
@@ -219,10 +245,16 @@ function createState(options: StateOptions = {}) {
 
   const serviceClient: SupabaseServiceClient = {
     upsertEnrolling: (_userId, _requestId, _displayName) => {
+      if (options.upsertEnrollingError) {
+        return Promise.reject(options.upsertEnrollingError);
+      }
       return Promise.resolve(upsertResult);
     },
     setReady: (_voiceProfileId, _providerVoiceId) => {
       state.setReadyCalls += 1;
+      if (options.setReadyError) {
+        return Promise.reject(options.setReadyError);
+      }
       profileStatus = "ready";
       return Promise.resolve();
     },
