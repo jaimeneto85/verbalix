@@ -248,10 +248,10 @@ pub trait VoiceEnrollmentPort: Send + Sync {
 - [x] T5.4: [LOW] `App.tsx`: aba "Interpretação" + `styles/panels.css`.
 
 ### Fase 6: Testes (test-engineer)
-- [ ] T6.1: Deno contract/provider/handler tests das duas functions (cap, auth, parse, sucesso, reconciliação de delete).
-- [ ] T6.2: Rust: `enrollment_session`, stub não-macOS, `RemoteVoiceEnrollment` (fake HTTP), `apply_remote` preserva voice_profile_id, settings round-trip serde default.
-- [ ] T6.3: Vitest: `native.ts` (7 wrappers) + `InterpretationPanel` (consentimento/permissão/sem áudio).
-- [ ] T6.4: Playwright e2e: roteamento da aba + sequência de invoke (declara não-cobertura de mic/TCC/real).
+- [x] T6.1: Deno contract/provider/handler tests das duas functions (cap, auth, parse, sucesso, reconciliação de delete).
+- [x] T6.2: Rust: `enrollment_session`, stub não-macOS, `RemoteVoiceEnrollment` (fake HTTP), `apply_remote` preserva voice_profile_id, settings round-trip serde default.
+- [x] T6.3: Vitest: `native.ts` (7 wrappers) + `InterpretationPanel` (consentimento/permissão/sem áudio).
+- [x] T6.4: Playwright e2e: roteamento da aba + sequência de invoke (declara não-cobertura de mic/TCC/real).
 
 ### Fase 7: Gates + Entrega
 - [ ] T7.1: Rodar suíte completa: `npm test`, `npm run test:coverage`, `npm run test:e2e`, `npm run build`, `cargo test`, `cargo clippy --all-targets --all-features -- -D warnings`, `cargo fmt --check`, `deno test` das functions novas, `npm run tauri -- build --debug --bundles app`.
