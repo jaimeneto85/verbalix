@@ -2,3 +2,12 @@ project_id = "verbalix"
 
 [functions.transform]
 verify_jwt = true
+
+[functions.voice-enroll]
+verify_jwt = true
+
+[functions.voice-delete]
+verify_jwt = true
+
+[functions.voice-status]
+verify_jwt = true
