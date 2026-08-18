@@ -47,7 +47,7 @@ export function parseEnrollRequest(value: unknown): EnrollRequest {
   ) {
     throw new Error("INVALID_REQUEST");
   }
-  if (c.sampleBase64.length > MAX_SAMPLE_BYTES * 1.5) {
+  if (c.sampleBase64.length > Math.ceil(MAX_SAMPLE_BYTES * (4 / 3))) {
     throw new Error("SAMPLE_TOO_LARGE");
   }
   return {

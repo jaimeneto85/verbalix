@@ -1,5 +1,4 @@
 export type DeleteRequest = {
-  requestId: string;
   voiceProfileId: string;
 };
 
@@ -20,15 +19,12 @@ export function parseDeleteRequest(value: unknown): DeleteRequest {
   if (!value || typeof value !== "object") throw new Error("INVALID_REQUEST");
   const c = value as Record<string, unknown>;
   if (
-    typeof c.requestId !== "string" ||
-    !isUuid(c.requestId) ||
     typeof c.voiceProfileId !== "string" ||
     !isUuid(c.voiceProfileId)
   ) {
     throw new Error("INVALID_REQUEST");
   }
   return {
-    requestId: c.requestId as string,
     voiceProfileId: c.voiceProfileId as string,
   };
 }

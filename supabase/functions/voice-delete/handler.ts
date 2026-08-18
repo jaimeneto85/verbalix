@@ -157,9 +157,9 @@ export function createDeleteServiceClient(
   };
 
   return {
-    async markDeleting(voiceProfileId: string, _userId: string): Promise<void> {
+    async markDeleting(voiceProfileId: string, userId: string): Promise<void> {
       const response = await fetcher(
-        `${baseUrl}/voice_profiles?id=eq.${voiceProfileId}`,
+        `${baseUrl}/voice_profiles?id=eq.${voiceProfileId}&user_id=eq.${userId}`,
         {
           method: "PATCH",
           headers: { ...authHeaders, Prefer: "return=minimal" },
@@ -171,10 +171,10 @@ export function createDeleteServiceClient(
 
     async resolveProviderVoiceId(
       voiceProfileId: string,
-      _userId: string,
+      userId: string,
     ): Promise<string | null> {
       const response = await fetcher(
-        `${baseUrl}/voice_profiles?id=eq.${voiceProfileId}&select=provider_voice_id`,
+        `${baseUrl}/voice_profiles?id=eq.${voiceProfileId}&user_id=eq.${userId}&select=provider_voice_id`,
         { headers: authHeaders },
       );
       if (!response.ok) throw new Error("INTERNAL_ERROR");

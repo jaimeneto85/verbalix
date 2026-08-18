@@ -1,41 +1,28 @@
 import type { UserAuthenticator } from "../transform/auth.ts";
 import {
   type ErrorCode,
+  MAX_SAMPLE_BYTES,
   parseEnrollRequest,
   type VoiceProfileView,
 } from "./contract.ts";
-import type { Fetcher, VoiceProvider } from "./provider.ts";
+import type { VoiceProvider } from "./provider.ts";
+import {
+  createSupabaseServiceClient,
+  type SupabaseServiceClient,
+  type UpsertResult,
+} from "./service_client.ts";
 
-export const MAX_ENROLL_BODY_BYTES = 14 * 1024 * 1024;
+export { createSupabaseServiceClient };
+export type { SupabaseServiceClient, UpsertResult };
+
+export const MAX_ENROLL_BODY_BYTES = Math.ceil(MAX_SAMPLE_BYTES * (4 / 3)) +
+  8 * 1024;
 export const ENROLL_TIMEOUT_MS = 60_000;
 
 export type TimeoutScheduler = {
   schedule(callback: () => void, delay: number): unknown;
   cancel(handle: unknown): void;
 };
-
-export type UpsertResult = {
-  voiceProfileId: string;
-  alreadyDone: boolean;
-};
-
-export interface SupabaseServiceClient {
-  upsertEnrolling(
-    userId: string,
-    requestId: string,
-    displayName: string,
-  ): Promise<UpsertResult>;
-  setReady(voiceProfileId: string, providerVoiceId: string): Promise<void>;
-  setFailed(voiceProfileId: string): Promise<void>;
-  getProfile(
-    userId: string,
-    voiceProfileId: string,
-  ): Promise<VoiceProfileView | null>;
-  getPreviousProfile(
-    userId: string,
-  ): Promise<{ voiceProfileId: string; providerVoiceId: string } | null>;
-  deleteProfile(voiceProfileId: string): Promise<void>;
-}
 
 export type EnrollHandlerDeps = {
   authenticator: UserAuthenticator;
@@ -78,7 +65,7 @@ export function createEnrollHandler(deps: EnrollHandlerDeps) {
       const enrollReq = parseEnrollRequest(parsed);
 
       const previous = await deps.serviceClient.getPreviousProfile(user.id);
-      if (previous && previous.voiceProfileId !== enrollReq.requestId) {
+      if (previous && previous.requestId !== enrollReq.requestId) {
         try {
           await deps.provider.deleteVoice(previous.providerVoiceId);
         } catch {
@@ -139,15 +126,22 @@ export function createEnrollHandler(deps: EnrollHandlerDeps) {
         return errorResponse(code, statusFor(code));
       }
 
-      await deps.serviceClient.setReady(voiceProfileId, providerVoiceId);
-
-      const view = await deps.serviceClient.getProfile(user.id, voiceProfileId);
-      if (!view) return errorResponse("INTERNAL_ERROR", 500);
-
-      return new Response(JSON.stringify(view), {
-        status: 200,
-        headers: responseHeaders,
-      });
+      try {
+        await deps.serviceClient.setReady(voiceProfileId, providerVoiceId);
+        const view = await deps.serviceClient.getProfile(
+          user.id,
+          voiceProfileId,
+        );
+        if (!view) return errorResponse("INTERNAL_ERROR", 500);
+        return new Response(JSON.stringify(view), {
+          status: 200,
+          headers: responseHeaders,
+        });
+      } catch {
+        await deps.provider.deleteVoice(providerVoiceId).catch(() => {});
+        await deps.serviceClient.setFailed(voiceProfileId).catch(() => {});
+        return errorResponse("INTERNAL_ERROR", 500);
+      }
     } catch (reason) {
       const code = normalizeError(reason);
       return errorResponse(code, statusFor(code));
@@ -247,134 +241,4 @@ function errorResponse(code: ErrorCode, status: number): Response {
     status,
     headers: responseHeaders,
   });
-}
-
-export function createSupabaseServiceClient(
-  supabaseUrl: string,
-  serviceKey: string,
-  fetcher: Fetcher = fetch,
-): SupabaseServiceClient {
-  const baseUrl = `${supabaseUrl}/rest/v1`;
-  const authHeaders = {
-    Authorization: `Bearer ${serviceKey}`,
-    apikey: serviceKey,
-    "Content-Type": "application/json",
-  };
-
-  return {
-    async upsertEnrolling(
-      userId: string,
-      requestId: string,
-      displayName: string,
-    ): Promise<UpsertResult> {
-      const response = await fetcher(
-        `${baseUrl}/voice_profiles?on_conflict=user_id,request_id&select=id,status`,
-        {
-          method: "POST",
-          headers: {
-            ...authHeaders,
-            Prefer: "resolution=merge-duplicates,return=representation",
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            request_id: requestId,
-            display_name: displayName,
-            status: "enrolling",
-          }),
-        },
-      );
-
-      if (!response.ok) throw new Error("INTERNAL_ERROR");
-
-      const rows = (await response.json()) as Array<Record<string, unknown>>;
-      if (!rows || rows.length === 0) throw new Error("INTERNAL_ERROR");
-
-      const row = rows[0];
-      const voiceProfileId = typeof row.id === "string" ? row.id : "";
-      if (!voiceProfileId) throw new Error("INTERNAL_ERROR");
-
-      return {
-        voiceProfileId,
-        alreadyDone: row.status !== "enrolling",
-      };
-    },
-
-    async setReady(
-      voiceProfileId: string,
-      providerVoiceId: string,
-    ): Promise<void> {
-      const response = await fetcher(
-        `${baseUrl}/voice_profiles?id=eq.${voiceProfileId}`,
-        {
-          method: "PATCH",
-          headers: { ...authHeaders, Prefer: "return=minimal" },
-          body: JSON.stringify({
-            status: "ready",
-            provider_voice_id: providerVoiceId,
-          }),
-        },
-      );
-      if (!response.ok) throw new Error("INTERNAL_ERROR");
-    },
-
-    async setFailed(voiceProfileId: string): Promise<void> {
-      const response = await fetcher(
-        `${baseUrl}/voice_profiles?id=eq.${voiceProfileId}`,
-        {
-          method: "PATCH",
-          headers: { ...authHeaders, Prefer: "return=minimal" },
-          body: JSON.stringify({ status: "failed" }),
-        },
-      );
-      if (!response.ok) throw new Error("INTERNAL_ERROR");
-    },
-
-    async getProfile(
-      userId: string,
-      voiceProfileId: string,
-    ): Promise<VoiceProfileView | null> {
-      const response = await fetcher(
-        `${baseUrl}/voice_profiles?id=eq.${voiceProfileId}&user_id=eq.${userId}&select=id,status,display_name`,
-        { headers: authHeaders },
-      );
-      if (!response.ok) throw new Error("INTERNAL_ERROR");
-      const rows = (await response.json()) as Array<Record<string, unknown>>;
-      if (!rows || rows.length === 0) return null;
-      const row = rows[0];
-      return {
-        voiceProfileId: row.id as string,
-        status: row.status as VoiceProfileView["status"],
-        displayName: row.display_name as string,
-      };
-    },
-
-    async getPreviousProfile(
-      userId: string,
-    ): Promise<{ voiceProfileId: string; providerVoiceId: string } | null> {
-      const response = await fetcher(
-        `${baseUrl}/voice_profiles?user_id=eq.${userId}&status=in.(ready,failed,enrolling,deleting)&select=id,provider_voice_id&order=created_at.desc&limit=1`,
-        { headers: authHeaders },
-      );
-      if (!response.ok) throw new Error("INTERNAL_ERROR");
-      const rows = (await response.json()) as Array<Record<string, unknown>>;
-      if (!rows || rows.length === 0) return null;
-      const row = rows[0];
-      if (typeof row.provider_voice_id !== "string") return null;
-      return {
-        voiceProfileId: row.id as string,
-        providerVoiceId: row.provider_voice_id,
-      };
-    },
-
-    async deleteProfile(voiceProfileId: string): Promise<void> {
-      const response = await fetcher(
-        `${baseUrl}/voice_profiles?id=eq.${voiceProfileId}`,
-        {
-          method: "DELETE",
-          headers: { ...authHeaders, Prefer: "return=minimal" },
-        },
-      );
-      if (!response.ok) throw new Error("INTERNAL_ERROR");
-    },
-  };
 }

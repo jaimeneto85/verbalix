@@ -11,24 +11,9 @@ import type { VoiceProfileView } from "../voice-enroll/contract.ts";
 const VALID_UUID = "b65c8888-fb0e-4a8f-9fee-95268995bf68";
 const ANOTHER_UUID = "ae63a86a-b5a2-4893-aea3-d78653385ed9";
 
-Deno.test("parseDeleteRequest rejects invalid UUID for requestId", () => {
-  assertThrows(
-    () =>
-      parseDeleteRequest({
-        requestId: "not-a-uuid",
-        voiceProfileId: VALID_UUID,
-      }),
-    "INVALID_REQUEST",
-  );
-});
-
 Deno.test("parseDeleteRequest rejects invalid UUID for voiceProfileId", () => {
   assertThrows(
-    () =>
-      parseDeleteRequest({
-        requestId: VALID_UUID,
-        voiceProfileId: "not-a-uuid",
-      }),
+    () => parseDeleteRequest({ voiceProfileId: "not-a-uuid" }),
     "INVALID_REQUEST",
   );
 });
@@ -38,12 +23,10 @@ Deno.test("parseDeleteRequest rejects missing fields", () => {
 });
 
 Deno.test("parseDeleteRequest accepts valid input", () => {
-  const result = parseDeleteRequest({
-    requestId: VALID_UUID,
-    voiceProfileId: ANOTHER_UUID,
-  });
-  if (result.requestId !== VALID_UUID) throw new Error("requestId mismatch");
-  if (result.voiceProfileId !== ANOTHER_UUID) throw new Error("voiceProfileId mismatch");
+  const result = parseDeleteRequest({ voiceProfileId: VALID_UUID });
+  if (result.voiceProfileId !== VALID_UUID) {
+    throw new Error("voiceProfileId mismatch");
+  }
 });
 
 Deno.test("handler returns 401 for missing Authorization", async () => {
@@ -77,10 +60,7 @@ Deno.test("handler returns 404 for missing profile", async () => {
       serviceClient: makeServiceClient(null, null),
     }),
   );
-  const body = JSON.stringify({
-    requestId: VALID_UUID,
-    voiceProfileId: ANOTHER_UUID,
-  });
+  const body = JSON.stringify({ voiceProfileId: ANOTHER_UUID });
   const response = await handler(
     makeRequest({ Authorization: "Bearer user-token" }, body),
   );
@@ -104,10 +84,7 @@ Deno.test("handler returns 200 on successful delete", async () => {
       },
     }),
   );
-  const body = JSON.stringify({
-    requestId: VALID_UUID,
-    voiceProfileId: ANOTHER_UUID,
-  });
+  const body = JSON.stringify({ voiceProfileId: ANOTHER_UUID });
   const response = await handler(
     makeRequest({ Authorization: "Bearer user-token" }, body),
   );

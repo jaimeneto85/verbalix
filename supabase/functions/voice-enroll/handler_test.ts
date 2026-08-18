@@ -86,6 +86,7 @@ Deno.test("handler replaces an existing profile before finishing a new enroll", 
   const state = createState({
     previousProfile: {
       voiceProfileId: "previous-profile",
+      requestId: "00000000-0000-4000-8000-000000000001",
       providerVoiceId: "previous-provider-voice",
     },
   });
@@ -101,7 +102,8 @@ Deno.test("handler replaces an existing profile before finishing a new enroll", 
 Deno.test("handler keeps the current request id and skips replace when previous is the same row", async () => {
   const state = createState({
     previousProfile: {
-      voiceProfileId: requestId,
+      voiceProfileId: "00000000-0000-4000-8000-000000000002",
+      requestId: requestId,
       providerVoiceId: "same-provider-voice",
     },
   });
@@ -166,7 +168,11 @@ type StateOptions = {
   enroll?: VoiceProvider["enroll"];
   providerError?: Error;
   upsertResult?: UpsertResult;
-  previousProfile?: { voiceProfileId: string; providerVoiceId: string };
+  previousProfile?: {
+    voiceProfileId: string;
+    requestId: string;
+    providerVoiceId: string;
+  };
   timeout?: EnrollHandlerDeps["timeout"];
 };
 

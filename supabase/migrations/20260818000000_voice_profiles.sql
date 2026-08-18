@@ -14,16 +14,15 @@ create unique index voice_profiles_user_request_idx
   on public.voice_profiles (user_id, request_id)
   where request_id is not null;
 
+create unique index voice_profiles_active_user_idx
+  on public.voice_profiles (user_id)
+  where status not in ('deleting', 'failed');
+
 create trigger voice_profiles_set_updated_at
   before insert or update on public.voice_profiles
   for each row execute function public.set_updated_at();
 
 alter table public.voice_profiles enable row level security;
-
-create policy "owners can read voice profiles"
-  on public.voice_profiles for select
-  to authenticated
-  using ((select auth.uid()) = user_id);
 
 create policy "owners can create voice profiles"
   on public.voice_profiles for insert

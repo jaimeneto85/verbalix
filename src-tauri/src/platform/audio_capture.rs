@@ -9,10 +9,11 @@ use std::sync::{
 };
 
 const MAX_DURATION_SECS: f32 = 120.0;
+const MIN_DURATION_SECS: f32 = 5.0;
 const TARGET_SAMPLE_RATE: u32 = 16_000;
 
 enum CaptureCommand {
-    Start,
+    Start(mpsc::SyncSender<Result<(), VerbalixError>>),
     Stop(mpsc::SyncSender<Result<EnrollmentSample, VerbalixError>>),
     Cancel,
 }
@@ -40,14 +41,18 @@ impl MacAudioCapture {
 
             while let Ok(cmd) = cmd_rx.recv() {
                 match cmd {
-                    CaptureCommand::Start => {
+                    CaptureCommand::Start(reply) => {
                         let host = cpal::default_host();
                         let Some(device) = host.default_input_device() else {
+                            let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
                             continue;
                         };
                         let config = match device.default_input_config() {
                             Ok(c) => c,
-                            Err(_) => continue,
+                            Err(_) => {
+                                let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                                continue;
+                            }
                         };
                         let sample_rate = config.sample_rate().0;
                         let channels = config.channels();
@@ -102,17 +107,30 @@ impl MacAudioCapture {
                                 |_| {},
                                 None,
                             ),
-                            _ => continue,
+                            _ => {
+                                let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                                continue;
+                            }
                         };
 
-                        if let Ok(stream) = stream_result {
-                            let _ = stream.play();
-                            active = Some(ActiveCapture {
-                                _stream: stream,
-                                buffer,
-                                channels,
-                                sample_rate,
-                            });
+                        match stream_result {
+                            Ok(stream) => match stream.play() {
+                                Ok(()) => {
+                                    active = Some(ActiveCapture {
+                                        _stream: stream,
+                                        buffer,
+                                        channels,
+                                        sample_rate,
+                                    });
+                                    let _ = reply.send(Ok(()));
+                                }
+                                Err(_) => {
+                                    let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                                }
+                            },
+                            Err(_) => {
+                                let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                            }
                         }
                     }
 
@@ -142,9 +160,12 @@ impl MacAudioCapture {
 
 impl AudioCapturePort for MacAudioCapture {
     fn start(&self) -> Result<(), VerbalixError> {
+        let (tx, rx) = mpsc::sync_channel(1);
         self.cmd_tx
-            .send(CaptureCommand::Start)
-            .map_err(|_| VerbalixError::AudioCaptureFailed)
+            .send(CaptureCommand::Start(tx))
+            .map_err(|_| VerbalixError::AudioCaptureFailed)?;
+        rx.recv_timeout(std::time::Duration::from_secs(5))
+            .map_err(|_| VerbalixError::AudioCaptureFailed)?
     }
 
     fn stop(&self) -> Result<EnrollmentSample, VerbalixError> {
@@ -181,13 +202,14 @@ fn process_audio(
     let total_frames = raw.len() / channels.max(1) as usize;
     let duration_secs = total_frames as f32 / native_rate.max(1) as f32;
 
+    if duration_secs < MIN_DURATION_SECS {
+        return Err(VerbalixError::AudioCaptureFailed);
+    }
+
     let samples_i16 = resample_to_16k(&raw, native_rate, channels);
     let wav_bytes = encode_wav(&samples_i16, TARGET_SAMPLE_RATE);
 
-    Ok(EnrollmentSample {
-        wav_bytes,
-        duration_secs,
-    })
+    Ok(EnrollmentSample { wav_bytes })
 }
 
 fn resample_to_16k(samples: &[f32], src_rate: u32, channels: u16) -> Vec<i16> {

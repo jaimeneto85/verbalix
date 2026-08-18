@@ -20,8 +20,6 @@ pub struct VoiceProfileView {
 
 pub struct EnrollmentSample {
     pub wav_bytes: Vec<u8>,
-    #[allow(dead_code)]
-    pub duration_secs: f32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]

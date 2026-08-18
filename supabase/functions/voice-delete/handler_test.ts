@@ -8,7 +8,6 @@ import {
 } from "./handler.ts";
 import type { VoiceDeleter } from "./provider.ts";
 
-const requestId = "b65c8888-fb0e-4a8f-9fee-95268995bf68";
 const voiceProfileId = "0d3f2c40-0e2a-4d3a-9c9a-2a4a6e9b0f11";
 
 Deno.test("handler rejects unsupported methods before dependencies", async () => {
@@ -216,7 +215,7 @@ function validRequest(body = validBody()) {
 }
 
 function validBody() {
-  return JSON.stringify({ requestId, voiceProfileId });
+  return JSON.stringify({ voiceProfileId });
 }
 
 async function assertError(response: Response, status: number, code: string) {
