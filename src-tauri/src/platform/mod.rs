@@ -1,3 +1,7 @@
+#[cfg(target_os = "macos")]
+mod audio_capture;
+#[cfg(target_os = "macos")]
+pub mod audio_permission;
 mod causal_epoch;
 #[cfg(target_os = "macos")]
 mod causal_registry;
@@ -76,6 +80,10 @@ pub(crate) use overlay_readiness::OverlaySurface;
 pub(crate) use overlay_window::is_current_caller;
 
 #[cfg(target_os = "macos")]
+pub use audio_capture::MacAudioCapture;
+#[cfg(target_os = "macos")]
+pub use audio_permission::{microphone_permission_status, request_microphone_permission};
+#[cfg(target_os = "macos")]
 pub use macos_accessibility::MacAccessibility;
 
 #[cfg(not(target_os = "macos"))]
@@ -117,4 +125,41 @@ mod unsupported {
             Err(VerbalixError::UnsupportedPlatform)
         }
     }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub struct StubAudioCapture;
+
+#[cfg(not(target_os = "macos"))]
+impl crate::application::AudioCapturePort for StubAudioCapture {
+    fn start(&self) -> Result<(), crate::domain::VerbalixError> {
+        Err(crate::domain::VerbalixError::UnsupportedPlatform)
+    }
+
+    fn stop(&self) -> Result<crate::domain::EnrollmentSample, crate::domain::VerbalixError> {
+        Err(crate::domain::VerbalixError::UnsupportedPlatform)
+    }
+
+    fn cancel(&self) {}
+
+    fn level(&self) -> f32 {
+        0.0
+    }
+
+    fn permission_status(&self) -> crate::domain::MicrophonePermission {
+        crate::domain::MicrophonePermission::Denied
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn microphone_permission_status() -> crate::domain::MicrophonePermission {
+    crate::domain::MicrophonePermission::Denied
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn request_microphone_permission<
+    F: FnOnce(crate::domain::MicrophonePermission) + Send + 'static,
+>(
+    _callback: F,
+) {
 }

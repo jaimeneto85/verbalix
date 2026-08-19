@@ -32,6 +32,9 @@ pub(crate) fn show_transform_failure(
         | VerbalixError::InvalidResponse => {
             "O serviço de IA está indisponível. Tente novamente ou abra o Verbalix."
         }
+        VerbalixError::MicrophonePermissionDenied
+        | VerbalixError::AudioCaptureFailed
+        | VerbalixError::EnrollmentFailed => "Erro no enrollment de voz.",
         #[cfg(not(target_os = "macos"))]
         VerbalixError::UnsupportedPlatform => "Esta operação não está disponível nesta plataforma.",
         VerbalixError::LocalFailure => "Não foi possível aplicar o resultado. Tente novamente.",

@@ -137,3 +137,159 @@
   font-size: 12px;
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
+
+.interpretation-panel .consent-card {
+  background: #f8f9fb;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.interpretation-panel .consent-card p {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.interpretation-panel .permission-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.interpretation-panel .hint {
+  font-size: 11px;
+  color: #888;
+}
+
+.interpretation-panel .enrollment-workspace {
+  display: grid;
+  gap: 12px;
+}
+
+.voice-name-input {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #dce0e7;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.level-meter {
+  height: 8px;
+  background: #e8eaed;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.level-bar {
+  height: 100%;
+  background: #4CAF50;
+  border-radius: 4px;
+  transition: width 0.05s linear;
+  min-width: 2px;
+}
+
+.recording-hint {
+  font-size: 12px;
+  color: #666;
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-primary {
+  padding: 9px 18px;
+  background: #111;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: #333;
+}
+
+.btn-secondary {
+  padding: 9px 18px;
+  background: transparent;
+  color: #333;
+  border: 1px solid #dce0e7;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #f5f6f8;
+}
+
+.btn-danger {
+  padding: 9px 18px;
+  background: transparent;
+  color: #c0392b;
+  border: 1px solid #e74c3c;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  background: #fdf2f2;
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.profile-card {
+  background: #f8f9fb;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.profile-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.status-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #e8eaed;
+}
+
+.status-badge.status-ready { background: #d4edda; color: #155724; }
+.status-badge.status-enrolling { background: #fff3cd; color: #856404; }
+.status-badge.status-failed { background: #f8d7da; color: #721c24; }
+.status-badge.status-deleting { background: #d1ecf1; color: #0c5460; }
+
+.status-hint {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+.error-hint {
+  font-size: 12px;
+  color: #c0392b;
+  margin-top: 4px;
+}
+
+.panel-notice {
+  font-size: 13px;
+  color: #666;
+}

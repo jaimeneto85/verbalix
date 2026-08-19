@@ -5,6 +5,7 @@ mod coordinator_commit;
 mod coordinator_mutation;
 mod coordinator_presentation;
 mod coordinator_transform;
+mod enrollment_session;
 mod mutation;
 mod mutation_journal;
 mod ports;
@@ -14,6 +15,7 @@ mod runtime_pause;
 mod settings_file;
 mod supabase;
 mod transform_lease;
+mod voice_enrollment;
 
 pub use ai_readiness::{
     classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,
@@ -21,8 +23,9 @@ pub use ai_readiness::{
 };
 pub use auth_refresh::RemoteAuthRepository;
 pub use coordinator::SelectionCoordinator;
+pub use enrollment_session::EnrollmentSession;
 pub use mutation::{MutationProjection, MutationReceipt, MutationStatus};
-pub use ports::{ClipboardPort, OverlayPort, SelectionPort};
+pub use ports::{AudioCapturePort, ClipboardPort, OverlayPort, SelectionPort, VoiceEnrollmentPort};
 pub use preferences_sync_store::{epoch_secs_now, PreferencesSyncStore};
 pub use remote_preferences::{merge_preferences, RemotePreferencesRepository};
 pub use runtime_pause::RuntimePause;
@@ -34,3 +37,4 @@ pub use supabase::{
     SessionRepository, StoredSession,
 };
 pub(crate) use transform_lease::{PublicationGuard, PublicationPermit, TransformLease};
+pub use voice_enrollment::RemoteVoiceEnrollment;

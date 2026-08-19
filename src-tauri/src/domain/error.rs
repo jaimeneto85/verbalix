@@ -28,6 +28,13 @@ pub enum VerbalixError {
     #[cfg(not(target_os = "macos"))]
     #[error("The requested operation is not supported on this platform")]
     UnsupportedPlatform,
+    #[allow(dead_code)]
+    #[error("Permissão de microfone negada")]
+    MicrophonePermissionDenied,
+    #[error("Falha na captura de áudio")]
+    AudioCaptureFailed,
+    #[error("Falha no enrollment de voz")]
+    EnrollmentFailed,
     #[error("A local operation failed")]
     LocalFailure,
 }

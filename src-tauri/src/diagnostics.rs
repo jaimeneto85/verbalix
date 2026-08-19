@@ -146,6 +146,9 @@ pub(super) fn error_code(error: &VerbalixError) -> &'static str {
         VerbalixError::ProviderTimeout => "provider_timeout",
         VerbalixError::ProviderRejected => "provider_rejected",
         VerbalixError::InvalidResponse => "invalid_response",
+        VerbalixError::MicrophonePermissionDenied => "microphone_permission_denied",
+        VerbalixError::AudioCaptureFailed => "audio_capture_failed",
+        VerbalixError::EnrollmentFailed => "enrollment_failed",
         #[cfg(not(target_os = "macos"))]
         VerbalixError::UnsupportedPlatform => "unsupported_platform",
         VerbalixError::LocalFailure => "local_failure",

@@ -28,6 +28,8 @@ pub struct AppSettings {
     pub history_enabled: bool,
     pub automatic_toolbar: bool,
     pub shortcut: String,
+    #[serde(default)]
+    pub voice_profile_id: Option<uuid::Uuid>,
 }
 
 impl Default for AppSettings {
@@ -40,6 +42,7 @@ impl Default for AppSettings {
             history_enabled: false,
             automatic_toolbar: true,
             shortcut: "Option+Shift+Space".to_owned(),
+            voice_profile_id: None,
         }
     }
 }
