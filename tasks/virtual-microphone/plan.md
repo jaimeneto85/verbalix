@@ -266,10 +266,10 @@ Seção "Microfone virtual" no painel Interpretação:
 ## 📝 TASKS
 
 ### Fase 1 — Driver vendorizado + scripts (independente do Rust)
-- [ ] T1.1: [MEDIUM] Vendorizar fork do BlackHole em `virtual-mic-driver/` com LICENSE + README; rebrand (device
+- [x] T1.1: [MEDIUM] Vendorizar fork do BlackHole em `virtual-mic-driver/` com LICENSE + README; rebrand (device
   name, bundle id `com.verbalix.virtualmic`, UID estável, 48 kHz 2ch).
-- [ ] T1.2: [LOW] `scripts/build-virtual-mic.sh` (xcodebuild → `.driver` em `build/`), idempotente, falha loud.
-- [ ] T1.3: [LOW] `scripts/install-virtual-mic.sh` e `uninstall-virtual-mic.sh` — pedem sudo, copiam/removem em
+- [x] T1.2: [LOW] `scripts/build-virtual-mic.sh` (xcodebuild → `.driver` em `build/`), idempotente, falha loud.
+- [x] T1.3: [LOW] `scripts/install-virtual-mic.sh` e `uninstall-virtual-mic.sh` — pedem sudo, copiam/removem em
   `/Library/Audio/Plug-Ins/HAL`, `sudo killall coreaudiod`; nunca embutem senha.
 
 ### Fase 2 — Ports + domain + settings + erros
