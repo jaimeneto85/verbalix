@@ -2,6 +2,8 @@ pub struct EndpointerConfig {
     pub voice_threshold: f32,
     pub min_voiced_frames: u32,
     pub silence_close_frames: u32,
+    pub silence_close_frames_early: u32,
+    pub min_voiced_for_early_close: u32,
     pub max_frames: u32,
 }
 
@@ -11,6 +13,8 @@ impl Default for EndpointerConfig {
             voice_threshold: 0.02,
             min_voiced_frames: 20,
             silence_close_frames: 35,
+            silence_close_frames_early: 22,
+            min_voiced_for_early_close: 60,
             max_frames: 750,
         }
     }
@@ -75,10 +79,17 @@ impl Endpointer {
                 }
 
                 if rms > self.config.voice_threshold {
+                    self.voiced_frames += 1;
                     self.silent_frames = 0;
                 } else {
                     self.silent_frames += 1;
-                    if self.silent_frames > self.config.silence_close_frames {
+                    let close_threshold =
+                        if self.voiced_frames >= self.config.min_voiced_for_early_close {
+                            self.config.silence_close_frames_early
+                        } else {
+                            self.config.silence_close_frames
+                        };
+                    if self.silent_frames > close_threshold {
                         self.reset();
                         return Some(EndpointEvent::Closed);
                     }
