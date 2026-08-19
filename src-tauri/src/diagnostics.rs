@@ -152,6 +152,14 @@ pub(super) fn error_code(error: &VerbalixError) -> &'static str {
         #[cfg(not(target_os = "macos"))]
         VerbalixError::UnsupportedPlatform => "unsupported_platform",
         VerbalixError::LocalFailure => "local_failure",
+        VerbalixError::LiveSessionInactive => "live_session_inactive",
+        VerbalixError::TargetLanguageUnsupported => "target_language_unsupported",
+        VerbalixError::VoiceProfileMissing => "voice_profile_missing",
+        VerbalixError::AudioPlaybackFailed => "audio_playback_failed",
+        VerbalixError::InterpretationFailed => "interpretation_failed",
+        VerbalixError::SttFailed => "stt_failed",
+        VerbalixError::TranslationFailed => "translation_failed",
+        VerbalixError::TtsFailed => "tts_failed",
     }
 }
 
