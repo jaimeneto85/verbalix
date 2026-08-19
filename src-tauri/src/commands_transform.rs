@@ -46,6 +46,10 @@ pub(crate) fn show_transform_failure(
         #[cfg(not(target_os = "macos"))]
         VerbalixError::UnsupportedPlatform => "Esta operação não está disponível nesta plataforma.",
         VerbalixError::LocalFailure => "Não foi possível aplicar o resultado. Tente novamente.",
+        VerbalixError::VirtualMicUnavailable => "Microfone virtual indisponível.",
+        VerbalixError::VirtualMicSelectedAsInput => {
+            "Selecione um microfone físico nas configurações de áudio."
+        }
     };
     let _ = runtime.overlay.show_error_guarded(bounds, message, guard);
 }

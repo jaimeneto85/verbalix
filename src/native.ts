@@ -11,6 +11,8 @@ import type {
   PublicBackendConfig,
   SelectionSnapshot,
   TransformResult,
+  VirtualMicStatus,
+  VirtualMicStatusEvent,
   VoiceProfileView
 } from "./types";
 
@@ -118,6 +120,20 @@ export const native = {
   onLiveStateChange(callback: (event: LiveStateEvent) => void): () => void {
     let unlisten: (() => void) | undefined;
     listen<LiveStateEvent>("live-state-changed", (event) => {
+      callback(event.payload);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => {
+      unlisten?.();
+    };
+  },
+  virtualMicStatus() {
+    return invoke<{ status: VirtualMicStatus }>("virtual_mic_status");
+  },
+  onVirtualMicStatusChange(callback: (event: VirtualMicStatusEvent) => void): () => void {
+    let unlisten: (() => void) | undefined;
+    listen<VirtualMicStatusEvent>("virtual-mic-status", (event) => {
       callback(event.payload);
     }).then((dispose) => {
       unlisten = dispose;

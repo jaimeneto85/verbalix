@@ -20,6 +20,7 @@ export type AppSettings = {
   automaticToolbar: boolean;
   shortcut: string;
   voiceProfileId?: string;
+  outputToVirtualMic?: boolean;
 };
 
 export type SelectionSnapshot = {
@@ -90,6 +91,12 @@ export interface EnterLivePayload {
 
 export interface LiveSettings {
   targetLanguage: string;
+}
+
+export type VirtualMicStatus = "notInstalled" | "installed" | "incompatibleVersion";
+
+export interface VirtualMicStatusEvent {
+  status: VirtualMicStatus;
 }
 
 export const defaultSettings: AppSettings = {

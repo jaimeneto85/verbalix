@@ -13,6 +13,9 @@ supabase/.temp/
 
 .worktrees/
 
+# Driver build artifacts
+virtual-mic-driver/build/
+
 # iOS build artifacts
 ios/Verbalix.xcodeproj/
 ios/Local.xcconfig

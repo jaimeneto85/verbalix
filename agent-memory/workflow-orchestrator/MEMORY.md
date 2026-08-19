@@ -6,6 +6,36 @@
 - Toda tarefa é executada em worktree dedicado e só é integrada à branch de origem após aprovação explícita.
 
 ## Decisões Arquiteturais
+- Microfone virtual (M3, `docs/014`, branch `virtual-microphone`): device de ENTRADA virtual p/ Zoom/Meet
+  ouvirem a tradução. DECISÃO DE LICENÇA: fork rebrandeado do BlackHole (GPL-3) — GPL só obriga na
+  DISTRIBUIÇÃO; build/uso LOCAL não dispara nada; push do fonte com LICENSE preservada SATISFAZ a GPL (não
+  viola). Fork vive em `virtual-mic-driver/` FORA do crate Tauri, processo à parte carregado pelo coreaudiod,
+  NUNCA linkado no binário → sem contaminação de copyleft do app (LICENSE do subtree governa só o subtree).
+  Rebrand: device "Verbalix Microphone", bundle `com.verbalix.virtualmic`, UID `com.verbalix.virtualmic:0`,
+  48 kHz 2ch, CFBundleVersion "1.0". BlackHole tem `kHas_Driver_Name_Format=false` → branch com nome hardcoded
+  (sem sufixo "%ich") — o NOME exposto ao CoreAudio bate exato com a constante Rust. BlackHole também cria um
+  device "…Mirror" (kDevice2) → filtro de captura deve excluir `starts_with("Verbalix Microphone")`, não `==`.
+- M3 integração com M2 SEM tocar o pipeline: `PlaybackRouter` implementa o `AudioPreviewPort` do M2 e entra
+  no lugar do `MacAudioPlayback` no coordinator → `live_worker.rs`/`live_queue.rs` INTACTOS (ordering do
+  reorder buffer preservado; enqueue não-bloqueante mantém a ordem de emissão). `play(wav)`: rota on →
+  decode+resample p/ 48k → `virtual_mic.enqueue`; rota off → `speaker.play` (M2). Setting `output_to_virtual_mic`
+  (`#[serde(default)]`, macOS-only, NÃO sync, preservado no struct-literal de `apply_remote`). Padrão de setting
+  não-sync idêntico a `shortcut`/`voice_profile_id`/`target_language`.
+- M3 fail-open/fail-closed: `resolve_route` (pura) só ativa rota se setting==true E device instalado E `open()`
+  ok; QUALQUER falha cai p/ alto-falante SEM derrubar a sessão (evento `virtual-mic-fallback`). BUG que o QA
+  pegou (e os gates não): falha de `capture.start_stream` APÓS `resolve_route` abrir o vmic deixava o stream
+  bombeando silêncio e `route=true`/`Idle` inconsistente (`leave_live` early-returna em Idle e não conserta) —
+  o `map_err` DEVE chamar `virtual_mic.close()` + `route.store(false)`. Perda de device mid-sessão: o watch
+  listener (registrado 1x no startup, detém Arc de route+vmic) faz route=false+close+emit. Device emite SILÊNCIO
+  quando o ring esvazia (fail-closed); NUNCA muda o output default do sistema.
+- M3 adapter macOS: `MacVirtualMicOutput` = molde thread-dedicada de `MacAudioPlayback` (cpal::Stream não-Send,
+  thread dona + canal + ring buffer). Ring BOUNDED (~2s a 48k), overflow=DROP-OLDEST, underrun→silêncio+contador.
+  `MacVirtualMicDevice.status()` lê `CFBundleVersion` do Info.plist instalado vs constante → NotInstalled/Installed/
+  IncompatibleVersion (classificação PURA testável, sem driver real). Property listener CoreAudio
+  (`AudioObjectAddPropertyListener` em `kAudioHardwarePropertyDevices`) — a callback NUNCA toca AppKit, só
+  recomputa status + repassa (pode `app.emit` Tauri, thread-safe). `coreaudio-sys` já vinha TRANSITIVO no
+  Cargo.lock (via cpal→coreaudio-rs) — só adicionar como dep DIRETA (`features=["core_audio"]`). cpal NÃO abre
+  device por UID (só por NOME); v1 casa por nome (controlamos o nome), UID via coreaudio-sys só p/ status/listener.
 - Interpretação ao vivo (M2, `docs/013`, branch `live-interpretation`): pipeline frase-a-frase SEM mic
   virtual. Edge Function `interpret` (split `index/handler/stages/contract/provider/service_client`,
   `verify_jwt=true`) faz STT (ElevenLabs Scribe `/v1/speech-to-text`) → tradução (OpenAI Responses,
@@ -160,6 +190,31 @@
   `load_settings` retorna local na hora e emite evento `preferences-synced` (padrão listen/emit de
   `note-result`, com comando de pull de fallback). No iOS, TODA edição local deve chamar `touch()` senão o
   bug reaparece.
+
+## Aprendizados de QA (cont. M3)
+- M3 (microfone virtual): mesmo com TODOS os gates verdes (cargo 326, clippy limpo, vitest 106, coverage 100%,
+  e2e 10, deno 112, bundle debug, build do .driver), o qa-reviewer com dual analysis pegou 3 defeitos reais que
+  os gates NÃO viam: (1) `audio_capture.rs` a 325 linhas efetivas > gate 300 (arquivo MODIFICADO no escopo estoura
+  o gate mesmo já sendo grande antes — extrair por SRP, ex. `audio_processing.rs`); (2) BUG de estado: `close()`+
+  `route.store(false)` faltando no `map_err` de `start_stream` (vmic aberto + captura falha = silêncio infinito +
+  estado inconsistente irreparável); (3) T7.5 (E2E do componente frontend) marcado como done SEM o arquivo e2e
+  existir — SEMPRE conferir `git log -- e2e/` antes de aceitar checkbox de teste; frontend novo EXIGE e2e.
+  Minor: hardcode de canais no enqueue. LIÇÃO reforçada: rodar gates é necessário mas insuficiente; a auditoria
+  de CONFORMIDADE (tamanho de arquivo de arquivos modificados, cleanup em caminho de erro, e2e de frontend) fecha
+  o buraco. Verificar checkbox de teste contra o repo, não contra o texto do sub-agente.
+- M3: contagem de LINHAS EFETIVAS (não-brancas) é o que o QA mede p/ o gate de 300 (`awk 'NF{c++} END{print c}'`),
+  não linhas totais. `audio_capture.rs` tinha 357 totais / 325 efetivas.
+- M3 padrão de rounds do orquestrador (repetível e que FUNCIONOU): a feature grande foi fatiada em ~6 rounds
+  bounded (fundação Rust → driver+scripts → adapter macos → roteamento/integração M2 → comando+diagnostics →
+  frontend → testes → QA → correção). Os sub-agentes truncaram em ~5 dos rounds (relatório final cortado antes do
+  commit); em TODOS o orquestrador (1) inspecionou git log/status, (2) rodou os gates empiricamente incl. os
+  pesados (clippy, cargo test, e2e, tauri bundle, build do .driver), (3) commitou o checkpoint quando o agente
+  esqueceu, (4) marcou os checkboxes do plano quando faltou. Rodar rounds SEQUENCIAIS (não paralelos) no MESMO
+  worktree evita corrida no índice git (dois `git add -A` concorrentes varrem arquivos meio-escritos do outro).
+- M3 clippy `-D warnings` "never used" é o detector de FIAÇÃO INCOMPLETA entre rounds: ports/constantes/tipos
+  definidos num round ficam dead-code (build passa com warning, clippy -D falha) até o round de wiring consumi-los.
+  Estratégia: commitar checkpoints intermediários que COMPILAM (`cargo build` verde) mesmo com clippy vermelho de
+  dead-code futuro; o round de wiring (runtime.rs) fecha o clippy verde. NUNCA silenciar com `#[allow(dead_code)]`.
 
 ## iOS — Auth deep link / Universal Links
 - Bug de produção: magic link caiu em `http://localhost:3000/?error=access_denied&error_code=otp_expired`

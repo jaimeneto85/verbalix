@@ -3,20 +3,24 @@ use crate::{
     application::{
         AudioCapturePort, AudioPreviewPort, AudioStreamPort, EnrollmentSession,
         JsonSettingsRepository, KeychainSessionRepository, LiveInterpretationCoordinator,
-        OnAirGuard, PreferencesSyncStore, PublicBackendConfig, RemoteAuthRepository,
-        RemoteHistoryRepository, RemotePreferencesRepository, RemoteVoiceEnrollment,
-        RemoteVoicePipeline, RuntimePause, SelectionCoordinator, VoiceEnrollmentPort,
+        OnAirGuard, PlaybackRouter, PreferencesSyncStore, PublicBackendConfig,
+        RemoteAuthRepository, RemoteHistoryRepository, RemotePreferencesRepository,
+        RemoteVoiceEnrollment, RemoteVoicePipeline, RuntimePause, SelectionCoordinator,
+        VirtualMicDevicePort, VirtualMicOutputPort, VirtualMicStatus, VoiceEnrollmentPort,
         VoicePipelinePort,
     },
     domain::{AppSettings, SelectionEvent, SettingsRepository, VerbalixError},
     platform::{MacAccessibility, SystemClipboard, TauriOverlay},
 };
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::{thread, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 pub(crate) struct AppRuntime {
@@ -38,6 +42,13 @@ pub(crate) struct AppRuntime {
     pub enrollment_session: Arc<EnrollmentSession>,
     pub live_coordinator: Arc<LiveInterpretationCoordinator>,
     pub on_air_guard: Mutex<Option<OnAirGuard>>,
+    pub virtual_mic_device: Arc<dyn VirtualMicDevicePort>,
+}
+
+impl AppRuntime {
+    pub fn virtual_mic_status(&self) -> VirtualMicStatus {
+        self.virtual_mic_device.status()
+    }
 }
 
 pub(crate) struct VoiceComponents {
@@ -74,31 +85,82 @@ pub(crate) fn build_voice_components(base_url: &str, anonymous_key: &str) -> Voi
     }
 }
 
+pub(crate) struct LiveComponents {
+    pub coordinator: Arc<LiveInterpretationCoordinator>,
+    pub virtual_mic_device: Arc<dyn VirtualMicDevicePort>,
+}
+
 pub(crate) fn build_live_coordinator(
     base_url: &str,
     anonymous_key: &str,
     stream: Arc<dyn AudioStreamPort>,
     pause: Arc<RuntimePause>,
     app: AppHandle,
-) -> Arc<LiveInterpretationCoordinator> {
+) -> LiveComponents {
     let pipeline =
         Arc::new(RemoteVoicePipeline::new(base_url, anonymous_key)) as Arc<dyn VoicePipelinePort>;
 
     #[cfg(target_os = "macos")]
-    let playback = Arc::new(crate::platform::MacAudioPlayback::new()) as Arc<dyn AudioPreviewPort>;
+    let speaker = Arc::new(crate::platform::MacAudioPlayback::new()) as Arc<dyn AudioPreviewPort>;
 
     #[cfg(not(target_os = "macos"))]
-    let playback = Arc::new(crate::platform::StubAudioPlayback) as Arc<dyn AudioPreviewPort>;
+    let speaker = Arc::new(crate::platform::StubAudioPlayback) as Arc<dyn AudioPreviewPort>;
+
+    #[cfg(target_os = "macos")]
+    let (virtual_mic_device, virtual_mic_output) = {
+        let device =
+            Arc::new(crate::platform::MacVirtualMicDevice::new()) as Arc<dyn VirtualMicDevicePort>;
+        let output =
+            Arc::new(crate::platform::MacVirtualMicOutput::new()) as Arc<dyn VirtualMicOutputPort>;
+        (device, output)
+    };
+
+    #[cfg(not(target_os = "macos"))]
+    let (virtual_mic_device, virtual_mic_output) = (
+        Arc::new(crate::platform::StubVirtualMicDevice) as Arc<dyn VirtualMicDevicePort>,
+        Arc::new(crate::platform::StubVirtualMicOutput) as Arc<dyn VirtualMicOutputPort>,
+    );
+
+    let route = Arc::new(AtomicBool::new(false));
+
+    {
+        let route_watch = Arc::clone(&route);
+        let vmic_watch = Arc::clone(&virtual_mic_output);
+        let app_watch = app.clone();
+        virtual_mic_device.watch(Box::new(move |status| {
+            if status != VirtualMicStatus::Installed && route_watch.load(Ordering::Relaxed) {
+                route_watch.store(false, Ordering::Relaxed);
+                vmic_watch.close();
+                let _ = app_watch.emit(
+                    "virtual-mic-status",
+                    serde_json::json!({ "status": "notInstalled" }),
+                );
+            }
+        }));
+    }
+
+    let router = Arc::new(PlaybackRouter::new(
+        speaker,
+        Arc::clone(&virtual_mic_output),
+        Arc::clone(&route),
+    )) as Arc<dyn AudioPreviewPort>;
 
     let on_live_event = make_live_emitter(app);
 
-    Arc::new(LiveInterpretationCoordinator::new(
+    let coordinator = Arc::new(LiveInterpretationCoordinator::new(
         pipeline,
         stream,
-        playback,
+        router,
         pause,
         on_live_event,
-    ))
+        virtual_mic_output,
+        route,
+    ));
+
+    LiveComponents {
+        coordinator,
+        virtual_mic_device,
+    }
 }
 
 pub(crate) fn setup_tray(app: &AppHandle) -> tauri::Result<()> {

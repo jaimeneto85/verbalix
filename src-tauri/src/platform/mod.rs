@@ -4,6 +4,8 @@ mod audio_capture;
 pub mod audio_permission;
 #[cfg(target_os = "macos")]
 mod audio_playback;
+#[cfg(target_os = "macos")]
+mod audio_processing;
 pub mod audio_wav;
 mod causal_epoch;
 #[cfg(target_os = "macos")]
@@ -74,6 +76,12 @@ mod macos_write_authorization;
 #[cfg(target_os = "macos")]
 mod macos_write_boundary;
 
+#[cfg(target_os = "macos")]
+mod virtual_mic;
+pub mod virtual_mic_constants;
+#[cfg(target_os = "macos")]
+mod virtual_mic_output;
+
 pub use clipboard::SystemClipboard;
 pub use note_result::NoteResultPayload;
 #[cfg(target_os = "macos")]
@@ -90,6 +98,10 @@ pub use audio_permission::{microphone_permission_status, request_microphone_perm
 pub use audio_playback::MacAudioPlayback;
 #[cfg(target_os = "macos")]
 pub use macos_accessibility::MacAccessibility;
+#[cfg(target_os = "macos")]
+pub use virtual_mic::MacVirtualMicDevice;
+#[cfg(target_os = "macos")]
+pub use virtual_mic_output::MacVirtualMicOutput;
 
 #[cfg(not(target_os = "macos"))]
 pub use unsupported::MacAccessibility;
@@ -195,4 +207,37 @@ impl crate::application::AudioPreviewPort for StubAudioPlayback {
     }
 
     fn stop(&self) {}
+}
+
+#[cfg(not(target_os = "macos"))]
+pub struct StubVirtualMicDevice;
+
+#[cfg(not(target_os = "macos"))]
+pub struct StubVirtualMicOutput;
+
+#[cfg(not(target_os = "macos"))]
+impl crate::application::VirtualMicDevicePort for StubVirtualMicDevice {
+    fn status(&self) -> crate::application::VirtualMicStatus {
+        crate::application::VirtualMicStatus::NotInstalled
+    }
+
+    fn watch(&self, _on_change: Box<dyn Fn(crate::application::VirtualMicStatus) + Send + Sync>) {}
+}
+
+#[cfg(not(target_os = "macos"))]
+impl crate::application::VirtualMicOutputPort for StubVirtualMicOutput {
+    fn open(&self) -> Result<(), crate::domain::VerbalixError> {
+        Err(crate::domain::VerbalixError::VirtualMicUnavailable)
+    }
+
+    fn enqueue(&self, _samples_48k: Vec<f32>, _channels: u16) {}
+
+    fn close(&self) {}
+
+    fn metrics(&self) -> crate::application::VirtualMicMetrics {
+        crate::application::VirtualMicMetrics {
+            buffer_depth: 0,
+            underruns: 0,
+        }
+    }
 }

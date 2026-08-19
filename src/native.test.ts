@@ -280,4 +280,59 @@ describe("native command contract", () => {
     expect(() => dispose()).not.toThrow();
     resolveListen?.(() => undefined);
   });
+
+  it("reads virtual mic status without arguments", async () => {
+    invoke.mockResolvedValue({ status: "installed" });
+
+    await expect(native.virtualMicStatus()).resolves.toEqual({
+      status: "installed"
+    });
+
+    expect(invoke).toHaveBeenCalledWith("virtual_mic_status");
+  });
+
+  it("subscribes to virtual-mic-status and forwards only the event payload", async () => {
+    let deliver: ((event: { payload: unknown }) => void) | undefined;
+    listen.mockImplementation((eventName, handler) => {
+      expect(eventName).toBe("virtual-mic-status");
+      deliver = handler;
+      return Promise.resolve(() => undefined);
+    });
+    const callback = vi.fn();
+
+    native.onVirtualMicStatusChange(callback);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    deliver?.({ payload: { status: "incompatibleVersion" } });
+
+    expect(callback).toHaveBeenCalledWith({ status: "incompatibleVersion" });
+  });
+
+  it("unsubscribes from virtual-mic-status once the underlying listener resolves", async () => {
+    const unlisten = vi.fn();
+    listen.mockResolvedValue(unlisten);
+
+    const dispose = native.onVirtualMicStatusChange(vi.fn());
+    await Promise.resolve();
+    await Promise.resolve();
+    dispose();
+
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("is a no-op to unsubscribe from virtual-mic-status before the listener resolves", () => {
+    let resolveListen: ((value: () => void) => void) | undefined;
+    listen.mockImplementation(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveListen = resolve;
+        })
+    );
+
+    const dispose = native.onVirtualMicStatusChange(vi.fn());
+
+    expect(() => dispose()).not.toThrow();
+    resolveListen?.(() => undefined);
+  });
 });

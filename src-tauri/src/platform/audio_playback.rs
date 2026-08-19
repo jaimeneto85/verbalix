@@ -1,6 +1,8 @@
 #[cfg(target_os = "macos")]
 mod mac {
-    use crate::{application::AudioPreviewPort, domain::VerbalixError};
+    use crate::{
+        application::AudioPreviewPort, domain::VerbalixError, platform::audio_wav::decode_wav_f32,
+    };
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use std::{
         collections::VecDeque,
@@ -29,7 +31,7 @@ mod mac {
                         PlaybackCommand::Play(wav_bytes, reply) => {
                             drop(active_stream.take());
 
-                            let samples = match decode_wav_f32(&wav_bytes) {
+                            let samples = match decode_wav_f32(&wav_bytes).map(|(s, _, _)| s) {
                                 Some(s) => s,
                                 None => {
                                     let _ = reply.send(Err(VerbalixError::AudioPlaybackFailed));
@@ -185,30 +187,6 @@ mod mac {
                 }
             }
         }
-    }
-
-    fn decode_wav_f32(bytes: &[u8]) -> Option<Vec<f32>> {
-        if bytes.len() < 44 {
-            return None;
-        }
-        if &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
-            return None;
-        }
-        let channels = u16::from_le_bytes([bytes[22], bytes[23]]) as usize;
-        let bits_per_sample = u16::from_le_bytes([bytes[34], bytes[35]]);
-        let data_size = u32::from_le_bytes([bytes[40], bytes[41], bytes[42], bytes[43]]) as usize;
-        let data = bytes.get(44..44 + data_size)?;
-
-        if bits_per_sample != 16 || channels == 0 {
-            return None;
-        }
-
-        let samples: Vec<f32> = data
-            .chunks_exact(2)
-            .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
-            .collect();
-
-        Some(samples)
     }
 }
 

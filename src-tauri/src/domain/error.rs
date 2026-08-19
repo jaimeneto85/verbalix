@@ -53,6 +53,10 @@ pub enum VerbalixError {
     TranslationFailed,
     #[error("Falha de TTS no segmento")]
     TtsFailed,
+    #[error("Microfone virtual indisponível")]
+    VirtualMicUnavailable,
+    #[error("Selecione um microfone físico")]
+    VirtualMicSelectedAsInput,
 }
 
 impl Serialize for VerbalixError {

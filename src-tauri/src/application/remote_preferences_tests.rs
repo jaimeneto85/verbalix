@@ -88,6 +88,7 @@ fn base_settings() -> AppSettings {
         shortcut: "Cmd+Shift+V".to_owned(),
         voice_profile_id: None,
         target_language: "en".to_owned(),
+        output_to_virtual_mic: false,
     }
 }
 

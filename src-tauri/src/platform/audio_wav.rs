@@ -1,20 +1,18 @@
 pub const TARGET_SAMPLE_RATE: u32 = 16_000;
+pub const VIRTUAL_MIC_SAMPLE_RATE: u32 = 48_000;
 
-pub fn resample_to_16k(samples: &[f32], src_rate: u32, channels: u16) -> Vec<i16> {
+pub fn resample_f32(samples: &[f32], src_rate: u32, target_rate: u32, channels: u16) -> Vec<f32> {
     let ch = channels.max(1) as usize;
     let mono: Vec<f32> = samples
         .chunks(ch)
         .map(|frame| frame.iter().sum::<f32>() / ch as f32)
         .collect();
 
-    if src_rate == TARGET_SAMPLE_RATE {
-        return mono
-            .iter()
-            .map(|&s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
-            .collect();
+    if src_rate == target_rate {
+        return mono;
     }
 
-    let ratio = src_rate as f64 / TARGET_SAMPLE_RATE as f64;
+    let ratio = src_rate as f64 / target_rate as f64;
     let out_len = (mono.len() as f64 / ratio) as usize;
     let mut output = Vec::with_capacity(out_len);
 
@@ -24,11 +22,42 @@ pub fn resample_to_16k(samples: &[f32], src_rate: u32, channels: u16) -> Vec<i16
         let frac = (pos - idx as f64) as f32;
         let a = mono.get(idx).copied().unwrap_or(0.0);
         let b = mono.get(idx + 1).copied().unwrap_or(a);
-        let sample = a + (b - a) * frac;
-        output.push((sample * 32767.0).clamp(-32768.0, 32767.0) as i16);
+        output.push(a + (b - a) * frac);
     }
 
     output
+}
+
+pub fn resample_to_16k(samples: &[f32], src_rate: u32, channels: u16) -> Vec<i16> {
+    resample_f32(samples, src_rate, TARGET_SAMPLE_RATE, channels)
+        .iter()
+        .map(|&s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
+        .collect()
+}
+
+pub fn decode_wav_f32(bytes: &[u8]) -> Option<(Vec<f32>, u32, u16)> {
+    if bytes.len() < 44 {
+        return None;
+    }
+    if &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+        return None;
+    }
+    let channels = u16::from_le_bytes([bytes[22], bytes[23]]);
+    let sample_rate = u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]);
+    let bits_per_sample = u16::from_le_bytes([bytes[34], bytes[35]]);
+    let data_size = u32::from_le_bytes([bytes[40], bytes[41], bytes[42], bytes[43]]) as usize;
+    let data = bytes.get(44..44 + data_size)?;
+
+    if bits_per_sample != 16 || channels == 0 {
+        return None;
+    }
+
+    let samples: Vec<f32> = data
+        .chunks_exact(2)
+        .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
+        .collect();
+
+    Some((samples, sample_rate, channels))
 }
 
 pub fn encode_wav(samples: &[i16], sample_rate: u32) -> Vec<u8> {
@@ -60,4 +89,63 @@ pub fn pcm_rms(samples: &[f32]) -> f32 {
     }
     let sum: f32 = samples.iter().map(|s| s * s).sum();
     (sum / samples.len() as f32).sqrt()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resample_f32_identity_when_same_rate() {
+        let samples = vec![0.1f32, 0.2, 0.3];
+        let out = resample_f32(&samples, 16_000, 16_000, 1);
+        assert_eq!(out.len(), 3);
+        assert!((out[0] - 0.1).abs() < 1e-5);
+    }
+
+    #[test]
+    fn resample_f32_upsample() {
+        let samples = vec![0.0f32, 1.0];
+        let out = resample_f32(&samples, 16_000, 48_000, 1);
+        assert!(out.len() > 2);
+    }
+
+    #[test]
+    fn resample_to_16k_delegates_correctly() {
+        let samples = vec![0.5f32; 160];
+        let out = resample_to_16k(&samples, 16_000, 1);
+        assert_eq!(out.len(), 160);
+        assert!(out.iter().all(|&s| s > 0));
+    }
+
+    #[test]
+    fn resample_f32_mono_mix() {
+        let stereo = vec![0.4f32, 0.6, 0.4, 0.6];
+        let out = resample_f32(&stereo, 16_000, 16_000, 2);
+        assert_eq!(out.len(), 2);
+        assert!((out[0] - 0.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn decode_wav_f32_round_trips() {
+        let samples_i16: Vec<i16> = vec![1000, -1000, 2000, -2000];
+        let wav = encode_wav(&samples_i16, 16_000);
+        let (decoded, rate, ch) = decode_wav_f32(&wav).unwrap();
+        assert_eq!(rate, 16_000);
+        assert_eq!(ch, 1);
+        assert_eq!(decoded.len(), 4);
+        assert!((decoded[0] - 1000.0 / 32768.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn decode_wav_f32_rejects_short_bytes() {
+        assert!(decode_wav_f32(&[0u8; 10]).is_none());
+    }
+
+    #[test]
+    fn decode_wav_f32_rejects_non_wav() {
+        let mut bytes = vec![0u8; 44];
+        bytes[0..4].copy_from_slice(b"XXXX");
+        assert!(decode_wav_f32(&bytes).is_none());
+    }
 }

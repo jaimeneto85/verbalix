@@ -5,6 +5,7 @@ use crate::{
         VoiceProfileView,
     },
 };
+use serde::{Deserialize, Serialize};
 
 pub trait SelectionPort: Send + Sync {
     fn permission_granted(&self, prompt: bool) -> bool;
@@ -175,6 +176,33 @@ pub trait VoicePipelinePort: Send + Sync {
 pub trait AudioPreviewPort: Send + Sync {
     fn play(&self, wav_bytes: Vec<u8>) -> Result<(), crate::domain::VerbalixError>;
     fn stop(&self);
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VirtualMicStatus {
+    NotInstalled,
+    Installed,
+    IncompatibleVersion,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VirtualMicMetrics {
+    pub buffer_depth: u32,
+    pub underruns: u64,
+}
+
+pub trait VirtualMicDevicePort: Send + Sync {
+    fn status(&self) -> VirtualMicStatus;
+    fn watch(&self, on_change: Box<dyn Fn(VirtualMicStatus) + Send + Sync>);
+}
+
+pub trait VirtualMicOutputPort: Send + Sync {
+    fn open(&self) -> Result<(), VerbalixError>;
+    fn enqueue(&self, samples_48k: Vec<f32>, channels: u16);
+    fn close(&self);
+    fn metrics(&self) -> VirtualMicMetrics;
 }
 
 pub trait VoiceEnrollmentPort: Send + Sync {

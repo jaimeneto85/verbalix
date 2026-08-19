@@ -38,6 +38,8 @@ pub struct AppSettings {
     pub voice_profile_id: Option<uuid::Uuid>,
     #[serde(default = "default_target_language")]
     pub target_language: String,
+    #[serde(default)]
+    pub output_to_virtual_mic: bool,
 }
 
 impl Default for AppSettings {
@@ -52,6 +54,7 @@ impl Default for AppSettings {
             shortcut: "Option+Shift+Space".to_owned(),
             voice_profile_id: None,
             target_language: "en".to_owned(),
+            output_to_virtual_mic: false,
         }
     }
 }
@@ -93,5 +96,24 @@ mod tests {
             ..AppSettings::default()
         };
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn legacy_settings_json_without_output_to_virtual_mic_defaults_to_false() {
+        let legacy_json = r#"{
+            "formality": 3,
+            "length": "balanced",
+            "tone": "technical",
+            "confirmBeforeReplace": false,
+            "historyEnabled": false,
+            "automaticToolbar": true,
+            "shortcut": "Option+Shift+Space"
+        }"#;
+
+        let settings: AppSettings = serde_json::from_str(legacy_json).unwrap();
+
+        assert!(!settings.output_to_virtual_mic);
+        assert_eq!(settings.target_language, "en");
+        assert!(settings.voice_profile_id.is_none());
     }
 }

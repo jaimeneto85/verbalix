@@ -1,9 +1,9 @@
 use crate::{
     application::{AudioCapturePort, AudioStreamPort},
     domain::{EnrollmentSample, MicrophonePermission, VerbalixError},
-    platform::audio_wav::{encode_wav, resample_to_16k, TARGET_SAMPLE_RATE},
+    platform::audio_processing::{process_audio, resolve_physical_input_device},
 };
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, StreamTrait};
 use std::sync::{
     atomic::{AtomicU32, Ordering},
     mpsc, Arc, Mutex,
@@ -11,7 +11,6 @@ use std::sync::{
 use std::time::Duration;
 
 const MAX_DURATION_SECS: f32 = 120.0;
-const MIN_DURATION_SECS: f32 = 5.0;
 
 enum CaptureCommand {
     Start(mpsc::SyncSender<Result<(), VerbalixError>>),
@@ -59,9 +58,12 @@ impl MacAudioCapture {
                             continue;
                         }
                         let host = cpal::default_host();
-                        let Some(device) = host.default_input_device() else {
-                            let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
-                            continue;
+                        let device = match resolve_physical_input_device(&host) {
+                            Ok(d) => d,
+                            Err(e) => {
+                                let _ = reply.send(Err(e));
+                                continue;
+                            }
                         };
                         let config = match device.default_input_config() {
                             Ok(c) => c,
@@ -177,9 +179,12 @@ impl MacAudioCapture {
                             continue;
                         }
                         let host = cpal::default_host();
-                        let Some(device) = host.default_input_device() else {
-                            let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
-                            continue;
+                        let device = match resolve_physical_input_device(&host) {
+                            Ok(d) => d,
+                            Err(e) => {
+                                let _ = reply.send(Err(e));
+                                continue;
+                            }
                         };
                         let config = match device.default_input_config() {
                             Ok(c) => c,
@@ -305,26 +310,4 @@ impl AudioStreamPort for MacAudioCapture {
     fn stop_stream(&self) {
         let _ = self.cmd_tx.send(CaptureCommand::StopStream);
     }
-}
-
-fn process_audio(
-    raw: Vec<f32>,
-    channels: u16,
-    native_rate: u32,
-) -> Result<EnrollmentSample, VerbalixError> {
-    if raw.is_empty() {
-        return Err(VerbalixError::AudioCaptureFailed);
-    }
-
-    let total_frames = raw.len() / channels.max(1) as usize;
-    let duration_secs = total_frames as f32 / native_rate.max(1) as f32;
-
-    if duration_secs < MIN_DURATION_SECS {
-        return Err(VerbalixError::AudioCaptureFailed);
-    }
-
-    let samples_i16 = resample_to_16k(&raw, native_rate, channels);
-    let wav_bytes = encode_wav(&samples_i16, TARGET_SAMPLE_RATE);
-
-    Ok(EnrollmentSample { wav_bytes })
 }

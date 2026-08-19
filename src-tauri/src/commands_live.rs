@@ -27,9 +27,17 @@ pub(crate) async fn enter_live(
     let token = stored.access_token;
     let profile_id =
         Uuid::parse_str(&voice_profile_id).map_err(|_| VerbalixError::VoiceProfileMissing)?;
-    let guard = runtime
-        .live_coordinator
-        .enter_live(&target_language, profile_id, token)?;
+    let route_to_virtual_mic = runtime
+        .settings
+        .load()
+        .map(|s| s.output_to_virtual_mic)
+        .unwrap_or(false);
+    let guard = runtime.live_coordinator.enter_live(
+        &target_language,
+        profile_id,
+        token,
+        route_to_virtual_mic,
+    )?;
     *runtime.on_air_guard.lock().unwrap() = Some(guard);
     Ok(())
 }
@@ -53,6 +61,8 @@ pub(crate) fn live_status(
         LiveState::Stopping => "idle",
         LiveState::Failed => "error",
     };
+    let _vmic_status = runtime.virtual_mic_status();
+    let _vmic_metrics = runtime.live_coordinator.vmic_metrics();
     Ok(LiveStatusResponse {
         status: status.to_owned(),
     })
