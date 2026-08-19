@@ -271,44 +271,44 @@ falha). Tudo determinístico e testável sem rede.
 > criar duas implementações paralelas de `encode_wav`/`resample_to_16k` (dívida técnica evitável).
 
 ### Fase 1: Backend Edge Function
-- [ ] T1.1: [MEDIUM] `interpret/contract.ts` — request/response, allowlist BCP-47, caps próprios, ErrorCodes stage-específicos + `contract_test.ts`.
-- [ ] T1.2: [MEDIUM] `interpret/provider.ts` — `transcribe`/`translate`/`synthesize` (fetcher injetável) + `provider_test.ts`; prompt de tradução com língua-alvo EXPLÍCITA (não reusar prompt PT↔EN). Confirmar endpoints ElevenLabs: STT `/v1/speech-to-text` (Scribe), TTS `/v1/text-to-speech/{voice_id}`.
-- [ ] T1.3: [LOW/copy-adapt de `voice-enroll/service_client.ts`] `interpret/service_client.ts` — resolve `provider_voice_id` do perfil `ready` por JWT; rejeita ausente → `NO_VOICE_PROFILE`.
-- [ ] T1.4: [MEDIUM] `interpret/handler.ts` + `interpret/stages.ts` + `index.ts` — orquestração 3 estágios (stages.ts p/ ≤300 linhas), durações, timeout ~45s, JWT/anon reject + `handler_test.ts`.
-- [ ] T1.5: [LOW] `supabase/config.toml` — `[functions.interpret] verify_jwt = true`.
+- [x] T1.1: [MEDIUM] `interpret/contract.ts` — request/response, allowlist BCP-47, caps próprios, ErrorCodes stage-específicos + `contract_test.ts`.
+- [x] T1.2: [MEDIUM] `interpret/provider.ts` — `transcribe`/`translate`/`synthesize` (fetcher injetável) + `provider_test.ts`; prompt de tradução com língua-alvo EXPLÍCITA (não reusar prompt PT↔EN). Confirmar endpoints ElevenLabs: STT `/v1/speech-to-text` (Scribe), TTS `/v1/text-to-speech/{voice_id}`.
+- [x] T1.3: [LOW/copy-adapt de `voice-enroll/service_client.ts`] `interpret/service_client.ts` — resolve `provider_voice_id` do perfil `ready` por JWT; rejeita ausente → `NO_VOICE_PROFILE`.
+- [x] T1.4: [MEDIUM] `interpret/handler.ts` + `interpret/stages.ts` + `index.ts` — orquestração 3 estágios (stages.ts p/ ≤300 linhas), durações, timeout ~45s, JWT/anon reject + `handler_test.ts`.
+- [x] T1.5: [LOW] `supabase/config.toml` — `[functions.interpret] verify_jwt = true`.
 
 ### Fase 2: Domain puro
-- [ ] T2.4: [LOW — FAZER PRIMEIRO] Extrair `encode_wav`/`resample_to_16k` p/ `audio_wav.rs` compartilhável (sem regredir enrollment).
-- [ ] T2.1: [MEDIUM] `domain/live_interpretation.rs` — LiveSessionId/SegmentId/LanguageTag/LiveState + `accepts()` staleness + `_tests.rs`.
-- [ ] T2.2: [MEDIUM] `domain/endpointing.rs` — `Endpointer` (VAD por energia/silêncio, min/max, supressão em Speaking) + `_tests.rs`.
-- [ ] T2.3: [LOW] `domain/error.rs` novas variantes stage-específicas + `domain/settings.rs` `target_language` (`#[serde(default)]`, validação allowlist) + preservação em `apply_remote` + testes.
+- [x] T2.4: [LOW — FAZER PRIMEIRO] Extrair `encode_wav`/`resample_to_16k` p/ `audio_wav.rs` compartilhável (sem regredir enrollment).
+- [x] T2.1: [MEDIUM] `domain/live_interpretation.rs` — LiveSessionId/SegmentId/LanguageTag/LiveState + `accepts()` staleness + `_tests.rs`.
+- [x] T2.2: [MEDIUM] `domain/endpointing.rs` — `Endpointer` (VAD por energia/silêncio, min/max, supressão em Speaking) + `_tests.rs`.
+- [x] T2.3: [LOW] `domain/error.rs` novas variantes stage-específicas + `domain/settings.rs` `target_language` (`#[serde(default)]`, validação allowlist) + preservação em `apply_remote` + testes.
 
 ### Fase 3: Application + Ports
-- [ ] T3.1: [MEDIUM] `ports.rs` — `AudioStreamPort` (separado, mutex c/ enrollment), `VoicePipelinePort`, `AudioPreviewPort`.
-- [ ] T3.2: [LOW/copy-adapt de `voice_enrollment.rs`] `application/voice_pipeline.rs` — `RemoteVoicePipeline` (reusa `map_status_error`, timeout ~50s, erro de conexão → recuperável).
-- [ ] T3.3a: [MEDIUM] `application/live_queue.rs` — reorder buffer bounded + backpressure (puro) + `_tests.rs`.
-- [ ] T3.3b: [MEDIUM] `application/live_worker.rs` — loop de dispatch concorrente (cap 2 em voo) + `_tests.rs` com fake ports.
-- [ ] T3.3c: [MEDIUM] `application/live_interpretation.rs` — coordinator (estado, staleness, fail-closed, circuit-breaker, idle, permissão revogada) + `_tests.rs` com fake ports.
-- [ ] T3.4: [LOW/copy-adapt de `ActionGuard`] `runtime_pause.rs` — `on_air: AtomicBool` SEPARADO + `OnAirGuard` compondo nos 5 entrypoints + teste de supressão por sessão inteira (sem regressão).
+- [x] T3.1: [MEDIUM] `ports.rs` — `AudioStreamPort` (separado, mutex c/ enrollment), `VoicePipelinePort`, `AudioPreviewPort`.
+- [x] T3.2: [LOW/copy-adapt de `voice_enrollment.rs`] `application/voice_pipeline.rs` — `RemoteVoicePipeline` (reusa `map_status_error`, timeout ~50s, erro de conexão → recuperável).
+- [x] T3.3a: [MEDIUM] `application/live_queue.rs` — reorder buffer bounded + backpressure (puro) + `_tests.rs`.
+- [x] T3.3b: [MEDIUM] `application/live_worker.rs` — loop de dispatch concorrente (cap 2 em voo) + `_tests.rs` com fake ports.
+- [x] T3.3c: [MEDIUM] `application/live_interpretation.rs` — coordinator (estado, staleness, fail-closed, circuit-breaker, idle, permissão revogada) + `_tests.rs` com fake ports.
+- [x] T3.4: [LOW/copy-adapt de `ActionGuard`] `runtime_pause.rs` — `on_air: AtomicBool` SEPARADO + `OnAirGuard` compondo nos 5 entrypoints + teste de supressão por sessão inteira (sem regressão).
 
 ### Fase 4: Plataforma (macOS + stub)
-- [ ] T4.1: [HARD] `platform/audio_capture.rs` — modo streaming de frames p/ VAD via extensão do `CaptureCommand` (mutex c/ enrollment, sem regredir M1).
-- [ ] T4.2: [MEDIUM] `platform/audio_playback.rs` — `MacAudioPlayback` cpal (thread dedicada, reply-timeout) + stub não-macOS em `mod.rs`.
+- [x] T4.1: [HARD] `platform/audio_capture.rs` — modo streaming de frames p/ VAD via extensão do `CaptureCommand` (mutex c/ enrollment, sem regredir M1).
+- [x] T4.2: [MEDIUM] `platform/audio_playback.rs` — `MacAudioPlayback` cpal (thread dedicada, reply-timeout) + stub não-macOS em `mod.rs`.
 
 ### Fase 5: Wiring + Commands
-- [ ] T5.1: [MEDIUM] `commands_live.rs` — `enter_live`, `leave_live`, `live_status`, `set_target_language` (ou via save_settings) + registro.
-- [ ] T5.2: [MEDIUM] `runtime.rs`/`lib.rs` — construir adapters, agregar no `AppRuntime`, registrar comandos, wire tray-pause→leave_live NÃO-BLOQUEANTE. Verificar headroom de `lib.rs` (hoje 295/301) ANTES; se estourar, mover fiação p/ `runtime.rs` (89 linhas, tem folga).
-- [ ] T5.3: [LOW] `diagnostics.rs` — eventos de latência por estágio/contagem + teste de sanitização.
+- [x] T5.1: [MEDIUM] `commands_live.rs` — `enter_live`, `leave_live`, `live_status`, `set_target_language` (ou via save_settings) + registro.
+- [x] T5.2: [MEDIUM] `runtime.rs`/`lib.rs` — construir adapters, agregar no `AppRuntime`, registrar comandos, wire tray-pause→leave_live NÃO-BLOQUEANTE. Verificar headroom de `lib.rs` (hoje 295/301) ANTES; se estourar, mover fiação p/ `runtime.rs` (89 linhas, tem folga).
+- [x] T5.3: [LOW] `diagnostics.rs` — eventos de latência por estágio/contagem + teste de sanitização.
 
 ### Fase 6: Frontend
-- [ ] T6.1: [MEDIUM] `src/types.ts` + `src/native.ts` — tipos camelCase + wrappers dos comandos e listener de `live-state`.
-- [ ] T6.2: [MEDIUM] `LivePanel` (seção "Ao vivo") — seletor de língua-alvo, Entrar/Sair do ar, status, latência, erro + `styles/panels.css`.
-- [ ] T6.3: [LOW] Vitest do LivePanel + e2e de sequência de comandos (Tauri stubbed).
+- [x] T6.1: [MEDIUM] `src/types.ts` + `src/native.ts` — tipos camelCase + wrappers dos comandos e listener de `live-state`.
+- [x] T6.2: [MEDIUM] `LivePanel` (seção "Ao vivo") — seletor de língua-alvo, Entrar/Sair do ar, status, latência, erro + `styles/panels.css`.
+- [x] T6.3: [LOW] Vitest do LivePanel + e2e de sequência de comandos (Tauri stubbed).
 
 ### Fase 7: Gates + entrega
-- [ ] T7.1: Rodar toda a suíte de gates (ver Verificação) DENTRO do worktree; corrigir até verde.
-- [ ] T7.2: QA (dual analysis) → verdict.
-- [ ] T7.3: `docs/013-*.md` (português) com escopo, solução, testes, qualidade, gates manuais pendentes.
+- [x] T7.1: Rodar toda a suíte de gates (ver Verificação) DENTRO do worktree; corrigir até verde.
+- [x] T7.2: QA (dual analysis) → verdict.
+- [x] T7.3: `docs/013-*.md` (português) com escopo, solução, testes, qualidade, gates manuais pendentes.
 
 ## Verificação (gates antes do handoff, DENTRO do worktree)
 `npm test` · `npm run test:coverage` · `npm run test:e2e` · `npm run build` · `cargo test` ·
