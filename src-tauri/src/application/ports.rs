@@ -179,6 +179,7 @@ pub trait VoicePipelinePort: Send + Sync {
         wav_bytes: Vec<u8>,
         target_language: &'a str,
         token: &'a str,
+        _context: Vec<String>,
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<

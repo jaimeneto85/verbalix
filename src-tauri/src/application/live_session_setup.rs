@@ -6,7 +6,7 @@ use crate::{
     },
     domain::{
         EndpointEvent, Endpointer, EndpointerConfig, LiveSession, LiveState, SegmentId,
-        StageDurations,
+        StageDurations, TranslationContext,
     },
     platform::audio_wav::{encode_wav, pcm_rms, resample_to_16k, TARGET_SAMPLE_RATE},
 };
@@ -18,6 +18,7 @@ pub struct LiveEventPayload {
     pub stage_ms: Option<StageDurations>,
     pub segment_id: Option<u64>,
     pub detected_language: Option<String>,
+    pub target_language: Option<String>,
     pub first_audio_ms: Option<u64>,
 }
 
@@ -57,6 +58,7 @@ pub(crate) fn build_audio_sink(
     state_arc: Arc<Mutex<CoordinatorState>>,
     worker_arc: Arc<Mutex<Option<LiveWorker>>>,
     token: String,
+    context_arc: Arc<Mutex<TranslationContext>>,
 ) -> SinkFn {
     Box::new(move |frames, sample_rate, channels| {
         let rms = pcm_rms(&frames);
@@ -78,7 +80,7 @@ pub(crate) fn build_audio_sink(
             }
             Some(EndpointEvent::Closed) | Some(EndpointEvent::MaxDurationReached) => {
                 let t_capture_end = Instant::now();
-                let (wav_bytes, session_id, segment_id, target_lang) = {
+                let (wav_bytes, session_id, segment_id, target_lang, ctx_snapshot) = {
                     let mut ss = sink_state_arc.lock().unwrap();
                     let samples = resample_to_16k(&ss.frame_buffer, ss.sample_rate, ss.channels);
                     let wav = encode_wav(&samples, TARGET_SAMPLE_RATE);
@@ -89,8 +91,9 @@ pub(crate) fn build_audio_sink(
                         let sid = session.id;
                         let seg = session.advance();
                         let lang = session.target_language.as_str().to_owned();
+                        let ctx = context_arc.lock().unwrap().snapshot();
                         st.last_segment_time = Some(Instant::now());
-                        (wav, sid, seg, lang)
+                        (wav, sid, seg, lang, ctx)
                     } else {
                         return;
                     }
@@ -105,6 +108,7 @@ pub(crate) fn build_audio_sink(
                         target_language: target_lang,
                         token: token.clone(),
                         t_capture_end,
+                        context: ctx_snapshot,
                     });
                 }
             }
@@ -153,6 +157,7 @@ pub(crate) fn build_worker_callback(
                     stage_ms: None,
                     segment_id: None,
                     detected_language: None,
+                    target_language: None,
                     first_audio_ms: None,
                 });
             }
@@ -162,6 +167,7 @@ pub(crate) fn build_worker_callback(
             session_id,
             stage_ms,
             detected_language,
+            target_language,
             first_audio_ms,
         } => {
             let current_session_matches = {
@@ -183,6 +189,7 @@ pub(crate) fn build_worker_callback(
                 stage_ms: Some(stage_ms),
                 segment_id: Some(segment_id.0),
                 detected_language: Some(detected_language),
+                target_language,
                 first_audio_ms,
             });
         }
@@ -192,6 +199,7 @@ pub(crate) fn build_worker_callback(
                 stage_ms: None,
                 segment_id: Some(segment_id.0),
                 detected_language: None,
+                target_language: None,
                 first_audio_ms: None,
             });
         }

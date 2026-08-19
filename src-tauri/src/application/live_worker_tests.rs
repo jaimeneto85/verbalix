@@ -96,6 +96,7 @@ impl VoicePipelinePort for FakeStreamPipeline {
         _wav_bytes: Vec<u8>,
         _target_language: &'a str,
         _token: &'a str,
+        _context: Vec<String>,
     ) -> std::pin::Pin<
         Box<
             dyn std::future::Future<Output = Result<StreamSegmentHandle, InterpretOutcome>>
@@ -166,6 +167,10 @@ fn accepts_only(
     Arc::new(move |s: LiveSessionId, _| s == sid)
 }
 
+fn make_context() -> Arc<Mutex<crate::domain::TranslationContext>> {
+    Arc::new(Mutex::new(crate::domain::TranslationContext::new()))
+}
+
 fn make_worker(
     pipeline: Arc<dyn VoicePipelinePort>,
     playback: Arc<dyn AudioPreviewPort>,
@@ -184,6 +189,7 @@ fn make_worker(
             }
         }),
         always_accepts(),
+        make_context(),
     );
 
     (worker, queue, ready_count)

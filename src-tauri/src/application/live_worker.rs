@@ -5,7 +5,10 @@ use crate::{
         AudioPreviewPort, VoicePipelinePort,
     },
     diagnostics::{self, LatencyStage},
-    domain::{InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations},
+    domain::{
+        InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations,
+        TranslationContext,
+    },
 };
 use std::{
     collections::HashMap,
@@ -24,6 +27,7 @@ pub enum WorkerCommand {
         target_language: String,
         token: String,
         t_capture_end: Instant,
+        context: Vec<String>,
     },
     Stop,
 }
@@ -34,6 +38,7 @@ pub enum WorkerEvent {
         session_id: LiveSessionId,
         stage_ms: StageDurations,
         detected_language: String,
+        target_language: Option<String>,
         first_audio_ms: Option<u64>,
     },
     Dropped {
@@ -56,9 +61,17 @@ async fn call_interpret_stream(
     wav_bytes: Vec<u8>,
     target_language: String,
     token: String,
+    context: Vec<String>,
 ) -> Result<StreamSegmentHandle, InterpretOutcome> {
     pipeline
-        .interpret_stream(session_id, segment_id, wav_bytes, &target_language, &token)
+        .interpret_stream(
+            session_id,
+            segment_id,
+            wav_bytes,
+            &target_language,
+            &token,
+            context,
+        )
         .await
 }
 
@@ -69,6 +82,7 @@ async fn process_queue_events_async(
     pending_handles: Arc<Mutex<HashMap<SegmentId, StreamSegmentHandle>>>,
     accepts_fn: Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Sync>,
     on_event: Arc<dyn Fn(WorkerEvent) + Send + Sync>,
+    context: Arc<Mutex<TranslationContext>>,
     t_capture_end: Instant,
 ) {
     for event in events {
@@ -95,18 +109,28 @@ async fn process_queue_events_async(
                     let first_audio_ms = t_capture_end.elapsed().as_millis() as u64;
                     diagnostics::record_latency(LatencyStage::FirstAudio, first_audio_ms);
 
-                    if let Some(h) = handle_opt {
+                    let handle_target = if let Some(h) = handle_opt {
+                        let source = h.source_text.clone();
+                        let target = h.target_language.clone();
                         let pb = Arc::clone(&playback);
-                        let _ =
-                            tokio::task::spawn_blocking(move || pb.play_stream(h)).await;
-                    } else if !result.audio_base64.is_empty() {
-                        use base64::{engine::general_purpose::STANDARD, Engine};
-                        if let Ok(wav) = STANDARD.decode(&result.audio_base64) {
-                            let pb = Arc::clone(&playback);
-                            let _ =
-                                tokio::task::spawn_blocking(move || pb.play(wav)).await;
+                        let play_ok = tokio::task::spawn_blocking(move || pb.play_stream(h))
+                            .await
+                            .is_ok();
+                        if play_ok && accepts_fn(emit_session, emit_seg) {
+                            context.lock().unwrap().push(&source);
                         }
-                    }
+                        Some(target)
+                    } else {
+                        if !result.audio_base64.is_empty() {
+                            use base64::{engine::general_purpose::STANDARD, Engine};
+                            if let Ok(wav) = STANDARD.decode(&result.audio_base64) {
+                                let pb = Arc::clone(&playback);
+                                let _ =
+                                    tokio::task::spawn_blocking(move || pb.play(wav)).await;
+                            }
+                        }
+                        None
+                    };
 
                     diagnostics::record_latency(
                         LatencyStage::PlaybackEnd,
@@ -119,6 +143,7 @@ async fn process_queue_events_async(
                         session_id: emit_session,
                         stage_ms: result.stage_ms.clone(),
                         detected_language: result.detected_language.clone(),
+                        target_language: handle_target,
                         first_audio_ms: Some(first_audio_ms),
                     });
                 } else {
@@ -148,6 +173,7 @@ impl LiveWorker {
         queue: Arc<Mutex<LiveQueue>>,
         on_event: Arc<dyn Fn(WorkerEvent) + Send + Sync>,
         accepts_fn: Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Sync + 'static>,
+        context: Arc<Mutex<TranslationContext>>,
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::sync_channel::<WorkerCommand>(32);
 
@@ -187,6 +213,7 @@ impl LiveWorker {
                             target_language,
                             token,
                             t_capture_end,
+                            context: ctx_snapshot,
                         }) => {
                             let pipeline = Arc::clone(&pipeline);
                             let playback = Arc::clone(&playback);
@@ -196,6 +223,7 @@ impl LiveWorker {
                             let playback_lock = Arc::clone(&playback_lock);
                             let pending_handles = Arc::clone(&pending_handles);
                             let accepts_fn = Arc::clone(&accepts_fn);
+                            let context = Arc::clone(&context);
 
                             tokio::task::spawn(async move {
                                 let _permit = sem.acquire_owned().await.unwrap();
@@ -212,6 +240,7 @@ impl LiveWorker {
                                     wav_bytes,
                                     target_language,
                                     token,
+                                    ctx_snapshot,
                                 )
                                 .await
                                 {
@@ -248,6 +277,7 @@ impl LiveWorker {
                                             pending_handles,
                                             accepts_fn,
                                             on_event,
+                                            context,
                                             t_capture_end,
                                         )
                                         .await;
@@ -266,6 +296,7 @@ impl LiveWorker {
                                             pending_handles,
                                             accepts_fn,
                                             on_event,
+                                            context,
                                             t_capture_end,
                                         )
                                         .await;

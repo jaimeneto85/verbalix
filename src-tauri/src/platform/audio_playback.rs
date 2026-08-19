@@ -14,7 +14,10 @@ mod mac {
 
     enum PlaybackCommand {
         Play(Vec<u8>, mpsc::SyncSender<Result<(), VerbalixError>>),
-        PlayStream(StreamSegmentHandle, mpsc::SyncSender<Result<(), VerbalixError>>),
+        PlayStream(
+            StreamSegmentHandle,
+            mpsc::SyncSender<Result<(), VerbalixError>>,
+        ),
         Stop,
     }
 

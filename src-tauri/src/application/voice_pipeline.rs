@@ -141,6 +141,7 @@ impl VoicePipelinePort for RemoteVoicePipeline {
         wav_bytes: Vec<u8>,
         target_language: &'a str,
         token: &'a str,
+        context: Vec<String>,
     ) -> Pin<
         Box<
             dyn std::future::Future<Output = Result<StreamSegmentHandle, InterpretOutcome>>
@@ -161,6 +162,7 @@ impl VoicePipelinePort for RemoteVoicePipeline {
                     wav_bytes,
                     target_language: target,
                     token: tok,
+                    context,
                 },
             )
             .await

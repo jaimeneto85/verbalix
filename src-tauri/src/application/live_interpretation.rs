@@ -8,7 +8,7 @@ use crate::{
         runtime_pause::{OnAirGuard, RuntimePause},
         AudioPreviewPort, AudioStreamPort, VirtualMicOutputPort, VoicePipelinePort,
     },
-    domain::{LiveState, SegmentId, VerbalixError},
+    domain::{LiveState, SegmentId, TranslationContext, VerbalixError},
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -32,6 +32,7 @@ pub struct LiveInterpretationCoordinator {
     on_live_event: LiveEventFn,
     virtual_mic: Arc<dyn VirtualMicOutputPort>,
     route: Arc<AtomicBool>,
+    context: Arc<Mutex<TranslationContext>>,
 }
 
 impl LiveInterpretationCoordinator {
@@ -62,6 +63,7 @@ impl LiveInterpretationCoordinator {
             on_live_event,
             virtual_mic,
             route,
+            context: Arc::new(Mutex::new(TranslationContext::new())),
         }
     }
 
@@ -86,6 +88,8 @@ impl LiveInterpretationCoordinator {
             st.last_segment_time = None;
         }
 
+        self.context.lock().unwrap().reset();
+
         let routed = resolve_route(
             route_to_virtual_mic,
             self.virtual_mic.as_ref(),
@@ -98,6 +102,7 @@ impl LiveInterpretationCoordinator {
             Arc::clone(&self.state),
             Arc::clone(&self.worker),
             token,
+            Arc::clone(&self.context),
         );
 
         let state_for_error = Arc::clone(&self.state);
@@ -140,6 +145,7 @@ impl LiveInterpretationCoordinator {
                 Arc::clone(&self.on_live_event),
             ),
             accepts_fn,
+            Arc::clone(&self.context),
         );
 
         *self.worker.lock().unwrap() = Some(worker);
@@ -154,6 +160,7 @@ impl LiveInterpretationCoordinator {
             stage_ms: None,
             segment_id: None,
             detected_language: None,
+            target_language: None,
             first_audio_ms: None,
         });
 
@@ -168,6 +175,8 @@ impl LiveInterpretationCoordinator {
         st.live_state = LiveState::Stopping;
         st.session = None;
         drop(st);
+
+        self.context.lock().unwrap().reset();
 
         self.route.store(false, Ordering::Relaxed);
         self.virtual_mic.close();
@@ -193,6 +202,7 @@ impl LiveInterpretationCoordinator {
             stage_ms: None,
             segment_id: None,
             detected_language: None,
+            target_language: None,
             first_audio_ms: None,
         });
     }
@@ -226,6 +236,11 @@ impl LiveInterpretationCoordinator {
     pub(crate) fn active_session_id(&self) -> Option<crate::domain::LiveSessionId> {
         self.state.lock().unwrap().session.as_ref().map(|s| s.id)
     }
+
+    #[cfg(test)]
+    pub(crate) fn context_snapshot(&self) -> Vec<String> {
+        self.context.lock().unwrap().snapshot()
+    }
 }
 
 fn resolve_route(
@@ -244,6 +259,7 @@ fn resolve_route(
                 stage_ms: None,
                 segment_id: None,
                 detected_language: None,
+                target_language: None,
                 first_audio_ms: None,
             });
             false

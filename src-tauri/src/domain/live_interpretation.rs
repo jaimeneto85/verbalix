@@ -93,6 +93,35 @@ pub struct InterpretOutcome {
     pub result: Result<SegmentResult, crate::domain::VerbalixError>,
 }
 
+const CONTEXT_CAP_ITEMS: usize = 2;
+const CONTEXT_SOURCE_CAP_CHARS: usize = 300;
+
+pub struct TranslationContext {
+    items: Vec<String>,
+}
+
+impl TranslationContext {
+    pub fn new() -> Self {
+        Self { items: Vec::new() }
+    }
+
+    pub fn push(&mut self, source: &str) {
+        let capped: String = source.chars().take(CONTEXT_SOURCE_CAP_CHARS).collect();
+        if self.items.len() >= CONTEXT_CAP_ITEMS {
+            self.items.remove(0);
+        }
+        self.items.push(capped);
+    }
+
+    pub fn snapshot(&self) -> Vec<String> {
+        self.items.clone()
+    }
+
+    pub fn reset(&mut self) {
+        self.items.clear();
+    }
+}
+
 #[cfg(test)]
 #[path = "live_interpretation_tests.rs"]
 mod tests;

@@ -124,6 +124,7 @@ pub(crate) struct StreamRequest {
     pub(crate) wav_bytes: Vec<u8>,
     pub(crate) target_language: String,
     pub(crate) token: String,
+    pub(crate) context: Vec<String>,
 }
 
 pub(crate) async fn do_interpret_stream(
@@ -136,13 +137,21 @@ pub(crate) async fn do_interpret_stream(
     let segment_id = req.segment_id;
     let target_language = req.target_language;
     let token = req.token;
-    let payload = serde_json::json!({
+    let context_items: Vec<serde_json::Value> = req
+        .context
+        .into_iter()
+        .map(|s| serde_json::json!({"source": s}))
+        .collect();
+    let mut payload = serde_json::json!({
         "requestId": format!("{}-{}", session_id.0, segment_id.0),
         "targetLanguage": target_language,
         "audioBase64": STANDARD.encode(&req.wav_bytes),
         "mimeType": "audio/wav",
         "stream": true,
     });
+    if !context_items.is_empty() {
+        payload["context"] = serde_json::Value::Array(context_items);
+    }
 
     let resp = match client
         .post(format!("{}/functions/v1/interpret", base_url))

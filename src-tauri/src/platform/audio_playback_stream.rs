@@ -1,9 +1,7 @@
 #[cfg(target_os = "macos")]
 pub(crate) mod mac_stream {
     use crate::{
-        application::streaming_audio::StreamSegmentHandle,
-        diagnostics,
-        domain::VerbalixError,
+        application::streaming_audio::StreamSegmentHandle, diagnostics, domain::VerbalixError,
         platform::audio_resample::IncrementalResampler,
     };
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
