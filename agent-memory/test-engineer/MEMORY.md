@@ -30,5 +30,14 @@
 
 - O projeto tem gate de linhas em `lib.rs` (≤301) verificado por `bundle-smoke.test.ts` — não adicionar código inline lá.
 - Commits NUNCA devem mencionar Claude, IA ou qualquer ferramenta de IA.
-- Worktree ativo em `.worktrees/voice-enrollment` (branch `voice-enrollment`).
-- Gates manuais documentados em `tasks/voice-enrollment/plan.md` na seção "Gates Manuais".
+- Worktree ativo em `.worktrees/live-latency` (branch `live-latency`), Round 2 concluído (Edge Function streaming Deno + Rust T2.2 com 18 testes).
+- `futures_util::stream::unfold` NÃO implementa `Unpin`. Para passar a funções `S: Unpin`, usar `Box::pin(unfold(...))` — `Box<T>: Unpin` sempre, então `Pin<Box<...>>: Unpin`.
+- `drain_streaming_body` checa `cancel` DEPOIS de `stream.next().await` retornar — para simular "cancel após primeiro chunk", o unfold define `cancel.store(true)` antes de retornar o segundo item; o item é recebido mas o loop faz break antes de processá-lo.
+- Gates manuais documentados em `tasks/voice-enrollment/plan.md` e `tasks/virtual-microphone/plan.md` na seção "Gates Manuais"/"Gates antes do handoff".
+- **QA exige E2E Playwright para TODA mudança de componente de frontend novo**, mesmo que já tenha Vitest de unidade/integração — rejeição comum se faltar `e2e/*.e2e.ts` cobrindo o componente. Ver `e2e/virtual-mic.e2e.ts` como exemplo do padrão a seguir (stub de `__TAURI_INTERNALS__.invoke` por `page.addInitScript`, parametrizado com um segundo argumento quando o cenário varia por status, ex.: `page.addInitScript(stubTauri, "notInstalled")`).
+- Ao montar o stub de `invoke`, sempre inclua `plugin:event|listen` retornando um id numérico (ex. `1`) — os componentes usam `listen()` do Tauri internamente mesmo quando o teste não dispara eventos custom.
+- Para alcançar uma seção condicional que só aparece com `profile.status === "ready"` (ex. `VirtualMicSection` dentro de `InterpretationPanel`), já retorne `voice_profile_status` com `status: "ready"` no stub em vez de simular o fluxo completo de gravação/upload — evita testes longos e frágeis quando o objetivo é outro componente.
+- **Edge Function tests (Deno)**: quando um handler tem ramos de role check (`anon`/`anonymous`) e normalizeError (`DOMException AbortError` → PROVIDER_TIMEOUT, objeto desconhecido → INTERNAL_ERROR), criar arquivo `*_edge_cases_test.ts` separado para não ultrapassar 300 linhas efetivas do handler_test.ts principal.
+- **AbortError em Deno**: `new DOMException("AbortError", "AbortError")` — primeiro argumento é a mensagem, segundo é o nome. Verificar `err instanceof DOMException && err.name === "AbortError"`.
+- **stages.ts**: pipeline functions devem ser testadas diretamente (sem passar pelo handler) para cobrir os 6 ramos AbortError→PROVIDER_TIMEOUT (3 por pipeline × 2 pipelines). Arquivo `stages_test.ts` separado para isso.
+- **Content-length guard em handler.ts**: testável passando header `Content-Length: <número>` ou `Content-Length: invalid` no Request. O guard atua ANTES de `parseRequest`.

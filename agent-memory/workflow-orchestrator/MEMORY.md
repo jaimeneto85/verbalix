@@ -216,6 +216,57 @@
   Estratégia: commitar checkpoints intermediários que COMPILAM (`cargo build` verde) mesmo com clippy vermelho de
   dead-code futuro; o round de wiring (runtime.rs) fecha o clippy verde. NUNCA silenciar com `#[allow(dead_code)]`.
 
+## Aprendizados de QA (cont. M4 — otimização de latência / streaming)
+- M4 (`docs/015`, branch `live-latency`): streaming TTS ponta-a-ponta (Edge passthrough PCM + playback
+  progressivo). ARQUITETURA-CHAVE que a análise dual (upsidedown) revelou ANTES de implementar: o ordering
+  N-1→N do M2 era um ACIDENTE (chamada `play()` síncrona bloqueante num runtime `current_thread` — nunca
+  cede, então nenhuma outra task progride). Playback progressivo ASSÍNCRONO (com `.await`) quebraria isso.
+  SOLUÇÃO desenhada no plano (D8): `tokio::sync::Mutex<()>` cap-1 (`playback_lock`) mantido pelo worker,
+  adquirido antes de tocar N e liberado ao fim — garantia EXPLÍCITA independente do runtime. Teste de
+  BURST-DRAIN obrigatório: `live_queue.insert()` pode retornar MÚLTIPLOS `Ready` numa chamada (N-1 atrasado
+  libera N-1,N,N+1) — provar que tocam em ordem sob o lock. LIÇÃO: quando um invariante depende de efeito
+  colateral de runtime, torne-o explícito antes de mudar o modelo de concorrência.
+- M4: streaming HTTP tem 2 armadilhas de timeout que os gates não pegam. (a) `reqwest::Client.timeout(55s)`
+  cobre a requisição INTEIRA (envio→consumo total do corpo) — se o corpo de N+1 só fosse consumido quando
+  chegasse a vez de tocar, o socket ficaria refém e estouraria; SOLUÇÃO (D9): DRENAR o corpo para buffer em
+  memória (`Arc<Mutex<VecDeque<f32>>>`+flags complete/cancel) assim que chega, DESACOPLADO da vez de tocar;
+  a vez de tocar só CONSOME. (b) na Edge Deno, `clearTimeout` no `finally` do setup dispara quando o
+  `Response` é RETORNADO (headers enviados) — no streaming isso NEUTRALIZA o abort enquanto o corpo flui;
+  SOLUÇÃO (D10): watchdog de inatividade dedicado ao corpo (`TransformStream` que aborta se nenhum chunk em
+  N s). Segmento descartado por overflow da fila DEVE setar `cancel` e fechar o corpo (senão socket órfão).
+- M4 privacidade de streaming: metadados NÃO-conteúdo (línguas, durações) podem ir em headers `X-Verbalix-*`,
+  mas CONTEÚDO (ex.: `sourceText` da transcrição p/ contexto) NUNCA em header — logs de acesso de infra
+  (Supabase/Deno/proxies) capturam headers. SOLUÇÃO: frame de metadados no CORPO streaming
+  `[magic "VLBX"][u32 BE len][JSON UTF-8][PCM]`; o Rust parseia com `from_be_bytes` (case byte-a-byte com o
+  `DataView.setUint32(...,false)` da Edge). Formato de áudio p/ streaming incremental: PCM cru
+  (`output_format=pcm_24000`) evita decodificador de MP3 e parsing de frame; resample incremental PRECISA de
+  estado de fase entre chunks (senão clicks de borda). reqwest exige a feature `stream` p/ `bytes_stream()`.
+- M4 contexto de tradução (mudança do modelo de privacidade do M2, onde texto nunca voltava): texto vive SÓ
+  em memória do Rust, PROMOVIDO só APÓS playback bem-sucedido (re-checar `accepts` — sem "contexto fantasma"
+  de segmento que truncou; reset de `leave_live` vence a corrida). BUG real que o engenheiro pegou:
+  `spawn_blocking(f).await.is_ok()` checa só que a task não PANICOU, não o `Result` interno — usar
+  `matches!(...await, Ok(Ok(())))` p/ "playback realmente sucedeu". Contexto reinjetado é texto de voz do
+  usuário → envolver em `<untrusted_context>` PRÓPRIO com invariante (prompt-injection via o próprio canal
+  de contexto). Defasagem causal aceita: com `MAX_IN_FLIGHT=2` o contexto é best-effort dos segmentos JÁ
+  concluídos, não exatamente N-1.
+- M4 gate de 300 EFETIVAS aplica-se a arquivos de TESTE também (precedente M1: `handler_test.ts` dividido em
+  3). No fim do M4 o sweep pós-refactor pegou `live_worker_tests.rs`=420 e `voice_pipeline_stream_tests.rs`
+  =308 além de 2 de produção (`live_worker.rs`=308, `diagnostics.rs`=302) — extrair por SRP em submódulos
+  (`live_worker/playback.rs`, `diagnostics/latency.rs`, helpers/streaming/frame de teste). SEMPRE rodar o
+  sweep `awk 'NF{c++}END{print c}'` em TODOS os arquivos alterados (git diff --name-only) no fim, não só nos
+  óbvios. Split de módulo Rust com `pub use` re-exporta caminhos estáveis (`crate::diagnostics::record_latency`
+  segue funcionando); `LiveLatencyAggregator` re-exportado só sob `#[cfg(test)]` p/ não gerar unused_imports.
+- M4 padrão de rounds (repetível, FUNCIONOU): feature grande fatiada em ~7 rounds bounded (quick-wins
+  isolados → Edge Deno → núcleo Rust streaming em 3 sub-rounds → frontend+fechamento → 2 refactors de
+  tamanho). Sub-agentes TRUNCARAM em ~5 rounds (relatório cortado mid-edit, sem commit). Em TODOS o
+  orquestrador: (1) NÃO confiou no texto; inspecionou `git log/status` + rodou gates empiricamente incl.
+  pesados (clippy, cargo test, e2e, coverage, tauri bundle, deno); (2) COMMITOU o checkpoint compilável
+  quando o agente esqueceu (produção verde mesmo com testes/clippy pendentes); (3) re-delegou continuação
+  BOUNDED com inventário EXATO (arquivo:linha dos erros de compilação de teste, itens de dead-code, arquivos
+  >300). `cargo build` (produção) verde + `cargo test` (lib test) VERMELHO = call-sites de teste
+  desatualizados após a API crescer um campo/param — fix mecânico bounded. Rodar rounds SEQUENCIAIS no mesmo
+  worktree (nunca `cargo` concorrente — corrida no `target/`).
+
 ## iOS — Auth deep link / Universal Links
 - Bug de produção: magic link caiu em `http://localhost:3000/?error=access_denied&error_code=otp_expired`
   porque o `redirect_to` (`verbalix-ios://auth/callback`) NÃO estava na allow-list do Supabase → o serviço
