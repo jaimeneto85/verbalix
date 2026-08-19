@@ -79,6 +79,7 @@ export type LiveStatus = 'idle' | 'listening' | 'processing' | 'speaking' | 'err
 export interface LiveStateEvent {
   status: LiveStatus;
   lastLatencyMs?: number;
+  firstAudioMs?: number;
   lastDropped?: boolean;
   errorMessage?: string;
   sessionId?: string;

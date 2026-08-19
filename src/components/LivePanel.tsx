@@ -119,6 +119,13 @@ export function LivePanel({ voiceProfileId, onAirChange, onVirtualMicFallback }:
         {STATUS_LABELS[liveState.status]}
       </div>
 
+      {liveState.firstAudioMs !== undefined && (
+        <div className="live-latency live-latency--first-audio">
+          <span className="live-latency__label">fala→primeiro áudio</span>
+          <span className="live-latency__value">{liveState.firstAudioMs} ms</span>
+        </div>
+      )}
+
       {liveState.lastLatencyMs !== undefined && (
         <div className="live-latency">{liveState.lastLatencyMs} ms</div>
       )}

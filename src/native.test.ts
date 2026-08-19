@@ -254,6 +254,23 @@ describe("native command contract", () => {
     expect(callback).toHaveBeenCalledWith({ status: "speaking", lastLatencyMs: 1200 });
   });
 
+  it("forwards firstAudioMs from the live-state-changed payload without modification", async () => {
+    let deliver: ((event: { payload: unknown }) => void) | undefined;
+    listen.mockImplementation((_eventName, handler) => {
+      deliver = handler;
+      return Promise.resolve(() => undefined);
+    });
+    const callback = vi.fn();
+
+    native.onLiveStateChange(callback);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    deliver?.({ payload: { status: "speaking", firstAudioMs: 720 } });
+
+    expect(callback).toHaveBeenCalledWith({ status: "speaking", firstAudioMs: 720 });
+  });
+
   it("unsubscribes from live-state-changed once the underlying listener resolves", async () => {
     const unlisten = vi.fn();
     listen.mockResolvedValue(unlisten);
