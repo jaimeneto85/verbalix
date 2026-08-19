@@ -1,5 +1,9 @@
 use crate::{
-    application::VoicePipelinePort,
+    application::{
+        streaming_audio::StreamSegmentHandle,
+        voice_pipeline_stream::{do_interpret_stream, parse_error_response},
+        VoicePipelinePort,
+    },
     domain::{
         InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError,
     },
@@ -10,18 +14,19 @@ use serde::{Deserialize, Serialize};
 use std::{pin::Pin, time::Duration};
 
 pub struct RemoteVoicePipeline {
-    client: Client,
-    base_url: String,
-    anonymous_key: String,
+    pub(crate) client: Client,
+    pub(crate) base_url: String,
+    pub(crate) anonymous_key: String,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct InterpretPayload {
+struct InterpretJsonPayload {
     request_id: String,
     target_language: String,
     audio_base64: String,
     mime_type: &'static str,
+    stream: bool,
 }
 
 #[derive(Deserialize)]
@@ -41,16 +46,6 @@ struct StageMsResponse {
     tts: u32,
 }
 
-#[derive(Deserialize)]
-struct ErrorBody {
-    error: ErrorDetail,
-}
-
-#[derive(Deserialize)]
-struct ErrorDetail {
-    code: String,
-}
-
 impl RemoteVoicePipeline {
     pub fn new(base_url: impl Into<String>, anonymous_key: impl Into<String>) -> Self {
         let client = Client::builder()
@@ -65,20 +60,7 @@ impl RemoteVoicePipeline {
     }
 
     async fn parse_error(resp: Response, status: StatusCode) -> VerbalixError {
-        if let Ok(body) = resp.json::<ErrorBody>().await {
-            match body.error.code.as_str() {
-                "STT_FAILED" => return VerbalixError::SttFailed,
-                "TRANSLATION_FAILED" => return VerbalixError::TranslationFailed,
-                "TTS_FAILED" => return VerbalixError::TtsFailed,
-                _ => {}
-            }
-        }
-        match status {
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => VerbalixError::Unauthenticated,
-            StatusCode::NOT_FOUND => VerbalixError::VoiceProfileMissing,
-            StatusCode::GATEWAY_TIMEOUT => VerbalixError::ProviderTimeout,
-            _ => VerbalixError::InterpretationFailed,
-        }
+        parse_error_response(resp, status).await
     }
 }
 
@@ -92,11 +74,12 @@ impl VoicePipelinePort for RemoteVoicePipeline {
         token: &'a str,
     ) -> Pin<Box<dyn std::future::Future<Output = InterpretOutcome> + Send + 'a>> {
         Box::pin(async move {
-            let payload = InterpretPayload {
+            let payload = InterpretJsonPayload {
                 request_id: format!("{}-{}", session_id.0, segment_id.0),
                 target_language: target_language.to_owned(),
                 audio_base64: STANDARD.encode(&wav_bytes),
                 mime_type: "audio/wav",
+                stream: false,
             };
 
             let resp = match self
@@ -148,6 +131,37 @@ impl VoicePipelinePort for RemoteVoicePipeline {
                     result: Err(VerbalixError::InvalidResponse),
                 },
             }
+        })
+    }
+
+    fn interpret_stream<'a>(
+        &'a self,
+        session_id: LiveSessionId,
+        segment_id: SegmentId,
+        wav_bytes: Vec<u8>,
+        target_language: &'a str,
+        token: &'a str,
+    ) -> Pin<
+        Box<
+            dyn std::future::Future<Output = Result<StreamSegmentHandle, InterpretOutcome>>
+                + Send
+                + 'a,
+        >,
+    > {
+        let target = target_language.to_owned();
+        let tok = token.to_owned();
+        Box::pin(async move {
+            do_interpret_stream(
+                &self.client,
+                &self.base_url,
+                &self.anonymous_key,
+                session_id,
+                segment_id,
+                wav_bytes,
+                target,
+                tok,
+            )
+            .await
         })
     }
 }

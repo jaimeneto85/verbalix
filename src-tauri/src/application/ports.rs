@@ -171,6 +171,34 @@ pub trait VoicePipelinePort: Send + Sync {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = crate::domain::InterpretOutcome> + Send + 'a>,
     >;
+
+    fn interpret_stream<'a>(
+        &'a self,
+        session_id: crate::domain::LiveSessionId,
+        segment_id: crate::domain::SegmentId,
+        wav_bytes: Vec<u8>,
+        target_language: &'a str,
+        token: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        crate::application::streaming_audio::StreamSegmentHandle,
+                        crate::domain::InterpretOutcome,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        let _ = (wav_bytes, target_language, token);
+        Box::pin(async move {
+            Err(crate::domain::InterpretOutcome {
+                session_id,
+                segment_id,
+                result: Err(crate::domain::VerbalixError::InterpretationFailed),
+            })
+        })
+    }
 }
 
 pub trait AudioPreviewPort: Send + Sync {
