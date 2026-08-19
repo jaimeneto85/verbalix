@@ -186,6 +186,8 @@ impl LiveInterpretationCoordinator {
         st.live_state = LiveState::Idle;
         drop(st);
 
+        crate::diagnostics::emit_latency_summary();
+
         self.on_live_event.as_ref()(LiveEventPayload {
             status: "idle".to_owned(),
             stage_ms: None,

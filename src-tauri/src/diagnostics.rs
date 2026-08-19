@@ -127,6 +127,32 @@ pub(crate) fn increment_underruns() {
     }
 }
 
+pub(crate) fn emit_latency_summary() {
+    if !enabled() {
+        return;
+    }
+    if let Ok(agg) = global_agg().lock() {
+        let stages: &[(LatencyStage, &str)] = &[
+            (LatencyStage::CaptureToRequest, "capture_to_request"),
+            (LatencyStage::Ttfb, "ttfb"),
+            (LatencyStage::FirstAudio, "first_audio"),
+            (LatencyStage::PlaybackEnd, "playback_end"),
+        ];
+        for &(stage, name) in stages {
+            emit(
+                "live_latency_summary",
+                name,
+                &format!("p50={} p95={}", agg.p50(stage), agg.p95(stage)),
+            );
+        }
+        emit(
+            "live_latency_summary",
+            "underruns",
+            &format!("total={}", agg.underruns),
+        );
+    }
+}
+
 pub(crate) mod history;
 pub(crate) fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
