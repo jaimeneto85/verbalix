@@ -3,6 +3,7 @@ mod commands;
 mod commands_live;
 mod commands_settings;
 mod commands_transform;
+mod commands_virtual_mic;
 mod commands_voice;
 mod diagnostics;
 mod domain;
@@ -20,6 +21,7 @@ use commands::*;
 use commands_live::*;
 use commands_settings::*;
 use commands_transform::*;
+use commands_virtual_mic::*;
 use commands_voice::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use overlay_commands::*;
@@ -251,7 +253,8 @@ pub fn run() {
             enter_live,
             leave_live,
             live_status,
-            set_target_language
+            set_target_language,
+            virtual_mic_status
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Verbalix");

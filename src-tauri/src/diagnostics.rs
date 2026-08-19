@@ -1,3 +1,4 @@
+use crate::application::VirtualMicStatus;
 use crate::domain::{SelectionSnapshot, VerbalixError};
 #[cfg(target_os = "macos")]
 use crate::platform::macos_focus::{AxCategory, AxStage, ExtractionOrigin};
@@ -72,6 +73,19 @@ pub fn accessibility(trusted: bool) {
 
 pub fn ai_readiness(status: &str) {
     emit("ai", "readiness", &format!("status={status}"));
+}
+
+pub fn virtual_mic(status: VirtualMicStatus, buffer_depth: u32, underruns: u64) {
+    let label = match status {
+        VirtualMicStatus::NotInstalled => "not_installed",
+        VirtualMicStatus::Installed => "installed",
+        VirtualMicStatus::IncompatibleVersion => "incompatible_version",
+    };
+    emit(
+        "virtual_mic",
+        "status",
+        &format!("status={label} buffer_depth={buffer_depth} underruns={underruns}"),
+    );
 }
 
 pub fn capture_success(snapshot: &SelectionSnapshot) {

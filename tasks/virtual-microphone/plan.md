@@ -304,10 +304,10 @@ Seção "Microfone virtual" no painel Interpretação:
   `LiveQueue` (enqueue não-bloqueante). Rodar testes de ordering do M2 (não regride).
 
 ### Fase 5 — Commands + wiring + eventos + diagnostics
-- [ ] T5.1: [LOW] `commands_virtual_mic.rs`: `virtual_mic_status`; emitter do evento `virtual-mic-status`.
+- [x] T5.1: [LOW] `commands_virtual_mic.rs`: `virtual_mic_status`; emitter do evento `virtual-mic-status`.
 - [x] T5.2: [MEDIUM] `runtime.rs`: construir device/output/router; wiring no `AppRuntime`/`build_live_coordinator`. (parcial: virtual_mic_status command fica pro próximo round)
-- [ ] T5.3: [LOW] `lib.rs`: registrar comandos + listener de device-list; manter `lib.rs` ≤301 (R6).
-- [ ] T5.4: [LOW] `diagnostics.rs`: `virtual_mic(status, buffer_depth, underruns)` sanitizado.
+- [x] T5.3: [LOW] `lib.rs`: registrar comandos + listener de device-list; manter `lib.rs` ≤301 (R6).
+- [x] T5.4: [LOW] `diagnostics.rs`: `virtual_mic(status, buffer_depth, underruns)` sanitizado.
 
 ### Fase 6 — Frontend
 - [ ] T6.1: [LOW] `types.ts` + `native.ts`: `VirtualMicStatus`, `virtualMicStatus()`, `onVirtualMicStatusChange()`.
