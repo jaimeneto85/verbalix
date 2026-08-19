@@ -97,4 +97,23 @@ mod tests {
         };
         assert!(settings.validate().is_err());
     }
+
+    #[test]
+    fn legacy_settings_json_without_output_to_virtual_mic_defaults_to_false() {
+        let legacy_json = r#"{
+            "formality": 3,
+            "length": "balanced",
+            "tone": "technical",
+            "confirmBeforeReplace": false,
+            "historyEnabled": false,
+            "automaticToolbar": true,
+            "shortcut": "Option+Shift+Space"
+        }"#;
+
+        let settings: AppSettings = serde_json::from_str(legacy_json).unwrap();
+
+        assert!(!settings.output_to_virtual_mic);
+        assert_eq!(settings.target_language, "en");
+        assert!(settings.voice_profile_id.is_none());
+    }
 }

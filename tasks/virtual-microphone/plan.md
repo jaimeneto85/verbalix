@@ -315,11 +315,17 @@ Seção "Microfone virtual" no painel Interpretação:
   não roda sudo) + toggle `output_to_virtual_mic` + indicador de destino do áudio; estilos em `panels.css`.
 
 ### Fase 7 — Testes (test-engineer) + QA
-- [ ] T7.1: Rust — `playback_router` (roteamento, fail-open), settings default/preservação, stub, filtro de captura.
-- [ ] T7.2: Rust — `live_interpretation` enter/leave com vmic (mock ports): routing on/off, open falha → fallback, close no leave.
-- [ ] T7.3: Vitest — `native.test.ts` cobertura de `virtualMicStatus`/listener; `types.ts` 100%.
-- [ ] T7.4: Vitest — painel: estados not-installed/installed/incompatible, toggle, indicador de destino.
-- [ ] T7.5: Playwright — sequência de comandos da seção do vmic (status + toggle).
+- [x] T7.1: Rust — `playback_router` (roteamento, fail-open), settings default/preservação, stub, filtro de captura.
+- [x] T7.2: Rust — `live_interpretation` enter/leave com vmic (mock ports): routing on/off, open falha → fallback, close no leave.
+  Auditoria (round test-engineer): adicionados `resolve_route_true_when_setting_on_and_open_succeeds` (route ON +
+  `open()` sucesso → `route==true`) e `leave_live_zeroes_route_after_successful_routing` (`leave_live` zera `route`
+  e chama `virtual_mic.close()` partindo de um roteamento ativo) em `live_interpretation_tests.rs`. Adicionado
+  `legacy_settings_json_without_output_to_virtual_mic_defaults_to_false` (EC12) em `domain/settings.rs`. Adicionado
+  `virtual_mic_metadata_*` (sanitização) em `diagnostics_tests.rs` (extraído de `diagnostics.rs` para respeitar o
+  gate de ~300 linhas após a adição).
+- [x] T7.3: Vitest — `native.test.ts` cobertura de `virtualMicStatus`/listener; `types.ts` 100%.
+- [x] T7.4: Vitest — painel: estados not-installed/installed/incompatible, toggle, indicador de destino.
+- [x] T7.5: Playwright — sequência de comandos da seção do vmic (status + toggle).
 - [ ] T7.6: QA (@qa-reviewer com análise dual) → verdict.
 
 ## Gates antes do handoff (DENTRO do worktree)

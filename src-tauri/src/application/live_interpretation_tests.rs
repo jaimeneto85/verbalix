@@ -345,3 +345,63 @@ fn leave_live_closes_virtual_mic() {
 
     assert!(close_called.load(Ordering::Relaxed));
 }
+
+#[test]
+fn resolve_route_true_when_setting_on_and_open_succeeds() {
+    let route = Arc::new(AtomicBool::new(false));
+    let coord = make_coordinator_with_route(
+        Arc::new(FakeAudioStream::new()),
+        Arc::new(FakePipeline { should_fail: false }),
+        Arc::new(FakeVirtualMicOutput::new()),
+        Arc::clone(&route),
+    );
+
+    let _guard = coord
+        .enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned(), true)
+        .unwrap();
+
+    assert!(route.load(Ordering::Relaxed));
+}
+
+#[test]
+fn leave_live_zeroes_route_after_successful_routing() {
+    let close_called = Arc::new(AtomicBool::new(false));
+    let vmic = FakeVirtualMicOutput {
+        open_fails: false,
+        close_called: Arc::clone(&close_called),
+    };
+    let route = Arc::new(AtomicBool::new(false));
+    let coord = make_coordinator_with_route(
+        Arc::new(FakeAudioStream::new()),
+        Arc::new(FakePipeline { should_fail: false }),
+        Arc::new(vmic),
+        Arc::clone(&route),
+    );
+
+    let _guard = coord
+        .enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned(), true)
+        .unwrap();
+    assert!(route.load(Ordering::Relaxed));
+
+    coord.leave_live();
+
+    assert!(!route.load(Ordering::Relaxed));
+    assert!(close_called.load(Ordering::Relaxed));
+}
+
+fn make_coordinator_with_route(
+    capture: Arc<dyn AudioStreamPort>,
+    pipeline: Arc<dyn VoicePipelinePort>,
+    virtual_mic: Arc<dyn VirtualMicOutputPort>,
+    route: Arc<AtomicBool>,
+) -> LiveInterpretationCoordinator {
+    LiveInterpretationCoordinator::new(
+        pipeline,
+        capture,
+        Arc::new(FakeAudioPreview),
+        Arc::new(RuntimePause::default()),
+        Arc::new(|_| {}),
+        virtual_mic,
+        route,
+    )
+}
