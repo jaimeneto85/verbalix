@@ -319,7 +319,7 @@ enum InterpretMode { Json, Stream }
   separar "ainda pode virar JSON de erro" (STT/translate/TTS-not-ok) de "corpo já fluindo → truncar". Ramo
   streaming = FRAME de metadados no corpo (`[magic][len][json sourceText]` + PCM) + headers `X-Verbalix-*`
   não-conteúdo (D4). Ramo JSON legado byte-idêntico ao M2. **Watchdog de inatividade do corpo (D10, CA12).**
-- [x] T1.4: [MEDIUM] `{contract,provider,handler}_test.ts`: CA01–CA05, CA12, contexto, não-regressão do JSON.
+- [x] T1.4: [MEDIUM] `{contract,provider,handler}_test.ts`: CA01–CA05, CA12, contexto, não-regressão do JSON. + `{handler_edge_cases,stages}_test.ts`: PROVIDER_TIMEOUT via AbortError, INTERNAL_ERROR, anon role, content-length guard, runStreamPipeline/runInterpretPipeline AbortError paths.
 
 ### Round 3 — Núcleo de streaming no Rust (SEQUENCIAL; maior valor de latência)
 - [ ] T2.2: [HIGH] `Cargo.toml` (feature `stream`), `ports.rs`, `voice_pipeline.rs`(+split se preciso):
