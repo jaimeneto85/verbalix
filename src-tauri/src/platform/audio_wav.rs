@@ -229,6 +229,22 @@ mod tests {
     }
 
     #[test]
+    fn pcm_i16le_to_f32_empty_input_returns_empty() {
+        let out = pcm_i16le_to_f32(&[]);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn incremental_resampler_empty_push_returns_empty() {
+        let mut rs = IncrementalResampler::new(24_000, 48_000, 1);
+        let out = rs.push(&[]);
+        assert!(
+            out.is_empty(),
+            "empty push must return empty vec without panicking"
+        );
+    }
+
+    #[test]
     fn incremental_resampler_identity_same_rate() {
         let mut rs = IncrementalResampler::new(16_000, 16_000, 1);
         let input = vec![0.1f32, 0.5, -0.3];

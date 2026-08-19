@@ -190,6 +190,39 @@ fn pause_in_middle_does_not_close_with_conservative_threshold() {
 }
 
 #[test]
+fn voiced_frames_accumulate_across_pause_until_hysteresis_activates() {
+    let mut ep = Endpointer::new(config_with_hysteresis(3, 10, 3, 8, 500));
+
+    push_voiced(&mut ep, 3);
+    assert!(ep.is_open());
+
+    push_silent(&mut ep, 5);
+    assert!(
+        ep.is_open(),
+        "5 silent < conservative=10; voiced_frames=3 < min_voiced_for_early=8; still open"
+    );
+
+    push_voiced(&mut ep, 5);
+    assert!(
+        ep.is_open(),
+        "voiced resumes; voiced_frames now 8 = min_voiced_for_early"
+    );
+
+    push_silent(&mut ep, 3);
+    assert!(
+        ep.is_open(),
+        "3 silences = early threshold; not yet exceeded (> not >=)"
+    );
+
+    let close_event = ep.push_frame(0.0);
+    assert!(
+        matches!(close_event, Some(EndpointEvent::Closed)),
+        "voiced_frames=8 >= min_voiced_for_early=8 now; 4 silent > early=3 → closes"
+    );
+    assert!(!ep.is_open());
+}
+
+#[test]
 fn hysteresis_activates_after_sufficient_voiced_frames() {
     let mut ep = Endpointer::new(config_with_hysteresis(5, 10, 3, 10, 500));
 

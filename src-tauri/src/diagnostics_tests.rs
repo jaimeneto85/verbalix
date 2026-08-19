@@ -66,6 +66,25 @@ fn underrun_counter_increments() {
 }
 
 #[test]
+fn latency_ms_at_exact_bucket_boundary_falls_in_that_bucket() {
+    let mut agg = LiveLatencyAggregator::new();
+    agg.record(LatencyStage::FirstAudio, 50);
+    assert_eq!(
+        agg.p50(LatencyStage::FirstAudio),
+        50,
+        "ms=50 (exactly the first boundary) must land in the ≤50ms bucket"
+    );
+
+    let mut agg2 = LiveLatencyAggregator::new();
+    agg2.record(LatencyStage::FirstAudio, 5001);
+    let p50 = agg2.p50(LatencyStage::FirstAudio);
+    assert!(
+        p50 > 5000,
+        "ms=5001 exceeds all named boundaries; expected overflow bucket, got {p50}"
+    );
+}
+
+#[test]
 fn single_sample_p50_and_p95_agree() {
     let mut agg = LiveLatencyAggregator::new();
     agg.record(LatencyStage::PlaybackEnd, 300);
