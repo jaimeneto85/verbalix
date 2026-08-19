@@ -34,7 +34,7 @@ impl AudioPreviewPort for PlaybackRouter {
             let (samples, src_rate, channels) =
                 decode_wav_f32(&wav_bytes).ok_or(VerbalixError::AudioPlaybackFailed)?;
             let resampled = resample_f32(&samples, src_rate, VIRTUAL_MIC_SAMPLE_RATE, channels);
-            self.virtual_mic.enqueue(resampled, 1);
+            self.virtual_mic.enqueue(resampled, channels);
             Ok(())
         } else {
             self.speaker.play(wav_bytes)

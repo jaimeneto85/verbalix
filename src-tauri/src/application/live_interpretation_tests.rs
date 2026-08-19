@@ -389,6 +389,28 @@ fn leave_live_zeroes_route_after_successful_routing() {
     assert!(close_called.load(Ordering::Relaxed));
 }
 
+#[test]
+fn enter_live_with_routing_cleans_up_on_capture_failure() {
+    let close_called = Arc::new(AtomicBool::new(false));
+    let vmic = FakeVirtualMicOutput {
+        open_fails: false,
+        close_called: Arc::clone(&close_called),
+    };
+    let route = Arc::new(AtomicBool::new(false));
+    let coord = make_coordinator_with_route(
+        Arc::new(FakeAudioStream::new_failing()),
+        Arc::new(FakePipeline { should_fail: false }),
+        Arc::new(vmic),
+        Arc::clone(&route),
+    );
+
+    let result = coord.enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned(), true);
+
+    assert!(matches!(result, Err(VerbalixError::AudioCaptureFailed)));
+    assert!(!route.load(Ordering::Relaxed));
+    assert!(close_called.load(Ordering::Relaxed));
+}
+
 fn make_coordinator_with_route(
     capture: Arc<dyn AudioStreamPort>,
     pipeline: Arc<dyn VoicePipelinePort>,

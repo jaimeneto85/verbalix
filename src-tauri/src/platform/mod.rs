@@ -4,6 +4,8 @@ mod audio_capture;
 pub mod audio_permission;
 #[cfg(target_os = "macos")]
 mod audio_playback;
+#[cfg(target_os = "macos")]
+mod audio_processing;
 pub mod audio_wav;
 mod causal_epoch;
 #[cfg(target_os = "macos")]

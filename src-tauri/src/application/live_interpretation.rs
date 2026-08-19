@@ -108,6 +108,8 @@ impl LiveInterpretationCoordinator {
         });
 
         self.capture.start_stream(sink, error_sink).map_err(|_| {
+            self.virtual_mic.close();
+            self.route.store(false, Ordering::Relaxed);
             let mut st = self.state.lock().unwrap();
             st.live_state = LiveState::Idle;
             st.session = None;
