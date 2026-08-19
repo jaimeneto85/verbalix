@@ -325,7 +325,11 @@ Seção "Microfone virtual" no painel Interpretação:
   gate de ~300 linhas após a adição).
 - [x] T7.3: Vitest — `native.test.ts` cobertura de `virtualMicStatus`/listener; `types.ts` 100%.
 - [x] T7.4: Vitest — painel: estados not-installed/installed/incompatible, toggle, indicador de destino.
-- [x] T7.5: Playwright — sequência de comandos da seção do vmic (status + toggle).
+- [x] T7.5: Playwright — sequência de comandos da seção do vmic (status + toggle). `e2e/virtual-mic.e2e.ts`
+  (4 testes): notInstalled mostra status + CTA de instalação sem invocar sudo/script; installed esconde a CTA;
+  incompatibleVersion mostra orientação de reinstalar; toggle dispara `save_settings` com
+  `outputToVirtualMic: true`. Segue exatamente o padrão de `live-interpretation.e2e.ts` (stub de
+  `__TAURI_INTERNALS__.invoke` + `plugin:event|listen`).
 - [ ] T7.6: QA (@qa-reviewer com análise dual) → verdict.
 
 ## Gates antes do handoff (DENTRO do worktree)
