@@ -343,9 +343,9 @@ enum InterpretMode { Json, Stream }
   → Se custo/risco/valor desfavorável na implementação, ENTREGAR SEM D4 e documentar como trilha futura.
 
 ### Round 5 — Frontend + testes de integração + QA
-- [ ] T4.3: [LOW] `live-state` payload ganha `firstAudioMs`; `LivePanel.tsx` exibe "fala→primeiro áudio";
+- [x] T4.3: [LOW] `live-state` payload ganha `firstAudioMs`; `LivePanel.tsx` exibe "fala→primeiro áudio";
   `native.ts`/`types.ts` tipados (camelCase); `LivePanel.test.tsx`/`native.test.ts`; e2e ajustado.
-- [ ] T5.1: [MEDIUM] Testes coordinator/worker: ordering+burst-drain (CA07), fail-closed truncado (CA06),
+- [x] T5.1: [MEDIUM] Testes coordinator/worker: ordering+burst-drain (CA07), fail-closed truncado (CA06),
   stop/drop mid-stream fechando socket (CA11/EC04/EC08), underrun mid-segmento (EC07), contexto (CA08).
 - [ ] T5.2: [LOW] Rodar TODOS os gates; QA (dual analysis) e correções.
 
