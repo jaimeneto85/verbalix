@@ -32,8 +32,6 @@ struct InterpretJsonPayload {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InterpretResponseBody {
-    #[allow(dead_code)]
-    request_id: String,
     detected_language: String,
     audio_base64: String,
     stage_ms: StageMsResponse,
