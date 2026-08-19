@@ -194,6 +194,13 @@ export function InterpretationPanel({
               {recordingState === "recorded" && (
                 <div className="recording-controls">
                   <p>Amostra gravada. Pronto para enviar.</p>
+                  <input
+                    className="voice-name-input"
+                    placeholder="Nome do perfil de voz"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    maxLength={64}
+                  />
                   <div className="button-row">
                     <button className="btn-primary" onClick={upload}>Enviar</button>
                     <button className="btn-secondary" onClick={() => setRecordingState("idle")}>Re-gravar</button>
