@@ -7,13 +7,24 @@ import {
 } from "./contract.ts";
 import type { Fetcher } from "./provider.ts";
 import type { InterpretServiceClient } from "./service_client.ts";
-import { runInterpretPipeline } from "./stages.ts";
+import { runInterpretPipeline, runStreamPipeline } from "./stages.ts";
+import {
+  BODY_INACTIVITY_MS,
+  bodyWithInactivityWatchdog,
+  buildMetadataFrame,
+  prependFrame,
+} from "./streaming.ts";
 
 export const MAX_INTERPRET_BODY_BYTES = Math.ceil(MAX_AUDIO_BYTES * (4 / 3)) +
   8 * 1024;
 
-const responseHeaders = {
+const jsonHeaders = {
   "Content-Type": "application/json",
+  "Cache-Control": "no-store",
+};
+
+const streamHeaders = {
+  "Content-Type": "application/octet-stream",
   "Cache-Control": "no-store",
 };
 
@@ -62,6 +73,38 @@ export async function handleInterpret(
       return errorResponse("NO_VOICE_PROFILE", 404);
     }
 
+    if (interpretReq.stream) {
+      const result = await runStreamPipeline(
+        interpretReq.audioBase64,
+        interpretReq.targetLanguage,
+        voiceProfile.providerVoiceId,
+        interpretReq.context,
+        deps.fetcher,
+        deps.elevenLabsKey,
+        deps.openAiKey,
+        deps.openAiModel,
+      );
+
+      const frame = buildMetadataFrame(result.sourceText);
+      const watchdogBody = bodyWithInactivityWatchdog(
+        result.ttsBody,
+        BODY_INACTIVITY_MS,
+      );
+      const combinedBody = prependFrame(frame, watchdogBody);
+
+      return new Response(combinedBody, {
+        status: 200,
+        headers: {
+          ...streamHeaders,
+          "X-Verbalix-Detected-Language": result.detectedLanguage,
+          "X-Verbalix-Target-Language": interpretReq.targetLanguage,
+          "X-Verbalix-Stt-Ms": String(result.sttMs),
+          "X-Verbalix-Translate-Ms": String(result.translateMs),
+          "X-Verbalix-Audio-Format": "pcm_24000",
+        },
+      });
+    }
+
     const pipelineResult = await runInterpretPipeline(
       interpretReq.audioBase64,
       interpretReq.targetLanguage,
@@ -83,7 +126,7 @@ export async function handleInterpret(
 
     return new Response(JSON.stringify(response), {
       status: 200,
-      headers: responseHeaders,
+      headers: jsonHeaders,
     });
   } catch (reason) {
     const code = normalizeError(reason);
@@ -120,13 +163,13 @@ async function readBoundedBody(request: Request): Promise<Uint8Array> {
     reader.releaseLock();
   }
 
-  const body = new Uint8Array(length);
+  const result = new Uint8Array(length);
   let offset = 0;
   for (const chunk of chunks) {
-    body.set(chunk, offset);
+    result.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return body;
+  return result;
 }
 
 function bearerToken(authorization: string | null): string | null {
@@ -179,6 +222,6 @@ function statusFor(code: ErrorCode): number {
 function errorResponse(code: ErrorCode, status: number): Response {
   return new Response(JSON.stringify({ error: { code } }), {
     status,
-    headers: responseHeaders,
+    headers: jsonHeaders,
   });
 }
