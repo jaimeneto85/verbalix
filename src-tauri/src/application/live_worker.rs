@@ -54,6 +54,12 @@ pub struct LiveWorker {
     cmd_tx: mpsc::SyncSender<WorkerCommand>,
 }
 
+struct WorkerCallbacks {
+    accepts_fn: Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Sync>,
+    on_event: Arc<dyn Fn(WorkerEvent) + Send + Sync>,
+    context: Arc<Mutex<TranslationContext>>,
+}
+
 async fn call_interpret_stream(
     pipeline: Arc<dyn VoicePipelinePort>,
     session_id: LiveSessionId,
@@ -80,9 +86,7 @@ async fn process_queue_events_async(
     playback: Arc<dyn AudioPreviewPort>,
     playback_lock: Arc<AsyncMutex<()>>,
     pending_handles: Arc<Mutex<HashMap<SegmentId, StreamSegmentHandle>>>,
-    accepts_fn: Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Sync>,
-    on_event: Arc<dyn Fn(WorkerEvent) + Send + Sync>,
-    context: Arc<Mutex<TranslationContext>>,
+    cb: WorkerCallbacks,
     t_capture_end: Instant,
 ) {
     for event in events {
@@ -91,11 +95,11 @@ async fn process_queue_events_async(
                 let emit_seg = out.segment_id;
                 let emit_session = out.session_id;
 
-                if !accepts_fn(emit_session, emit_seg) {
+                if !(cb.accepts_fn)(emit_session, emit_seg) {
                     if let Some(h) = pending_handles.lock().unwrap().remove(&emit_seg) {
                         h.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
-                    on_event(WorkerEvent::Failed {
+                    (cb.on_event)(WorkerEvent::Failed {
                         segment_id: emit_seg,
                         session_id: emit_session,
                     });
@@ -113,11 +117,12 @@ async fn process_queue_events_async(
                         let source = h.source_text.clone();
                         let target = h.target_language.clone();
                         let pb = Arc::clone(&playback);
-                        let play_ok = tokio::task::spawn_blocking(move || pb.play_stream(h))
-                            .await
-                            .is_ok();
-                        if play_ok && accepts_fn(emit_session, emit_seg) {
-                            context.lock().unwrap().push(&source);
+                        let play_ok = matches!(
+                            tokio::task::spawn_blocking(move || pb.play_stream(h)).await,
+                            Ok(Ok(()))
+                        );
+                        if play_ok && (cb.accepts_fn)(emit_session, emit_seg) {
+                            cb.context.lock().unwrap().push(&source);
                         }
                         Some(target)
                     } else {
@@ -125,8 +130,7 @@ async fn process_queue_events_async(
                             use base64::{engine::general_purpose::STANDARD, Engine};
                             if let Ok(wav) = STANDARD.decode(&result.audio_base64) {
                                 let pb = Arc::clone(&playback);
-                                let _ =
-                                    tokio::task::spawn_blocking(move || pb.play(wav)).await;
+                                let _ = tokio::task::spawn_blocking(move || pb.play(wav)).await;
                             }
                         }
                         None
@@ -138,7 +142,7 @@ async fn process_queue_events_async(
                     );
                     drop(_guard);
 
-                    on_event(WorkerEvent::Ready {
+                    (cb.on_event)(WorkerEvent::Ready {
                         segment_id: emit_seg,
                         session_id: emit_session,
                         stage_ms: result.stage_ms.clone(),
@@ -150,7 +154,7 @@ async fn process_queue_events_async(
                     if let Some(h) = pending_handles.lock().unwrap().remove(&emit_seg) {
                         h.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
-                    on_event(WorkerEvent::Failed {
+                    (cb.on_event)(WorkerEvent::Failed {
                         segment_id: emit_seg,
                         session_id: emit_session,
                     });
@@ -160,7 +164,7 @@ async fn process_queue_events_async(
                 if let Some(h) = pending_handles.lock().unwrap().remove(&segment_id) {
                     h.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
-                on_event(WorkerEvent::Dropped { segment_id });
+                (cb.on_event)(WorkerEvent::Dropped { segment_id });
             }
         }
     }
@@ -192,11 +196,9 @@ impl LiveWorker {
                 loop {
                     match cmd_rx.try_recv() {
                         Ok(WorkerCommand::Stop) => {
-                            let handles: Vec<_> =
-                                pending_handles.lock().unwrap().drain().collect();
+                            let handles: Vec<_> = pending_handles.lock().unwrap().drain().collect();
                             for (_, h) in handles {
-                                h.cancel
-                                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                                h.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
                             }
                             let drained = queue.lock().unwrap().drain_all();
                             for o in drained {
@@ -254,9 +256,7 @@ impl LiveWorker {
                                             segment_id,
                                             result: Ok(SegmentResult {
                                                 audio_base64: String::new(),
-                                                detected_language: handle
-                                                    .detected_language
-                                                    .clone(),
+                                                detected_language: handle.detected_language.clone(),
                                                 stage_ms: StageDurations {
                                                     stt: handle.stt_ms,
                                                     translate: handle.translate_ms,
@@ -264,20 +264,18 @@ impl LiveWorker {
                                                 },
                                             }),
                                         };
-                                        pending_handles
-                                            .lock()
-                                            .unwrap()
-                                            .insert(segment_id, handle);
-                                        let events =
-                                            queue.lock().unwrap().insert(outcome);
+                                        pending_handles.lock().unwrap().insert(segment_id, handle);
+                                        let events = queue.lock().unwrap().insert(outcome);
                                         process_queue_events_async(
                                             events,
                                             playback,
                                             playback_lock,
                                             pending_handles,
-                                            accepts_fn,
-                                            on_event,
-                                            context,
+                                            WorkerCallbacks {
+                                                accepts_fn,
+                                                on_event,
+                                                context,
+                                            },
                                             t_capture_end,
                                         )
                                         .await;
@@ -287,16 +285,17 @@ impl LiveWorker {
                                             LatencyStage::Ttfb,
                                             t_capture_end.elapsed().as_millis() as u64,
                                         );
-                                        let events =
-                                            queue.lock().unwrap().insert(outcome);
+                                        let events = queue.lock().unwrap().insert(outcome);
                                         process_queue_events_async(
                                             events,
                                             playback,
                                             playback_lock,
                                             pending_handles,
-                                            accepts_fn,
-                                            on_event,
-                                            context,
+                                            WorkerCallbacks {
+                                                accepts_fn,
+                                                on_event,
+                                                context,
+                                            },
                                             t_capture_end,
                                         )
                                         .await;
@@ -328,3 +327,7 @@ impl LiveWorker {
 #[cfg(test)]
 #[path = "live_worker_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "live_worker_context_tests.rs"]
+mod context_tests;

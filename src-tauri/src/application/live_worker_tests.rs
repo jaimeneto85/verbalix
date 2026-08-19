@@ -207,6 +207,7 @@ fn dispatch_cmd(session_id: LiveSessionId, segment_id: SegmentId) -> WorkerComma
         target_language: "en".to_owned(),
         token: "tok".to_owned(),
         t_capture_end: Instant::now(),
+        context: vec![],
     }
 }
 
@@ -283,6 +284,7 @@ fn stop_drains_queue() {
             }
         }),
         always_accepts(),
+        make_context(),
     );
 
     {
@@ -337,6 +339,7 @@ fn streaming_burst_drain_plays_in_order() {
             }
         }),
         always_accepts(),
+        make_context(),
     );
 
     worker.dispatch(dispatch_cmd(s, SegmentId(2)));
@@ -396,6 +399,7 @@ fn accepts_rejects_wrong_session() {
         Arc::clone(&queue),
         Arc::new(|_| {}),
         accepts_only(right_session),
+        make_context(),
     );
 
     worker.dispatch(WorkerCommand::Dispatch {
@@ -405,6 +409,7 @@ fn accepts_rejects_wrong_session() {
         target_language: "en".to_owned(),
         token: "tok".to_owned(),
         t_capture_end: Instant::now(),
+        context: vec![],
     });
 
     std::thread::sleep(Duration::from_millis(300));
@@ -436,6 +441,7 @@ fn dropped_segment_does_not_play() {
         Arc::clone(&queue),
         Arc::new(|_| {}),
         always_accepts(),
+        make_context(),
     );
 
     for i in 0..5 {
