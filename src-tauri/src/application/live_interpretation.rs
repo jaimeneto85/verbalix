@@ -6,13 +6,22 @@ use crate::{
         AudioPreviewPort, AudioStreamPort, VoicePipelinePort,
     },
     domain::{
-        EndpointEvent, Endpointer, EndpointerConfig, LanguageTag, LiveSession,
-        LiveState, SegmentId, VerbalixError,
+        EndpointEvent, Endpointer, EndpointerConfig, LanguageTag, LiveSession, LiveState,
+        SegmentId, StageDurations, VerbalixError,
     },
     platform::audio_wav::{encode_wav, pcm_rms, resample_to_16k, TARGET_SAMPLE_RATE},
 };
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+pub struct LiveEventPayload {
+    pub status: String,
+    pub stage_ms: Option<StageDurations>,
+    pub segment_id: Option<u64>,
+    pub detected_language: Option<String>,
+}
+
+pub type LiveEventFn = Arc<dyn Fn(LiveEventPayload) + Send + Sync>;
 
 const CIRCUIT_BREAKER_THRESHOLD: u32 = 3;
 
@@ -39,6 +48,7 @@ pub struct LiveInterpretationCoordinator {
     pause: Arc<RuntimePause>,
     worker: Arc<Mutex<Option<LiveWorker>>>,
     queue: Arc<Mutex<LiveQueue>>,
+    on_live_event: LiveEventFn,
 }
 
 impl LiveInterpretationCoordinator {
@@ -47,6 +57,7 @@ impl LiveInterpretationCoordinator {
         capture: Arc<dyn AudioStreamPort>,
         playback: Arc<dyn AudioPreviewPort>,
         pause: Arc<RuntimePause>,
+        on_live_event: LiveEventFn,
     ) -> Self {
         let queue = Arc::new(Mutex::new(LiveQueue::new(8)));
         Self {
@@ -68,6 +79,7 @@ impl LiveInterpretationCoordinator {
             pause,
             worker: Arc::new(Mutex::new(None)),
             queue,
+            on_live_event,
         }
     }
 
@@ -77,8 +89,8 @@ impl LiveInterpretationCoordinator {
         _voice_profile_id: uuid::Uuid,
         token: String,
     ) -> Result<OnAirGuard, VerbalixError> {
-        let lang = LanguageTag::parse(target_language)
-            .ok_or(VerbalixError::TargetLanguageUnsupported)?;
+        let lang =
+            LanguageTag::parse(target_language).ok_or(VerbalixError::TargetLanguageUnsupported)?;
 
         {
             let mut st = self.state.lock().unwrap();
@@ -96,8 +108,8 @@ impl LiveInterpretationCoordinator {
         let worker_arc = Arc::clone(&self.worker);
         let token_clone = token.clone();
 
-        let sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static> = Box::new(
-            move |frames, sample_rate, channels| {
+        let sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static> =
+            Box::new(move |frames, sample_rate, channels| {
                 let rms = pcm_rms(&frames);
                 let event = {
                     let mut ss = sink_state_arc.lock().unwrap();
@@ -148,8 +160,7 @@ impl LiveInterpretationCoordinator {
                     }
                     Some(EndpointEvent::Dropped) | None => {}
                 }
-            },
-        );
+            });
 
         let state_for_error = Arc::clone(&self.state);
         let error_sink: Box<dyn Fn() + Send + Sync + 'static> = Box::new(move || {
@@ -158,25 +169,27 @@ impl LiveInterpretationCoordinator {
             st.session = None;
         });
 
-        self.capture
-            .start_stream(sink, error_sink)
-            .map_err(|_| {
-                let mut st = self.state.lock().unwrap();
-                st.live_state = LiveState::Idle;
-                st.session = None;
-                VerbalixError::AudioCaptureFailed
-            })?;
+        self.capture.start_stream(sink, error_sink).map_err(|_| {
+            let mut st = self.state.lock().unwrap();
+            st.live_state = LiveState::Idle;
+            st.session = None;
+            VerbalixError::AudioCaptureFailed
+        })?;
 
         let state_for_worker = Arc::clone(&self.state);
         let queue_clone = Arc::clone(&self.queue);
         let capture_for_cb = Arc::clone(&self.capture);
+        let on_event_for_worker = Arc::clone(&self.on_live_event);
 
         let worker = LiveWorker::new(
             Arc::clone(&self.pipeline),
             Arc::clone(&self.playback),
             Arc::clone(&self.queue),
             Arc::new(move |event| match event {
-                WorkerEvent::Failed { segment_id, session_id } => {
+                WorkerEvent::Failed {
+                    segment_id,
+                    session_id,
+                } => {
                     let current_session_matches = {
                         let st = state_for_worker.lock().unwrap();
                         st.session
@@ -201,9 +214,20 @@ impl LiveInterpretationCoordinator {
                         st.session = None;
                         capture_for_cb.stop_stream();
                         queue_clone.lock().unwrap().reset(SegmentId(0));
+                        on_event_for_worker(LiveEventPayload {
+                            status: "error".to_owned(),
+                            stage_ms: None,
+                            segment_id: None,
+                            detected_language: None,
+                        });
                     }
                 }
-                WorkerEvent::Ready { segment_id, session_id, stage_ms: _ } => {
+                WorkerEvent::Ready {
+                    segment_id,
+                    session_id,
+                    stage_ms,
+                    detected_language,
+                } => {
                     let current_session_matches = {
                         let st = state_for_worker.lock().unwrap();
                         st.session
@@ -218,8 +242,21 @@ impl LiveInterpretationCoordinator {
                             st.live_state = LiveState::OnAir;
                         }
                     }
+                    on_event_for_worker(LiveEventPayload {
+                        status: "speaking".to_owned(),
+                        stage_ms: Some(stage_ms),
+                        segment_id: Some(segment_id.0),
+                        detected_language: Some(detected_language),
+                    });
                 }
-                WorkerEvent::Dropped { .. } => {}
+                WorkerEvent::Dropped { segment_id } => {
+                    on_event_for_worker(LiveEventPayload {
+                        status: "dropped".to_owned(),
+                        stage_ms: None,
+                        segment_id: Some(segment_id.0),
+                        detected_language: None,
+                    });
+                }
             }),
         );
 
@@ -229,6 +266,13 @@ impl LiveInterpretationCoordinator {
             let mut st = self.state.lock().unwrap();
             st.live_state = LiveState::OnAir;
         }
+
+        self.on_live_event.as_ref()(LiveEventPayload {
+            status: "listening".to_owned(),
+            stage_ms: None,
+            segment_id: None,
+            detected_language: None,
+        });
 
         Ok(self.pause.begin_on_air())
     }
@@ -254,6 +298,14 @@ impl LiveInterpretationCoordinator {
 
         let mut st = self.state.lock().unwrap();
         st.live_state = LiveState::Idle;
+        drop(st);
+
+        self.on_live_event.as_ref()(LiveEventPayload {
+            status: "idle".to_owned(),
+            stage_ms: None,
+            segment_id: None,
+            detected_language: None,
+        });
     }
 
     pub fn live_state(&self) -> LiveState {
@@ -279,12 +331,7 @@ impl LiveInterpretationCoordinator {
 
     #[cfg(test)]
     pub(crate) fn active_session_id(&self) -> Option<crate::domain::LiveSessionId> {
-        self.state
-            .lock()
-            .unwrap()
-            .session
-            .as_ref()
-            .map(|s| s.id)
+        self.state.lock().unwrap().session.as_ref().map(|s| s.id)
     }
 }
 

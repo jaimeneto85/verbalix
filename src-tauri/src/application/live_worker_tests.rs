@@ -1,7 +1,9 @@
 use super::*;
 use crate::{
     application::{live_queue::LiveQueue, AudioPreviewPort, VoicePipelinePort},
-    domain::{InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError},
+    domain::{
+        InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError,
+    },
 };
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -190,7 +192,11 @@ fn stop_drains_queue() {
             result: Ok(SegmentResult {
                 audio_base64: String::new(),
                 detected_language: "en".to_owned(),
-                stage_ms: StageDurations { stt: 0, translate: 0, tts: 0 },
+                stage_ms: StageDurations {
+                    stt: 0,
+                    translate: 0,
+                    tts: 0,
+                },
             }),
         };
         queue.lock().unwrap().insert(pending);

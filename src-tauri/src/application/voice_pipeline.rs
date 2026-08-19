@@ -1,6 +1,8 @@
 use crate::{
     application::VoicePipelinePort,
-    domain::{InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError},
+    domain::{
+        InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError,
+    },
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::{Client, Response, StatusCode};

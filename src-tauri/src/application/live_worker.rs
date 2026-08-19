@@ -1,4 +1,3 @@
-use base64::{engine::general_purpose::STANDARD, Engine};
 use crate::{
     application::{
         live_queue::{LiveQueue, QueueEvent},
@@ -6,6 +5,7 @@ use crate::{
     },
     domain::{InterpretOutcome, LiveSessionId, SegmentId, StageDurations},
 };
+use base64::{engine::general_purpose::STANDARD, Engine};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -28,6 +28,7 @@ pub enum WorkerEvent {
         segment_id: SegmentId,
         session_id: LiveSessionId,
         stage_ms: StageDurations,
+        detected_language: String,
     },
     Dropped {
         segment_id: SegmentId,
@@ -73,6 +74,7 @@ fn process_queue_events(
                         segment_id: emit_seg,
                         session_id: emit_session,
                         stage_ms: result.stage_ms.clone(),
+                        detected_language: result.detected_language.clone(),
                     });
                 } else {
                     on_event(WorkerEvent::Failed {

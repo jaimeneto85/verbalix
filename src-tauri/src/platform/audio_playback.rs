@@ -5,7 +5,7 @@ mod mac {
     use std::{
         collections::VecDeque,
         sync::{mpsc, Arc, Mutex},
-        time::Duration,
+        time::{Duration, Instant},
     };
 
     enum PlaybackCommand {
@@ -27,7 +27,7 @@ mod mac {
                 while let Ok(cmd) = cmd_rx.recv() {
                     match cmd {
                         PlaybackCommand::Play(wav_bytes, reply) => {
-                            active_stream = None;
+                            drop(active_stream.take());
 
                             let samples = match decode_wav_f32(&wav_bytes) {
                                 Some(s) => s,
@@ -98,20 +98,32 @@ mod mac {
 
                             active_stream = Some(stream);
 
-                            match done_rx.recv_timeout(Duration::from_secs(60)) {
-                                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                                    active_stream = None;
-                                    let _ = reply.send(Ok(()));
+                            let deadline = Instant::now() + Duration::from_secs(60);
+                            let result = loop {
+                                match done_rx.try_recv() {
+                                    Ok(()) | Err(mpsc::TryRecvError::Disconnected) => break Ok(()),
+                                    Err(mpsc::TryRecvError::Empty) => {}
                                 }
-                                Err(mpsc::RecvTimeoutError::Timeout) => {
-                                    active_stream = None;
-                                    let _ = reply.send(Err(VerbalixError::AudioPlaybackFailed));
+                                if Instant::now() >= deadline {
+                                    break Err(VerbalixError::AudioPlaybackFailed);
                                 }
-                            }
+                                match cmd_rx.try_recv() {
+                                    Ok(PlaybackCommand::Stop) => {
+                                        break Err(VerbalixError::AudioPlaybackFailed);
+                                    }
+                                    Ok(PlaybackCommand::Play(_, r)) => {
+                                        let _ = r.send(Err(VerbalixError::AudioPlaybackFailed));
+                                    }
+                                    Err(_) => {}
+                                }
+                                std::thread::sleep(Duration::from_millis(5));
+                            };
+                            drop(active_stream.take());
+                            let _ = reply.send(result);
                         }
 
                         PlaybackCommand::Stop => {
-                            active_stream = None;
+                            drop(active_stream.take());
                         }
                     }
                 }
@@ -127,7 +139,7 @@ mod mac {
             self.cmd_tx
                 .send(PlaybackCommand::Play(wav_bytes, tx))
                 .map_err(|_| VerbalixError::AudioPlaybackFailed)?;
-            rx.recv_timeout(Duration::from_secs(60))
+            rx.recv_timeout(Duration::from_secs(65))
                 .map_err(|_| VerbalixError::AudioPlaybackFailed)?
         }
 

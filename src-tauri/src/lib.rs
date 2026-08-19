@@ -132,6 +132,7 @@ pub fn run() {
                 &anonymous_key,
                 vc.stream,
                 pause.clone(),
+                app.handle().clone(),
             );
             let runtime = Arc::new(AppRuntime {
                 coordinator,

@@ -167,7 +167,11 @@ impl MacAudioCapture {
                         level_thread.store(0f32.to_bits(), Ordering::Relaxed);
                     }
 
-                    CaptureCommand::StartStream { sink, error_sink, reply } => {
+                    CaptureCommand::StartStream {
+                        sink,
+                        error_sink,
+                        reply,
+                    } => {
                         if active.is_some() {
                             let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
                             continue;
@@ -288,7 +292,11 @@ impl AudioStreamPort for MacAudioCapture {
     ) -> Result<(), VerbalixError> {
         let (tx, rx) = mpsc::sync_channel(1);
         self.cmd_tx
-            .send(CaptureCommand::StartStream { sink, error_sink, reply: tx })
+            .send(CaptureCommand::StartStream {
+                sink,
+                error_sink,
+                reply: tx,
+            })
             .map_err(|_| VerbalixError::AudioCaptureFailed)?;
         rx.recv_timeout(Duration::from_secs(5))
             .map_err(|_| VerbalixError::AudioCaptureFailed)?

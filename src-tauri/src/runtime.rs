@@ -1,3 +1,4 @@
+use crate::commands_live::make_live_emitter;
 use crate::{
     application::{
         AudioCapturePort, AudioPreviewPort, AudioStreamPort, EnrollmentSession,
@@ -78,9 +79,10 @@ pub(crate) fn build_live_coordinator(
     anonymous_key: &str,
     stream: Arc<dyn AudioStreamPort>,
     pause: Arc<RuntimePause>,
+    app: AppHandle,
 ) -> Arc<LiveInterpretationCoordinator> {
-    let pipeline = Arc::new(RemoteVoicePipeline::new(base_url, anonymous_key))
-        as Arc<dyn VoicePipelinePort>;
+    let pipeline =
+        Arc::new(RemoteVoicePipeline::new(base_url, anonymous_key)) as Arc<dyn VoicePipelinePort>;
 
     #[cfg(target_os = "macos")]
     let playback = Arc::new(crate::platform::MacAudioPlayback::new()) as Arc<dyn AudioPreviewPort>;
@@ -88,8 +90,14 @@ pub(crate) fn build_live_coordinator(
     #[cfg(not(target_os = "macos"))]
     let playback = Arc::new(crate::platform::StubAudioPlayback) as Arc<dyn AudioPreviewPort>;
 
+    let on_live_event = make_live_emitter(app);
+
     Arc::new(LiveInterpretationCoordinator::new(
-        pipeline, stream, playback, pause,
+        pipeline,
+        stream,
+        playback,
+        pause,
+        on_live_event,
     ))
 }
 

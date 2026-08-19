@@ -1,5 +1,5 @@
 use crate::{
-    application::SessionRepository,
+    application::{live_interpretation::LiveEventPayload, LiveEventFn, SessionRepository},
     domain::{LiveState, SettingsRepository, VerbalixError},
     AppRuntime,
 };
@@ -68,6 +68,19 @@ pub(crate) fn set_target_language(
     runtime.settings.save(&settings.validate()?)
 }
 
-pub(crate) fn emit_live_state(app: &tauri::AppHandle, status: &str) {
-    let _ = app.emit("live-state", serde_json::json!({ "status": status }));
+pub(crate) fn make_live_emitter(app: tauri::AppHandle) -> LiveEventFn {
+    Arc::new(move |payload: LiveEventPayload| {
+        let mut map = serde_json::json!({ "status": payload.status });
+        if let Some(ms) = payload.stage_ms {
+            map["stageMs"] =
+                serde_json::json!({ "stt": ms.stt, "translate": ms.translate, "tts": ms.tts });
+        }
+        if let Some(sid) = payload.segment_id {
+            map["segmentId"] = serde_json::json!(sid);
+        }
+        if let Some(lang) = payload.detected_language {
+            map["detectedLanguage"] = serde_json::json!(lang);
+        }
+        let _ = app.emit("live-state", map);
+    })
 }

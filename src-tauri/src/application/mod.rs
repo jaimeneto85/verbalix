@@ -28,7 +28,7 @@ pub use ai_readiness::{
 pub use auth_refresh::RemoteAuthRepository;
 pub use coordinator::SelectionCoordinator;
 pub use enrollment_session::EnrollmentSession;
-pub use live_interpretation::LiveInterpretationCoordinator;
+pub use live_interpretation::{LiveEventFn, LiveInterpretationCoordinator};
 pub use mutation::{MutationProjection, MutationReceipt, MutationStatus};
 pub use ports::{
     AudioCapturePort, AudioPreviewPort, AudioStreamPort, ClipboardPort, OverlayPort, SelectionPort,
@@ -36,9 +36,9 @@ pub use ports::{
 };
 pub use preferences_sync_store::{epoch_secs_now, PreferencesSyncStore};
 pub use remote_preferences::{merge_preferences, RemotePreferencesRepository};
-pub use runtime_pause::{OnAirGuard, RuntimePause};
 #[cfg(test)]
 pub(crate) use runtime_pause::{set_test_clock_ms, test_clock_ms};
+pub use runtime_pause::{OnAirGuard, RuntimePause};
 pub use settings_file::JsonSettingsRepository;
 pub use supabase::{
     HistoryItem, KeychainSessionRepository, RemoteHistoryRepository, RemoteTransformer,

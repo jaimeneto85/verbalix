@@ -1,7 +1,9 @@
 use super::*;
 use crate::{
     application::{AudioPreviewPort, AudioStreamPort, VoicePipelinePort},
-    domain::{InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError},
+    domain::{
+        InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError,
+    },
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -36,11 +38,7 @@ impl FakeAudioStream {
 }
 
 impl AudioStreamPort for FakeAudioStream {
-    fn start_stream(
-        &self,
-        sink: SinkFn,
-        _error_sink: ErrorFn,
-    ) -> Result<(), VerbalixError> {
+    fn start_stream(&self, sink: SinkFn, _error_sink: ErrorFn) -> Result<(), VerbalixError> {
         if self.start_fails {
             return Err(VerbalixError::AudioCaptureFailed);
         }
@@ -81,7 +79,11 @@ impl VoicePipelinePort for FakePipeline {
                     result: Ok(SegmentResult {
                         audio_base64: String::new(),
                         detected_language: "en".to_owned(),
-                        stage_ms: StageDurations { stt: 0, translate: 0, tts: 0 },
+                        stage_ms: StageDurations {
+                            stt: 0,
+                            translate: 0,
+                            tts: 0,
+                        },
                     }),
                 }
             }
@@ -108,6 +110,7 @@ fn make_coordinator(
         capture,
         Arc::new(FakeAudioPreview),
         Arc::new(RuntimePause::default()),
+        Arc::new(|_| {}),
     )
 }
 
@@ -118,7 +121,10 @@ fn enter_live_fails_with_unsupported_language() {
         Arc::new(FakePipeline { should_fail: false }),
     );
     let result = coord.enter_live("xx", uuid::Uuid::new_v4(), "tok".to_owned());
-    assert!(matches!(result, Err(VerbalixError::TargetLanguageUnsupported)));
+    assert!(matches!(
+        result,
+        Err(VerbalixError::TargetLanguageUnsupported)
+    ));
 }
 
 #[test]
@@ -153,7 +159,9 @@ fn active_session_id_present_after_enter_live() {
         Arc::new(FakePipeline { should_fail: false }),
     );
     assert!(coord.active_session_id().is_none());
-    let _guard = coord.enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned()).unwrap();
+    let _guard = coord
+        .enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned())
+        .unwrap();
     assert!(coord.active_session_id().is_some());
     coord.leave_live();
     assert!(coord.active_session_id().is_none());
@@ -166,7 +174,9 @@ fn leave_live_stops_capture() {
         Arc::clone(&stream) as Arc<dyn AudioStreamPort>,
         Arc::new(FakePipeline { should_fail: false }),
     );
-    let _guard = coord.enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned()).unwrap();
+    let _guard = coord
+        .enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned())
+        .unwrap();
     coord.leave_live();
     assert!(stream.stop_called.load(Ordering::Relaxed));
     assert_eq!(coord.live_state(), LiveState::Idle);
@@ -189,7 +199,9 @@ fn circuit_breaker_triggers_after_k_failures() {
         Arc::new(FakeAudioStream::new()),
         Arc::new(FakePipeline { should_fail: true }),
     );
-    let _guard = coord.enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned()).unwrap();
+    let _guard = coord
+        .enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned())
+        .unwrap();
 
     coord.simulate_segment_failure();
     coord.simulate_segment_failure();
