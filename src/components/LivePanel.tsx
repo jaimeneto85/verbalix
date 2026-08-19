@@ -66,6 +66,7 @@ export function LivePanel({ voiceProfileId }: LivePanelProps) {
   const handleLeave = async () => {
     try {
       await native.leaveLive();
+    } catch {
     } finally {
       setOnAir(false);
       setLiveState({ status: "idle" });

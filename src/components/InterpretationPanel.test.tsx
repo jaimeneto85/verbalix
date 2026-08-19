@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   cancelVoiceEnrollment: vi.fn(),
   deleteVoiceProfile: vi.fn(),
   voiceProfileStatus: vi.fn(),
+  enterLive: vi.fn(),
+  leaveLive: vi.fn(),
+  onLiveStateChange: vi.fn(),
   listen: vi.fn()
 }));
 
@@ -21,7 +24,10 @@ vi.mock("../native", () => ({
     finishVoiceEnrollment: mocks.finishVoiceEnrollment,
     cancelVoiceEnrollment: mocks.cancelVoiceEnrollment,
     deleteVoiceProfile: mocks.deleteVoiceProfile,
-    voiceProfileStatus: mocks.voiceProfileStatus
+    voiceProfileStatus: mocks.voiceProfileStatus,
+    enterLive: mocks.enterLive,
+    leaveLive: mocks.leaveLive,
+    onLiveStateChange: mocks.onLiveStateChange
   }
 }));
 
@@ -37,6 +43,7 @@ describe("InterpretationPanel", () => {
     mocks.microphonePermissionStatus.mockResolvedValue("notDetermined");
     mocks.voiceProfileStatus.mockResolvedValue(null);
     mocks.listen.mockResolvedValue(() => undefined);
+    mocks.onLiveStateChange.mockReturnValue(() => undefined);
   });
 
   it("prompts for login when unauthenticated and never touches native voice APIs", async () => {

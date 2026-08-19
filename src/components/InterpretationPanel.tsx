@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { native } from "../native";
 import type { MicrophonePermission, VoiceProfileStatus, VoiceProfileView } from "../types";
+import { LivePanel } from "./LivePanel";
 
 type RecordingState = "idle" | "recording" | "recorded" | "uploading" | "done";
 
@@ -215,6 +216,13 @@ export function InterpretationPanel({ authenticated, voiceProfileId, onVoiceProf
           )}
 
           {error && <p className="error-hint">{error}</p>}
+
+          {profile && profile.status === "ready" && (
+            <>
+              <div className="section-heading">Ao vivo</div>
+              <LivePanel voiceProfileId={profile.voiceProfileId} />
+            </>
+          )}
         </>
       )}
     </section>
