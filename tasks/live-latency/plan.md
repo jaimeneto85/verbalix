@@ -327,16 +327,16 @@ enum InterpretMode { Json, Stream }
   ler o frame de metadados (línguas, stageMs, sourceText), expor handle de buffer + flag `complete` +
   flag de cancelamento. `domain::SegmentResult` permanece PURO (handle vive em `application`). Modo JSON
   preservado (reusa `parse_error`). Fechar corpo no cancel/drop (CA11/EC08).
-- [ ] T2.3: [HIGH] `audio_playback.rs`(+`audio_playback_stream.rs` split provável): playback progressivo
+- [x] T2.3: [HIGH] `audio_playback.rs`(+`audio_playback_stream.rs` split provável): playback progressivo
   reusando `fill_output_f32/i16` — trocar o PRODUTOR de "carga única" para "push incremental" no mesmo
   `Mutex<VecDeque<f32>>`; pré-buffer ~150–250 ms; underrun→silêncio+contador; `stop()` aborta. Rota mic
   virtual incremental via `playback_router.rs` (resample→48k reusando `resample_f32`).
-- [ ] T2.4: [HIGH] `live_worker.rs`+`live_session_setup.rs`: **LOCK explícito de playback (semáforo cap 1)
+- [x] T2.4: [HIGH] `live_worker.rs`+`live_session_setup.rs`: **LOCK explícito de playback (semáforo cap 1)
   serializando N-1→N independentemente do runtime (D8)**; liberar segmento N do reorder buffer → playback
   progressivo sob o lock; `accepts()` antes de publicar; fail-closed em truncamento/abort; burst-drain (CA07).
 
 ### Round 4 — Contexto de tradução (D4) — POR ÚLTIMO e DROPPABLE
-- [ ] T3.1: [HIGH] `domain/live_interpretation.rs`: tipo `TranslationContext` (janela cap, sanitizado,
+- [x] T3.1: [HIGH] `domain/live_interpretation.rs`: tipo `TranslationContext` (janela cap, sanitizado,
   reset). `live_interpretation.rs`/`live_session_setup.rs`: alimentar do `sourceText` do frame, **promover
   só APÓS playback bem-sucedido**; zerar em `leave_live`/troca de língua/sessão; reset vence promoção
   (CA08). NUNCA logar/emitir/persistir/para o React. Testes de cap, reset, corrida, defasagem causal.
