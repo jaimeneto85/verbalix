@@ -199,6 +199,12 @@ export function App() {
               setSettings(updated);
               native.saveSettings(updated).catch(() => {});
             }}
+            outputToVirtualMic={settings.outputToVirtualMic ?? false}
+            onOutputToVirtualMicChange={(value) => {
+              const updated = { ...settings, outputToVirtualMic: value };
+              setSettings(updated);
+              native.saveSettings(updated).catch(() => {});
+            }}
           />
         )}
       </div>

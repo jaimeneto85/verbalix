@@ -310,8 +310,8 @@ Seção "Microfone virtual" no painel Interpretação:
 - [x] T5.4: [LOW] `diagnostics.rs`: `virtual_mic(status, buffer_depth, underruns)` sanitizado.
 
 ### Fase 6 — Frontend
-- [ ] T6.1: [LOW] `types.ts` + `native.ts`: `VirtualMicStatus`, `virtualMicStatus()`, `onVirtualMicStatusChange()`.
-- [ ] T6.2: [MEDIUM] Seção "Microfone virtual" no painel Interpretação: status + CTA de instalação (aponta script,
+- [x] T6.1: [LOW] `types.ts` + `native.ts`: `VirtualMicStatus`, `virtualMicStatus()`, `onVirtualMicStatusChange()`.
+- [x] T6.2: [MEDIUM] Seção "Microfone virtual" no painel Interpretação: status + CTA de instalação (aponta script,
   não roda sudo) + toggle `output_to_virtual_mic` + indicador de destino do áudio; estilos em `panels.css`.
 
 ### Fase 7 — Testes (test-engineer) + QA

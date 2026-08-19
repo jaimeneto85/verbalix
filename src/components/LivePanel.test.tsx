@@ -189,6 +189,37 @@ describe("LivePanel", () => {
     expect(screen.queryByText("Falha ao processar segmento")).not.toBeInTheDocument();
   });
 
+  it("reports the virtual-mic-fallback event without replacing the main live status", async () => {
+    const onVirtualMicFallback = vi.fn();
+    render(
+      <LivePanel voiceProfileId="profile-id" onVirtualMicFallback={onVirtualMicFallback} />
+    );
+
+    act(() => {
+      liveStateListener?.({ status: "listening" });
+    });
+    expect(await screen.findByText("Escutando")).toBeInTheDocument();
+
+    act(() => {
+      liveStateListener?.({ status: "virtual-mic-fallback" });
+    });
+
+    expect(onVirtualMicFallback).toHaveBeenCalledOnce();
+    expect(screen.getByText("Escutando")).toBeInTheDocument();
+  });
+
+  it("reports on-air transitions through the onAirChange callback", async () => {
+    const onAirChange = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<LivePanel voiceProfileId="profile-id" onAirChange={onAirChange} />);
+
+    await user.click(screen.getByRole("button", { name: "Entrar no ar" }));
+    expect(onAirChange).toHaveBeenLastCalledWith(true);
+
+    await user.click(screen.getByRole("button", { name: "Sair do ar" }));
+    expect(onAirChange).toHaveBeenLastCalledWith(false);
+  });
+
   it("unsubscribes from the live-state-changed listener and clears pending timers on unmount", () => {
     const unlisten = vi.fn();
     mocks.onLiveStateChange.mockReturnValue(unlisten);

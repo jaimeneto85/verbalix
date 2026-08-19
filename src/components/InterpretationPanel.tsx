@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { native } from "../native";
 import type { MicrophonePermission, VoiceProfileStatus, VoiceProfileView } from "../types";
 import { LivePanel } from "./LivePanel";
+import { VirtualMicSection } from "./VirtualMicSection";
 
 type RecordingState = "idle" | "recording" | "recorded" | "uploading" | "done";
 
@@ -10,9 +11,17 @@ type Props = {
   authenticated: boolean;
   voiceProfileId?: string;
   onVoiceProfileChange: (id: string | undefined) => void;
+  outputToVirtualMic?: boolean;
+  onOutputToVirtualMicChange?: (value: boolean) => void;
 };
 
-export function InterpretationPanel({ authenticated, voiceProfileId, onVoiceProfileChange }: Props) {
+export function InterpretationPanel({
+  authenticated,
+  voiceProfileId,
+  onVoiceProfileChange,
+  outputToVirtualMic = false,
+  onOutputToVirtualMicChange = () => {}
+}: Props) {
   const [consent, setConsent] = useState(false);
   const [permission, setPermission] = useState<MicrophonePermission>("notDetermined");
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
@@ -21,6 +30,8 @@ export function InterpretationPanel({ authenticated, voiceProfileId, onVoiceProf
   const [profile, setProfile] = useState<VoiceProfileView | null>(null);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [liveOnAir, setLiveOnAir] = useState(false);
+  const [virtualMicFallback, setVirtualMicFallback] = useState(false);
   const levelUnlistenRef = useRef<(() => void) | null>(null);
   const permUnlistenRef = useRef<(() => void) | null>(null);
 
@@ -220,7 +231,20 @@ export function InterpretationPanel({ authenticated, voiceProfileId, onVoiceProf
           {profile && profile.status === "ready" && (
             <>
               <div className="section-heading">Ao vivo</div>
-              <LivePanel voiceProfileId={profile.voiceProfileId} />
+              <LivePanel
+                voiceProfileId={profile.voiceProfileId}
+                onAirChange={(next) => {
+                  setLiveOnAir(next);
+                  if (next) setVirtualMicFallback(false);
+                }}
+                onVirtualMicFallback={() => setVirtualMicFallback(true)}
+              />
+              <VirtualMicSection
+                outputToVirtualMic={outputToVirtualMic}
+                onOutputToVirtualMicChange={onOutputToVirtualMicChange}
+                onAir={liveOnAir}
+                fallbackWarning={virtualMicFallback}
+              />
             </>
           )}
         </>

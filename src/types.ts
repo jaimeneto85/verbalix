@@ -93,6 +93,12 @@ export interface LiveSettings {
   targetLanguage: string;
 }
 
+export type VirtualMicStatus = "notInstalled" | "installed" | "incompatibleVersion";
+
+export interface VirtualMicStatusEvent {
+  status: VirtualMicStatus;
+}
+
 export const defaultSettings: AppSettings = {
   formality: 3,
   length: "balanced",

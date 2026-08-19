@@ -25,19 +25,30 @@ const STATUS_LABELS: Record<LiveStatus, string> = {
 
 interface LivePanelProps {
   voiceProfileId?: string;
+  onAirChange?: (onAir: boolean) => void;
+  onVirtualMicFallback?: () => void;
 }
 
-export function LivePanel({ voiceProfileId }: LivePanelProps) {
+export function LivePanel({ voiceProfileId, onAirChange, onVirtualMicFallback }: LivePanelProps) {
   const [targetLanguage, setTargetLanguage] = useState("en");
   const [liveState, setLiveState] = useState<LiveStateEvent>({ status: "idle" });
   const [onAir, setOnAir] = useState(false);
   const errorResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const setOnAirState = (next: boolean) => {
+    setOnAir(next);
+    onAirChange?.(next);
+  };
+
   useEffect(() => {
     const unlisten = native.onLiveStateChange((event) => {
+      if ((event.status as string) === "virtual-mic-fallback") {
+        onVirtualMicFallback?.();
+        return;
+      }
       setLiveState(event);
       if (event.status === "idle" || event.status === "error") {
-        setOnAir(false);
+        setOnAirState(false);
       }
       if (event.status === "error") {
         if (errorResetTimer.current) clearTimeout(errorResetTimer.current);
@@ -51,13 +62,13 @@ export function LivePanel({ voiceProfileId }: LivePanelProps) {
       unlisten();
       if (errorResetTimer.current) clearTimeout(errorResetTimer.current);
     };
-  }, []);
+  }, [onVirtualMicFallback]);
 
   const handleEnter = async () => {
     if (!voiceProfileId) return;
     try {
       await native.enterLive({ targetLanguage, voiceProfileId });
-      setOnAir(true);
+      setOnAirState(true);
     } catch {
       setLiveState({ status: "error", errorMessage: "Falha ao iniciar interpretação ao vivo" });
     }
@@ -68,7 +79,7 @@ export function LivePanel({ voiceProfileId }: LivePanelProps) {
       await native.leaveLive();
     } catch {
     } finally {
-      setOnAir(false);
+      setOnAirState(false);
       setLiveState({ status: "idle" });
     }
   };
