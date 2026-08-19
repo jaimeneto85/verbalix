@@ -1,9 +1,8 @@
 use super::*;
 use crate::{
     application::{
-        live_queue::LiveQueue,
-        streaming_audio::StreamSegmentHandle,
-        AudioPreviewPort, VoicePipelinePort,
+        live_queue::LiveQueue, streaming_audio::StreamSegmentHandle, AudioPreviewPort,
+        VoicePipelinePort,
     },
     domain::{
         InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError,
@@ -92,16 +91,15 @@ impl VoicePipelinePort for FakeStreamPipeline {
 
     fn interpret_stream<'a>(
         &'a self,
-        session_id: LiveSessionId,
-        segment_id: SegmentId,
+        _session_id: LiveSessionId,
+        _segment_id: SegmentId,
         _wav_bytes: Vec<u8>,
         _target_language: &'a str,
         _token: &'a str,
     ) -> std::pin::Pin<
         Box<
-            dyn std::future::Future<
-                    Output = Result<StreamSegmentHandle, InterpretOutcome>,
-                > + Send
+            dyn std::future::Future<Output = Result<StreamSegmentHandle, InterpretOutcome>>
+                + Send
                 + 'a,
         >,
     > {
@@ -162,7 +160,9 @@ fn always_accepts() -> Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Syn
     Arc::new(|_, _| true)
 }
 
-fn accepts_only(sid: LiveSessionId) -> Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Sync + 'static> {
+fn accepts_only(
+    sid: LiveSessionId,
+) -> Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Sync + 'static> {
     Arc::new(move |s: LiveSessionId, _| s == sid)
 }
 
@@ -402,7 +402,11 @@ fn accepts_rejects_wrong_session() {
     });
 
     std::thread::sleep(Duration::from_millis(300));
-    assert_eq!(play_count.load(Ordering::Relaxed), 0, "wrong session must not play audio");
+    assert_eq!(
+        play_count.load(Ordering::Relaxed),
+        0,
+        "wrong session must not play audio"
+    );
 }
 
 #[test]

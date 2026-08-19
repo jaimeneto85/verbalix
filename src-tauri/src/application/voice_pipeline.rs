@@ -1,7 +1,7 @@
 use crate::{
     application::{
         streaming_audio::StreamSegmentHandle,
-        voice_pipeline_stream::{do_interpret_stream, parse_error_response},
+        voice_pipeline_stream::{do_interpret_stream, parse_error_response, StreamRequest},
         VoicePipelinePort,
     },
     domain::{
@@ -155,11 +155,13 @@ impl VoicePipelinePort for RemoteVoicePipeline {
                 &self.client,
                 &self.base_url,
                 &self.anonymous_key,
-                session_id,
-                segment_id,
-                wav_bytes,
-                target,
-                tok,
+                StreamRequest {
+                    session_id,
+                    segment_id,
+                    wav_bytes,
+                    target_language: target,
+                    token: tok,
+                },
             )
             .await
         })

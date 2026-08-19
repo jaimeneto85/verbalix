@@ -118,20 +118,28 @@ pub(crate) async fn drain_streaming_body<S, C, E>(
     complete.store(true, Ordering::Release);
 }
 
+pub(crate) struct StreamRequest {
+    pub(crate) session_id: LiveSessionId,
+    pub(crate) segment_id: SegmentId,
+    pub(crate) wav_bytes: Vec<u8>,
+    pub(crate) target_language: String,
+    pub(crate) token: String,
+}
+
 pub(crate) async fn do_interpret_stream(
     client: &Client,
     base_url: &str,
     anonymous_key: &str,
-    session_id: LiveSessionId,
-    segment_id: SegmentId,
-    wav_bytes: Vec<u8>,
-    target_language: String,
-    token: String,
+    req: StreamRequest,
 ) -> Result<StreamSegmentHandle, InterpretOutcome> {
+    let session_id = req.session_id;
+    let segment_id = req.segment_id;
+    let target_language = req.target_language;
+    let token = req.token;
     let payload = serde_json::json!({
         "requestId": format!("{}-{}", session_id.0, segment_id.0),
         "targetLanguage": target_language,
-        "audioBase64": STANDARD.encode(&wav_bytes),
+        "audioBase64": STANDARD.encode(&req.wav_bytes),
         "mimeType": "audio/wav",
         "stream": true,
     });
