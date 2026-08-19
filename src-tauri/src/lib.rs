@@ -127,7 +127,7 @@ pub fn run() {
             });
             let vc = runtime::build_voice_components(&supabase_url, &anonymous_key);
             let pause = Arc::new(RuntimePause::default());
-            let live_coordinator = runtime::build_live_coordinator(
+            let live_components = runtime::build_live_coordinator(
                 &supabase_url,
                 &anonymous_key,
                 vc.stream,
@@ -160,7 +160,8 @@ pub fn run() {
                 voice_enrollment: vc.enrollment,
                 audio_capture: vc.capture,
                 enrollment_session: vc.session,
-                live_coordinator,
+                live_coordinator: live_components.coordinator,
+                virtual_mic_device: live_components.virtual_mic_device,
                 on_air_guard: std::sync::Mutex::new(None),
             });
             app.manage(runtime.clone());

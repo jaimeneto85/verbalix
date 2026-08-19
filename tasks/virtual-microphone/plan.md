@@ -293,19 +293,19 @@ Seção "Microfone virtual" no painel Interpretação:
   ambos os pontos do `resolve_physical_input_device` — cobre "Verbalix Microphone" e "Verbalix Microphone Mirror".
 
 ### Fase 4 — Roteamento + integração M2
-- [ ] T4.0: [LOW] PRÉ-REQUISITO de gate: extrair a lógica de `enter_live`/`leave_live` de `live_interpretation.rs`
+- [x] T4.0: [LOW] PRÉ-REQUISITO de gate: extrair a lógica de `enter_live`/`leave_live` de `live_interpretation.rs`
   (já em 340 linhas > gate ~300) para helpers/módulo ANTES de adicionar routing, senão o gate falha na 1ª tentativa (R5).
-- [ ] T4.1: [MEDIUM] `application/playback_router.rs`: `PlaybackRouter` (impl `AudioPreviewPort`, PURO/testável;
+- [x] T4.1: [MEDIUM] `application/playback_router.rs`: `PlaybackRouter` (impl `AudioPreviewPort`, PURO/testável;
   decode+resample→48k → enqueue vs speaker por `Arc<AtomicBool>`). Reuso DRY: promover `decode_wav_f32` de
   `audio_playback.rs` para `pub` em `audio_wav.rs`; generalizar `resample_to_16k` → `resample(samples, src, target, ch)`
   com `resample_to_16k` virando wrapper fino (não regride o M2).
-- [ ] T4.2: [MEDIUM] `live_interpretation.rs`: injetar `virtual_mic` + `route`; enter/leave_live abrem/fecham vmic e
+- [x] T4.2: [MEDIUM] `live_interpretation.rs`: injetar `virtual_mic` + `route`; enter/leave_live abrem/fecham vmic e
   resolvem roteamento via `resolve_route(...)` única (fail-open p/ speaker; EC02/EC07/EC08). Preservar ordem do
   `LiveQueue` (enqueue não-bloqueante). Rodar testes de ordering do M2 (não regride).
 
 ### Fase 5 — Commands + wiring + eventos + diagnostics
 - [ ] T5.1: [LOW] `commands_virtual_mic.rs`: `virtual_mic_status`; emitter do evento `virtual-mic-status`.
-- [ ] T5.2: [MEDIUM] `runtime.rs`: construir device/output/router; wiring no `AppRuntime`/`build_live_coordinator`.
+- [x] T5.2: [MEDIUM] `runtime.rs`: construir device/output/router; wiring no `AppRuntime`/`build_live_coordinator`. (parcial: virtual_mic_status command fica pro próximo round)
 - [ ] T5.3: [LOW] `lib.rs`: registrar comandos + listener de device-list; manter `lib.rs` ≤301 (R6).
 - [ ] T5.4: [LOW] `diagnostics.rs`: `virtual_mic(status, buffer_depth, underruns)` sanitizado.
 

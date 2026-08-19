@@ -8,9 +8,11 @@ mod coordinator_transform;
 mod enrollment_session;
 pub(crate) mod live_interpretation;
 pub(crate) mod live_queue;
+pub(crate) mod live_session_setup;
 pub(crate) mod live_worker;
 mod mutation;
 mod mutation_journal;
+pub(crate) mod playback_router;
 mod ports;
 pub(crate) mod preferences_sync_store;
 pub(crate) mod remote_preferences;
@@ -30,6 +32,7 @@ pub use coordinator::SelectionCoordinator;
 pub use enrollment_session::EnrollmentSession;
 pub use live_interpretation::{LiveEventFn, LiveInterpretationCoordinator};
 pub use mutation::{MutationProjection, MutationReceipt, MutationStatus};
+pub use playback_router::PlaybackRouter;
 pub use ports::{
     AudioCapturePort, AudioPreviewPort, AudioStreamPort, ClipboardPort, OverlayPort, SelectionPort,
     VirtualMicDevicePort, VirtualMicMetrics, VirtualMicOutputPort, VirtualMicStatus,
