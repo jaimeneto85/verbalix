@@ -74,6 +74,7 @@ mod macos_write_authorization;
 #[cfg(target_os = "macos")]
 mod macos_write_boundary;
 
+pub mod virtual_mic_constants;
 pub use clipboard::SystemClipboard;
 pub use note_result::NoteResultPayload;
 #[cfg(target_os = "macos")]
@@ -195,4 +196,37 @@ impl crate::application::AudioPreviewPort for StubAudioPlayback {
     }
 
     fn stop(&self) {}
+}
+
+#[cfg(not(target_os = "macos"))]
+pub struct StubVirtualMicDevice;
+
+#[cfg(not(target_os = "macos"))]
+pub struct StubVirtualMicOutput;
+
+#[cfg(not(target_os = "macos"))]
+impl crate::application::VirtualMicDevicePort for StubVirtualMicDevice {
+    fn status(&self) -> crate::application::VirtualMicStatus {
+        crate::application::VirtualMicStatus::NotInstalled
+    }
+
+    fn watch(&self, _on_change: Box<dyn Fn(crate::application::VirtualMicStatus) + Send + Sync>) {}
+}
+
+#[cfg(not(target_os = "macos"))]
+impl crate::application::VirtualMicOutputPort for StubVirtualMicOutput {
+    fn open(&self) -> Result<(), crate::domain::VerbalixError> {
+        Err(crate::domain::VerbalixError::VirtualMicUnavailable)
+    }
+
+    fn enqueue(&self, _samples_48k: Vec<f32>, _channels: u16) {}
+
+    fn close(&self) {}
+
+    fn metrics(&self) -> crate::application::VirtualMicMetrics {
+        crate::application::VirtualMicMetrics {
+            buffer_depth: 0,
+            underruns: 0,
+        }
+    }
 }

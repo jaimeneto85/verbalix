@@ -1,7 +1,10 @@
 use crate::{
     application::{AudioCapturePort, AudioStreamPort},
     domain::{EnrollmentSample, MicrophonePermission, VerbalixError},
-    platform::audio_wav::{encode_wav, resample_to_16k, TARGET_SAMPLE_RATE},
+    platform::{
+        audio_wav::{encode_wav, resample_to_16k, TARGET_SAMPLE_RATE},
+        virtual_mic_constants::VERBALIX_MIC_DEVICE_NAME,
+    },
 };
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{
@@ -59,9 +62,12 @@ impl MacAudioCapture {
                             continue;
                         }
                         let host = cpal::default_host();
-                        let Some(device) = host.default_input_device() else {
-                            let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
-                            continue;
+                        let device = match resolve_physical_input_device(&host) {
+                            Ok(d) => d,
+                            Err(e) => {
+                                let _ = reply.send(Err(e));
+                                continue;
+                            }
                         };
                         let config = match device.default_input_config() {
                             Ok(c) => c,
@@ -177,9 +183,12 @@ impl MacAudioCapture {
                             continue;
                         }
                         let host = cpal::default_host();
-                        let Some(device) = host.default_input_device() else {
-                            let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
-                            continue;
+                        let device = match resolve_physical_input_device(&host) {
+                            Ok(d) => d,
+                            Err(e) => {
+                                let _ = reply.send(Err(e));
+                                continue;
+                            }
                         };
                         let config = match device.default_input_config() {
                             Ok(c) => c,
@@ -305,6 +314,20 @@ impl AudioStreamPort for MacAudioCapture {
     fn stop_stream(&self) {
         let _ = self.cmd_tx.send(CaptureCommand::StopStream);
     }
+}
+
+fn resolve_physical_input_device(host: &cpal::Host) -> Result<cpal::Device, VerbalixError> {
+    let default = host
+        .default_input_device()
+        .ok_or(VerbalixError::AudioCaptureFailed)?;
+    let default_name = default.name().unwrap_or_default();
+    if default_name != VERBALIX_MIC_DEVICE_NAME {
+        return Ok(default);
+    }
+    host.input_devices()
+        .map_err(|_| VerbalixError::AudioCaptureFailed)?
+        .find(|d| d.name().unwrap_or_default() != VERBALIX_MIC_DEVICE_NAME)
+        .ok_or(VerbalixError::VirtualMicSelectedAsInput)
 }
 
 fn process_audio(

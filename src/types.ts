@@ -20,6 +20,7 @@ export type AppSettings = {
   automaticToolbar: boolean;
   shortcut: string;
   voiceProfileId?: string;
+  outputToVirtualMic?: boolean;
 };
 
 export type SelectionSnapshot = {

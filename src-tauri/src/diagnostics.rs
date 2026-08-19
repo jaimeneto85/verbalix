@@ -160,6 +160,8 @@ pub(super) fn error_code(error: &VerbalixError) -> &'static str {
         VerbalixError::SttFailed => "stt_failed",
         VerbalixError::TranslationFailed => "translation_failed",
         VerbalixError::TtsFailed => "tts_failed",
+        VerbalixError::VirtualMicUnavailable => "virtual_mic_unavailable",
+        VerbalixError::VirtualMicSelectedAsInput => "virtual_mic_selected_as_input",
     }
 }
 

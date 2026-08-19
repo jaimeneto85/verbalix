@@ -215,6 +215,7 @@ fn apply_remote(remote: RemotePreferences, local: &AppSettings) -> AppSettings {
         shortcut: local.shortcut.clone(),
         voice_profile_id: local.voice_profile_id,
         target_language: local.target_language.clone(),
+        output_to_virtual_mic: local.output_to_virtual_mic,
     }
 }
 

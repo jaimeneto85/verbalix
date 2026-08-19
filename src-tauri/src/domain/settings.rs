@@ -38,6 +38,8 @@ pub struct AppSettings {
     pub voice_profile_id: Option<uuid::Uuid>,
     #[serde(default = "default_target_language")]
     pub target_language: String,
+    #[serde(default)]
+    pub output_to_virtual_mic: bool,
 }
 
 impl Default for AppSettings {
@@ -52,6 +54,7 @@ impl Default for AppSettings {
             shortcut: "Option+Shift+Space".to_owned(),
             voice_profile_id: None,
             target_language: "en".to_owned(),
+            output_to_virtual_mic: false,
         }
     }
 }

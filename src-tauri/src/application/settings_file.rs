@@ -67,6 +67,7 @@ mod tests {
             shortcut: "Option+Shift+Space".to_owned(),
             voice_profile_id: None,
             target_language: "en".to_owned(),
+            output_to_virtual_mic: false,
         };
 
         repository.save(&settings).unwrap();

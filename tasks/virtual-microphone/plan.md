@@ -273,12 +273,12 @@ Seção "Microfone virtual" no painel Interpretação:
   `/Library/Audio/Plug-Ins/HAL`, `sudo killall coreaudiod`; nunca embutem senha.
 
 ### Fase 2 — Ports + domain + settings + erros
-- [ ] T2.1: [LOW] `domain/settings.rs`: `output_to_virtual_mic: bool` (`#[serde(default)]`) + Default + preservar em `apply_remote`.
-- [ ] T2.2: [LOW] `domain/error.rs`: variantes sanitizadas (`VirtualMicUnavailable`).
-- [ ] T2.3: [LOW] `application/ports.rs`: `VirtualMicDevicePort` + `VirtualMicOutputPort` + `VirtualMicStatus`/`VirtualMicMetrics` (camelCase).
+- [x] T2.1: [LOW] `domain/settings.rs`: `output_to_virtual_mic: bool` (`#[serde(default)]`) + Default + preservar em `apply_remote`.
+- [x] T2.2: [LOW] `domain/error.rs`: variantes sanitizadas (`VirtualMicUnavailable`).
+- [x] T2.3: [LOW] `application/ports.rs`: `VirtualMicDevicePort` + `VirtualMicOutputPort` + `VirtualMicStatus`/`VirtualMicMetrics` (camelCase).
 
 ### Fase 3 — Adapter macOS + stub
-- [ ] T3.0: [MEDIUM] SPIKE de resolução de device: confirmar `coreaudio-sys` `kAudioHardwarePropertyDeviceForUID`
+- [x] T3.0: [MEDIUM] SPIKE de resolução de device: confirmar `coreaudio-sys` `kAudioHardwarePropertyDeviceForUID`
   (UID→AudioObjectID) + match por NOME em `cpal::host.output_devices()`; congelar a assinatura dos ports (T2.3)
   só após o spike. Sem device real, provar a resolução com um device qualquer existente.
 - [ ] T3.1: [MEDIUM] `platform/virtual_mic.rs`: `MacVirtualMicDevice` (status por Info.plist `CFBundleVersion` +
@@ -288,9 +288,9 @@ Seção "Microfone virtual" no painel Interpretação:
   dona do `cpal::Stream` de output — molde de `MacAudioPlayback`; ring buffer bounded ~2 s 48 kHz, overflow=drop
   oldest, silêncio quando vazio, métricas buffer_depth/underruns). Construção LAZY (só em `open()`); listener de
   device-list registrado no startup é barato.
-- [ ] T3.3: [LOW] Stubs não-macOS em `platform/mod.rs` (status `NotInstalled`, `watch` no-op que nunca dispara,
+- [x] T3.3: [LOW] Stubs não-macOS em `platform/mod.rs` (status `NotInstalled`, `watch` no-op que nunca dispara,
   `open`→Err, enqueue/close no-ops); `Cargo.toml`: `coreaudio-sys` como dep direta (já no lock).
-- [ ] T3.4: [MEDIUM] `platform/audio_capture.rs`: resolver o device de captura EXPLICITAMENTE (linhas 62 e 180 usam
+- [x] T3.4: [MEDIUM] `platform/audio_capture.rs`: resolver o device de captura EXPLICITAMENTE (linhas 62 e 180 usam
   `default_input_device()`, NÃO há enumeração) — se o UID/nome == Verbalix, andar por `host.input_devices()` até o
   próximo device físico ou falhar loud com erro sanitizado ("selecione um microfone físico"). Anti-feedback (EC03/CA04).
 
