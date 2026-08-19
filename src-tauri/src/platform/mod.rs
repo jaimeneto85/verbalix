@@ -74,7 +74,12 @@ mod macos_write_authorization;
 #[cfg(target_os = "macos")]
 mod macos_write_boundary;
 
+#[cfg(target_os = "macos")]
+mod virtual_mic;
 pub mod virtual_mic_constants;
+#[cfg(target_os = "macos")]
+mod virtual_mic_output;
+
 pub use clipboard::SystemClipboard;
 pub use note_result::NoteResultPayload;
 #[cfg(target_os = "macos")]
@@ -91,6 +96,10 @@ pub use audio_permission::{microphone_permission_status, request_microphone_perm
 pub use audio_playback::MacAudioPlayback;
 #[cfg(target_os = "macos")]
 pub use macos_accessibility::MacAccessibility;
+#[cfg(target_os = "macos")]
+pub use virtual_mic::MacVirtualMicDevice;
+#[cfg(target_os = "macos")]
+pub use virtual_mic_output::MacVirtualMicOutput;
 
 #[cfg(not(target_os = "macos"))]
 pub use unsupported::MacAccessibility;

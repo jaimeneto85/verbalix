@@ -281,18 +281,16 @@ Seção "Microfone virtual" no painel Interpretação:
 - [x] T3.0: [MEDIUM] SPIKE de resolução de device: confirmar `coreaudio-sys` `kAudioHardwarePropertyDeviceForUID`
   (UID→AudioObjectID) + match por NOME em `cpal::host.output_devices()`; congelar a assinatura dos ports (T2.3)
   só após o spike. Sem device real, provar a resolução com um device qualquer existente.
-- [ ] T3.1: [MEDIUM] `platform/virtual_mic.rs`: `MacVirtualMicDevice` (status por Info.plist `CFBundleVersion` +
+- [x] T3.1: [MEDIUM] `platform/virtual_mic.rs`: `MacVirtualMicDevice` (status por Info.plist `CFBundleVersion` +
   property listener de device-list `AudioObjectAddPropertyListener`) atrás de `cfg(macos)`. Testes NÃO exigem
   driver real instalado (lógica de comparação de versão isolada/pura).
-- [ ] T3.2: [HIGH] `platform/virtual_mic.rs`: `MacVirtualMicOutput` (resolve device por nome/UID, thread dedicada
-  dona do `cpal::Stream` de output — molde de `MacAudioPlayback`; ring buffer bounded ~2 s 48 kHz, overflow=drop
-  oldest, silêncio quando vazio, métricas buffer_depth/underruns). Construção LAZY (só em `open()`); listener de
-  device-list registrado no startup é barato.
+- [x] T3.2: [HIGH] `platform/virtual_mic_output.rs`: `MacVirtualMicOutput` (resolve device por nome, thread dedicada
+  dona do `cpal::Stream` de output — molde de `MacAudioPlayback`; `RingBuffer` puro+testável bounded ~2 s 48 kHz,
+  overflow=drop oldest, silêncio quando vazio, métricas buffer_depth/underruns). Construção LAZY (só em `open()`).
 - [x] T3.3: [LOW] Stubs não-macOS em `platform/mod.rs` (status `NotInstalled`, `watch` no-op que nunca dispara,
-  `open`→Err, enqueue/close no-ops); `Cargo.toml`: `coreaudio-sys` como dep direta (já no lock).
-- [x] T3.4: [MEDIUM] `platform/audio_capture.rs`: resolver o device de captura EXPLICITAMENTE (linhas 62 e 180 usam
-  `default_input_device()`, NÃO há enumeração) — se o UID/nome == Verbalix, andar por `host.input_devices()` até o
-  próximo device físico ou falhar loud com erro sanitizado ("selecione um microfone físico"). Anti-feedback (EC03/CA04).
+  `open`→Err, enqueue/close no-ops); re-export de `MacVirtualMicDevice`/`MacVirtualMicOutput` atrás de cfg(macos).
+- [x] T3.4: [MEDIUM] `platform/audio_capture.rs`: exclusão ampliada para `starts_with(VERBALIX_MIC_DEVICE_NAME)` em
+  ambos os pontos do `resolve_physical_input_device` — cobre "Verbalix Microphone" e "Verbalix Microphone Mirror".
 
 ### Fase 4 — Roteamento + integração M2
 - [ ] T4.0: [LOW] PRÉ-REQUISITO de gate: extrair a lógica de `enter_live`/`leave_live` de `live_interpretation.rs`

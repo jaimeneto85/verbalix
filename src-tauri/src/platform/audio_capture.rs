@@ -321,12 +321,16 @@ fn resolve_physical_input_device(host: &cpal::Host) -> Result<cpal::Device, Verb
         .default_input_device()
         .ok_or(VerbalixError::AudioCaptureFailed)?;
     let default_name = default.name().unwrap_or_default();
-    if default_name != VERBALIX_MIC_DEVICE_NAME {
+    if !default_name.starts_with(VERBALIX_MIC_DEVICE_NAME) {
         return Ok(default);
     }
     host.input_devices()
         .map_err(|_| VerbalixError::AudioCaptureFailed)?
-        .find(|d| d.name().unwrap_or_default() != VERBALIX_MIC_DEVICE_NAME)
+        .find(|d| {
+            !d.name()
+                .unwrap_or_default()
+                .starts_with(VERBALIX_MIC_DEVICE_NAME)
+        })
         .ok_or(VerbalixError::VirtualMicSelectedAsInput)
 }
 
