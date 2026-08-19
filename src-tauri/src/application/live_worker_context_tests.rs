@@ -4,10 +4,7 @@ use crate::{
         live_queue::LiveQueue, streaming_audio::StreamSegmentHandle, AudioPreviewPort,
         VoicePipelinePort,
     },
-    domain::{
-        InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations,
-        TranslationContext, VerbalixError,
-    },
+    domain::{InterpretOutcome, LiveSessionId, SegmentId, TranslationContext, VerbalixError},
 };
 use std::{
     collections::VecDeque,
@@ -187,17 +184,10 @@ fn session_switch_before_promotion_does_not_promote_context() {
     let old_session = session();
     let new_session = LiveSessionId(uuid::Uuid::new_v4());
 
-    let accepted = Arc::new(std::sync::atomic::AtomicBool::new(true));
-    let accepted_clone = Arc::clone(&accepted);
-
+    // After leave_live/session switch, only new_session is accepted.
+    // old_session's in-flight playback arrives after the switch and must be rejected.
     let accepts_fn: Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Sync + 'static> =
-        Arc::new(move |sid: LiveSessionId, _| {
-            if sid == old_session {
-                accepted_clone.load(Ordering::Relaxed)
-            } else {
-                true
-            }
-        });
+        Arc::new(move |sid: LiveSessionId, _| sid == new_session);
 
     let pipeline = Arc::new(ContextStreamPipeline {
         source_text: "old session text".to_owned(),
@@ -216,7 +206,6 @@ fn session_switch_before_promotion_does_not_promote_context() {
         Arc::clone(&ctx),
     );
 
-    accepted.store(false, Ordering::Relaxed);
     worker.dispatch(WorkerCommand::Dispatch {
         session_id: old_session,
         segment_id: SegmentId(0),
