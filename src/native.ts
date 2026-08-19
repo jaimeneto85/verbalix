@@ -1,8 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type {
   AppSettings,
   AiReadiness,
+  EnterLivePayload,
   HistoryItem,
+  LiveStateEvent,
   MicrophonePermission,
   NoteResult,
   PublicBackendConfig,
@@ -102,5 +105,25 @@ export const native = {
   },
   voiceProfileStatus(voiceProfileId: string) {
     return invoke<VoiceProfileView | null>("voice_profile_status", { voiceProfileId });
+  },
+  enterLive(payload: EnterLivePayload) {
+    return invoke<void>("enter_live", { payload });
+  },
+  leaveLive() {
+    return invoke<void>("leave_live");
+  },
+  liveStatus() {
+    return invoke<LiveStateEvent>("live_status");
+  },
+  onLiveStateChange(callback: (event: LiveStateEvent) => void): () => void {
+    let unlisten: (() => void) | undefined;
+    listen<LiveStateEvent>("live-state-changed", (event) => {
+      callback(event.payload);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => {
+      unlisten?.();
+    };
   }
 };

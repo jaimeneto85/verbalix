@@ -1,5 +1,5 @@
 use crate::{
-    application::AudioCapturePort,
+    application::{AudioCapturePort, AudioStreamPort},
     domain::{EnrollmentSample, MicrophonePermission, VerbalixError},
     platform::audio_wav::{encode_wav, resample_to_16k, TARGET_SAMPLE_RATE},
 };
@@ -8,6 +8,7 @@ use std::sync::{
     atomic::{AtomicU32, Ordering},
     mpsc, Arc, Mutex,
 };
+use std::time::Duration;
 
 const MAX_DURATION_SECS: f32 = 120.0;
 const MIN_DURATION_SECS: f32 = 5.0;
@@ -16,6 +17,12 @@ enum CaptureCommand {
     Start(mpsc::SyncSender<Result<(), VerbalixError>>),
     Stop(mpsc::SyncSender<Result<EnrollmentSample, VerbalixError>>),
     Cancel,
+    StartStream {
+        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + 'static>,
+        error_sink: Box<dyn Fn() + Send + 'static>,
+        reply: mpsc::SyncSender<Result<(), VerbalixError>>,
+    },
+    StopStream,
 }
 
 struct ActiveCapture {
@@ -23,6 +30,10 @@ struct ActiveCapture {
     buffer: Arc<Mutex<Vec<f32>>>,
     channels: u16,
     sample_rate: u32,
+}
+
+struct ActiveStream {
+    _stream: cpal::Stream,
 }
 
 pub struct MacAudioCapture {
@@ -38,10 +49,15 @@ impl MacAudioCapture {
 
         std::thread::spawn(move || {
             let mut active: Option<ActiveCapture> = None;
+            let mut streaming: Option<ActiveStream> = None;
 
             while let Ok(cmd) = cmd_rx.recv() {
                 match cmd {
                     CaptureCommand::Start(reply) => {
+                        if streaming.is_some() {
+                            let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                            continue;
+                        }
                         let host = cpal::default_host();
                         let Some(device) = host.default_input_device() else {
                             let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
@@ -150,6 +166,80 @@ impl MacAudioCapture {
                         active = None;
                         level_thread.store(0f32.to_bits(), Ordering::Relaxed);
                     }
+
+                    CaptureCommand::StartStream { sink, error_sink, reply } => {
+                        if active.is_some() {
+                            let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                            continue;
+                        }
+                        let host = cpal::default_host();
+                        let Some(device) = host.default_input_device() else {
+                            let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                            continue;
+                        };
+                        let config = match device.default_input_config() {
+                            Ok(c) => c,
+                            Err(_) => {
+                                let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                                continue;
+                            }
+                        };
+                        let sample_rate = config.sample_rate().0;
+                        let channels = config.channels();
+
+                        let sink = Arc::new(sink);
+                        let sink_cb = Arc::clone(&sink);
+                        let error_sink = Arc::new(error_sink);
+                        let error_sink_cb = Arc::clone(&error_sink);
+
+                        let stream_result = match config.sample_format() {
+                            cpal::SampleFormat::F32 => device.build_input_stream(
+                                &config.config(),
+                                move |data: &[f32], _| {
+                                    sink_cb(data.to_vec(), sample_rate, channels);
+                                },
+                                move |_err| {
+                                    error_sink_cb();
+                                },
+                                None,
+                            ),
+                            cpal::SampleFormat::I16 => device.build_input_stream(
+                                &config.config(),
+                                move |data: &[i16], _| {
+                                    let frames: Vec<f32> =
+                                        data.iter().map(|&s| s as f32 / 32768.0).collect();
+                                    sink_cb(frames, sample_rate, channels);
+                                },
+                                move |_err| {
+                                    error_sink_cb();
+                                },
+                                None,
+                            ),
+                            _ => {
+                                let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                                continue;
+                            }
+                        };
+
+                        match stream_result {
+                            Ok(stream) => match stream.play() {
+                                Ok(()) => {
+                                    streaming = Some(ActiveStream { _stream: stream });
+                                    let _ = reply.send(Ok(()));
+                                }
+                                Err(_) => {
+                                    let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                                }
+                            },
+                            Err(_) => {
+                                let _ = reply.send(Err(VerbalixError::AudioCaptureFailed));
+                            }
+                        }
+                    }
+
+                    CaptureCommand::StopStream => {
+                        streaming = None;
+                    }
                 }
             }
         });
@@ -164,7 +254,7 @@ impl AudioCapturePort for MacAudioCapture {
         self.cmd_tx
             .send(CaptureCommand::Start(tx))
             .map_err(|_| VerbalixError::AudioCaptureFailed)?;
-        rx.recv_timeout(std::time::Duration::from_secs(5))
+        rx.recv_timeout(Duration::from_secs(5))
             .map_err(|_| VerbalixError::AudioCaptureFailed)?
     }
 
@@ -173,7 +263,7 @@ impl AudioCapturePort for MacAudioCapture {
         self.cmd_tx
             .send(CaptureCommand::Stop(tx))
             .map_err(|_| VerbalixError::AudioCaptureFailed)?;
-        rx.recv_timeout(std::time::Duration::from_secs(70))
+        rx.recv_timeout(Duration::from_secs(70))
             .map_err(|_| VerbalixError::AudioCaptureFailed)?
     }
 
@@ -187,6 +277,25 @@ impl AudioCapturePort for MacAudioCapture {
 
     fn permission_status(&self) -> MicrophonePermission {
         crate::platform::microphone_permission_status()
+    }
+}
+
+impl AudioStreamPort for MacAudioCapture {
+    fn start_stream(
+        &self,
+        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + 'static>,
+        error_sink: Box<dyn Fn() + Send + 'static>,
+    ) -> Result<(), VerbalixError> {
+        let (tx, rx) = mpsc::sync_channel(1);
+        self.cmd_tx
+            .send(CaptureCommand::StartStream { sink, error_sink, reply: tx })
+            .map_err(|_| VerbalixError::AudioCaptureFailed)?;
+        rx.recv_timeout(Duration::from_secs(5))
+            .map_err(|_| VerbalixError::AudioCaptureFailed)?
+    }
+
+    fn stop_stream(&self) {
+        let _ = self.cmd_tx.send(CaptureCommand::StopStream);
     }
 }
 
@@ -211,4 +320,3 @@ fn process_audio(
 
     Ok(EnrollmentSample { wav_bytes })
 }
-

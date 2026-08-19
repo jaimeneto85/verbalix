@@ -73,6 +73,25 @@ export type HistoryItem = {
   created_at: string;
 };
 
+export type LiveStatus = 'idle' | 'listening' | 'processing' | 'speaking' | 'error';
+
+export interface LiveStateEvent {
+  status: LiveStatus;
+  lastLatencyMs?: number;
+  lastDropped?: boolean;
+  errorMessage?: string;
+  sessionId?: string;
+}
+
+export interface EnterLivePayload {
+  targetLanguage: string;
+  voiceProfileId: string;
+}
+
+export interface LiveSettings {
+  targetLanguage: string;
+}
+
 export const defaultSettings: AppSettings = {
   formality: 3,
   length: "balanced",
