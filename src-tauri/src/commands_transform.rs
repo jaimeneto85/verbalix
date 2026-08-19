@@ -35,6 +35,14 @@ pub(crate) fn show_transform_failure(
         VerbalixError::MicrophonePermissionDenied
         | VerbalixError::AudioCaptureFailed
         | VerbalixError::EnrollmentFailed => "Erro no enrollment de voz.",
+        VerbalixError::LiveSessionInactive
+        | VerbalixError::TargetLanguageUnsupported
+        | VerbalixError::VoiceProfileMissing
+        | VerbalixError::AudioPlaybackFailed
+        | VerbalixError::InterpretationFailed
+        | VerbalixError::SttFailed
+        | VerbalixError::TranslationFailed
+        | VerbalixError::TtsFailed => "Falha na interpretação ao vivo.",
         #[cfg(not(target_os = "macos"))]
         VerbalixError::UnsupportedPlatform => "Esta operação não está disponível nesta plataforma.",
         VerbalixError::LocalFailure => "Não foi possível aplicar o resultado. Tente novamente.",

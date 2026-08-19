@@ -37,6 +37,22 @@ pub enum VerbalixError {
     EnrollmentFailed,
     #[error("A local operation failed")]
     LocalFailure,
+    #[error("Sessão de interpretação ao vivo inativa")]
+    LiveSessionInactive,
+    #[error("Língua-alvo não suportada")]
+    TargetLanguageUnsupported,
+    #[error("Perfil de voz não encontrado")]
+    VoiceProfileMissing,
+    #[error("Falha na reprodução de áudio")]
+    AudioPlaybackFailed,
+    #[error("Falha na interpretação do segmento")]
+    InterpretationFailed,
+    #[error("Falha de STT no segmento")]
+    SttFailed,
+    #[error("Falha de tradução no segmento")]
+    TranslationFailed,
+    #[error("Falha de TTS no segmento")]
+    TtsFailed,
 }
 
 impl Serialize for VerbalixError {

@@ -87,6 +87,7 @@ fn base_settings() -> AppSettings {
         automatic_toolbar: true,
         shortcut: "Cmd+Shift+V".to_owned(),
         voice_profile_id: None,
+        target_language: "en".to_owned(),
     }
 }
 

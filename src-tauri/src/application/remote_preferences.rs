@@ -214,6 +214,7 @@ fn apply_remote(remote: RemotePreferences, local: &AppSettings) -> AppSettings {
         automatic_toolbar: local.automatic_toolbar,
         shortcut: local.shortcut.clone(),
         voice_profile_id: local.voice_profile_id,
+        target_language: local.target_language.clone(),
     }
 }
 

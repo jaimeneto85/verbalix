@@ -25,11 +25,22 @@ impl Drop for ActionGuard {
     }
 }
 
+pub struct OnAirGuard {
+    on_air: Arc<AtomicBool>,
+}
+
+impl Drop for OnAirGuard {
+    fn drop(&mut self) {
+        self.on_air.store(false, Ordering::Release);
+    }
+}
+
 pub struct RuntimePause {
     paused: AtomicBool,
     in_flight: Arc<AtomicUsize>,
     grace_deadline_ms: Arc<AtomicU64>,
     clock_ms: fn() -> u64,
+    on_air: Arc<AtomicBool>,
 }
 
 impl Default for RuntimePause {
@@ -39,6 +50,7 @@ impl Default for RuntimePause {
             in_flight: Arc::new(AtomicUsize::new(0)),
             grace_deadline_ms: Arc::new(AtomicU64::new(0)),
             clock_ms: now_ms,
+            on_air: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -69,24 +81,36 @@ impl RuntimePause {
         }
     }
 
+    pub fn begin_on_air(&self) -> OnAirGuard {
+        self.on_air.store(true, Ordering::Release);
+        OnAirGuard {
+            on_air: self.on_air.clone(),
+        }
+    }
+
+    pub fn is_on_air(&self) -> bool {
+        self.on_air.load(Ordering::Acquire)
+    }
+
     pub fn run_polling<T>(&self, automatic_toolbar: bool, action: impl FnOnce() -> T) -> Option<T> {
-        (automatic_toolbar && !self.is_paused() && !self.is_action_in_flight()).then(action)
+        (automatic_toolbar && !self.is_paused() && !self.is_action_in_flight() && !self.is_on_air())
+            .then(action)
     }
 
     pub fn run_ax_observer<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
-        (!self.is_paused() && !self.is_action_in_flight()).then(action)
+        (!self.is_paused() && !self.is_action_in_flight() && !self.is_on_air()).then(action)
     }
 
     pub fn run_mouse_dismiss<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
-        (!self.is_action_in_flight()).then(action)
+        (!self.is_action_in_flight() && !self.is_on_air()).then(action)
     }
 
     pub fn run_global_shortcut<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
-        (!self.is_paused()).then(action)
+        (!self.is_paused() && !self.is_on_air()).then(action)
     }
 
     pub fn run_clipboard_fallback<T>(&self, action: impl FnOnce() -> T) -> Option<T> {
-        (!self.is_paused()).then(action)
+        (!self.is_paused() && !self.is_on_air()).then(action)
     }
 }
 
@@ -99,6 +123,7 @@ impl RuntimePause {
             in_flight: Arc::new(AtomicUsize::new(0)),
             grace_deadline_ms: Arc::new(AtomicU64::new(0)),
             clock_ms,
+            on_air: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -241,5 +266,50 @@ mod tests {
 
         set_test_clock_ms(500 + GRACE_MS + 1);
         assert!(!pause.is_action_in_flight());
+    }
+
+    #[test]
+    fn on_air_suppresses_all_entry_points_for_session_duration() {
+        let pause = RuntimePause::default();
+        let calls = AtomicUsize::new(0);
+        let _guard = pause.begin_on_air();
+
+        assert!(pause.run_polling(true, increments(&calls)).is_none());
+        assert!(pause.run_ax_observer(increments(&calls)).is_none());
+        assert!(pause.run_mouse_dismiss(increments(&calls)).is_none());
+        assert!(pause.run_global_shortcut(increments(&calls)).is_none());
+        assert!(pause.run_clipboard_fallback(increments(&calls)).is_none());
+
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn on_air_guard_drop_immediately_reenables_entry_points() {
+        let pause = RuntimePause::default();
+        let calls = AtomicUsize::new(0);
+        let guard = pause.begin_on_air();
+
+        assert!(pause.run_polling(true, increments(&calls)).is_none());
+        drop(guard);
+        assert!(pause.run_polling(true, increments(&calls)).is_some());
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn on_air_is_independent_of_grace_and_in_flight() {
+        set_test_clock_ms(1000);
+        let pause = RuntimePause::with_clock(test_clock_ms);
+        let _on_air = pause.begin_on_air();
+
+        assert!(!pause.is_action_in_flight());
+        assert!(pause.is_on_air());
+
+        let action_guard = pause.begin_action();
+        assert!(pause.is_action_in_flight());
+        drop(action_guard);
+
+        set_test_clock_ms(1000 + GRACE_MS + 1);
+        assert!(!pause.is_action_in_flight());
+        assert!(pause.is_on_air());
     }
 }

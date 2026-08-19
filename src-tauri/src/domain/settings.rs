@@ -18,6 +18,12 @@ pub enum TonePreference {
     Technical,
 }
 
+const ALLOWED_LANGUAGES: &[&str] = &["en", "pt", "es", "fr", "de", "it", "ja", "ko", "zh"];
+
+fn default_target_language() -> String {
+    "en".to_owned()
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -30,6 +36,8 @@ pub struct AppSettings {
     pub shortcut: String,
     #[serde(default)]
     pub voice_profile_id: Option<uuid::Uuid>,
+    #[serde(default = "default_target_language")]
+    pub target_language: String,
 }
 
 impl Default for AppSettings {
@@ -43,6 +51,7 @@ impl Default for AppSettings {
             automatic_toolbar: true,
             shortcut: "Option+Shift+Space".to_owned(),
             voice_profile_id: None,
+            target_language: "en".to_owned(),
         }
     }
 }
@@ -50,6 +59,9 @@ impl Default for AppSettings {
 impl AppSettings {
     pub fn validate(self) -> Result<Self, VerbalixError> {
         if !(1..=5).contains(&self.formality) || self.shortcut.trim().is_empty() {
+            return Err(VerbalixError::LocalFailure);
+        }
+        if !ALLOWED_LANGUAGES.contains(&self.target_language.as_str()) {
             return Err(VerbalixError::LocalFailure);
         }
         Ok(self)

@@ -149,6 +149,34 @@ pub trait AudioCapturePort: Send + Sync {
     fn permission_status(&self) -> MicrophonePermission;
 }
 
+pub trait AudioStreamPort: Send + Sync {
+    fn start_stream(
+        &self,
+        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static>,
+        error_sink: Box<dyn Fn() + Send + Sync + 'static>,
+    ) -> Result<(), crate::domain::VerbalixError>;
+
+    fn stop_stream(&self);
+}
+
+pub trait VoicePipelinePort: Send + Sync {
+    fn interpret<'a>(
+        &'a self,
+        session_id: crate::domain::LiveSessionId,
+        segment_id: crate::domain::SegmentId,
+        wav_bytes: Vec<u8>,
+        target_language: &'a str,
+        token: &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = crate::domain::InterpretOutcome> + Send + 'a>,
+    >;
+}
+
+pub trait AudioPreviewPort: Send + Sync {
+    fn play(&self, wav_bytes: Vec<u8>) -> Result<(), crate::domain::VerbalixError>;
+    fn stop(&self);
+}
+
 pub trait VoiceEnrollmentPort: Send + Sync {
     fn enroll<'a>(
         &'a self,

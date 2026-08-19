@@ -66,6 +66,7 @@ mod tests {
             automatic_toolbar: false,
             shortcut: "Option+Shift+Space".to_owned(),
             voice_profile_id: None,
+            target_language: "en".to_owned(),
         };
 
         repository.save(&settings).unwrap();

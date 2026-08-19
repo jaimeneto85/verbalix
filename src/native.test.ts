@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultSettings } from "./types";
 
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
+const { invoke, listen } = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  listen: vi.fn()
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+vi.mock("@tauri-apps/api/event", () => ({ listen }));
 
 import { native } from "./native";
 
 describe("native command contract", () => {
   beforeEach(() => {
     invoke.mockReset();
+    listen.mockReset();
   });
 
   it("requests accessibility without prompting by default", async () => {
@@ -203,5 +208,76 @@ describe("native command contract", () => {
       ["delete_history", { id: "history-id" }],
       ["delete_history", { id: null }]
     ]);
+  });
+
+  it("enters live with the camelCase target language and voice profile payload", async () => {
+    invoke.mockResolvedValue(undefined);
+
+    await native.enterLive({ targetLanguage: "pt", voiceProfileId: "profile-id" });
+
+    expect(invoke).toHaveBeenCalledWith("enter_live", {
+      payload: { targetLanguage: "pt", voiceProfileId: "profile-id" }
+    });
+  });
+
+  it("leaves live without arguments", async () => {
+    invoke.mockResolvedValue(undefined);
+
+    await native.leaveLive();
+
+    expect(invoke).toHaveBeenCalledWith("leave_live");
+  });
+
+  it("reads live status without arguments", async () => {
+    invoke.mockResolvedValue({ status: "idle" });
+
+    await expect(native.liveStatus()).resolves.toEqual({ status: "idle" });
+
+    expect(invoke).toHaveBeenCalledWith("live_status");
+  });
+
+  it("subscribes to live-state-changed and forwards only the event payload", async () => {
+    let deliver: ((event: { payload: unknown }) => void) | undefined;
+    listen.mockImplementation((eventName, handler) => {
+      expect(eventName).toBe("live-state-changed");
+      deliver = handler;
+      return Promise.resolve(() => undefined);
+    });
+    const callback = vi.fn();
+
+    native.onLiveStateChange(callback);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    deliver?.({ payload: { status: "speaking", lastLatencyMs: 1200 } });
+
+    expect(callback).toHaveBeenCalledWith({ status: "speaking", lastLatencyMs: 1200 });
+  });
+
+  it("unsubscribes from live-state-changed once the underlying listener resolves", async () => {
+    const unlisten = vi.fn();
+    listen.mockResolvedValue(unlisten);
+
+    const dispose = native.onLiveStateChange(vi.fn());
+    await Promise.resolve();
+    await Promise.resolve();
+    dispose();
+
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("is a no-op to unsubscribe from live-state-changed before the listener resolves", () => {
+    let resolveListen: ((value: () => void) => void) | undefined;
+    listen.mockImplementation(
+      () =>
+        new Promise<() => void>((resolve) => {
+          resolveListen = resolve;
+        })
+    );
+
+    const dispose = native.onLiveStateChange(vi.fn());
+
+    expect(() => dispose()).not.toThrow();
+    resolveListen?.(() => undefined);
   });
 });

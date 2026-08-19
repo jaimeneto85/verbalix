@@ -2,6 +2,9 @@
 mod audio_capture;
 #[cfg(target_os = "macos")]
 pub mod audio_permission;
+#[cfg(target_os = "macos")]
+mod audio_playback;
+pub mod audio_wav;
 mod causal_epoch;
 #[cfg(target_os = "macos")]
 mod causal_registry;
@@ -84,6 +87,8 @@ pub use audio_capture::MacAudioCapture;
 #[cfg(target_os = "macos")]
 pub use audio_permission::{microphone_permission_status, request_microphone_permission};
 #[cfg(target_os = "macos")]
+pub use audio_playback::MacAudioPlayback;
+#[cfg(target_os = "macos")]
 pub use macos_accessibility::MacAccessibility;
 
 #[cfg(not(target_os = "macos"))]
@@ -131,6 +136,12 @@ mod unsupported {
 pub struct StubAudioCapture;
 
 #[cfg(not(target_os = "macos"))]
+pub struct StubAudioStream;
+
+#[cfg(not(target_os = "macos"))]
+pub struct StubAudioPlayback;
+
+#[cfg(not(target_os = "macos"))]
 impl crate::application::AudioCapturePort for StubAudioCapture {
     fn start(&self) -> Result<(), crate::domain::VerbalixError> {
         Err(crate::domain::VerbalixError::UnsupportedPlatform)
@@ -162,4 +173,26 @@ pub fn request_microphone_permission<
 >(
     _callback: F,
 ) {
+}
+
+#[cfg(not(target_os = "macos"))]
+impl crate::application::AudioStreamPort for StubAudioStream {
+    fn start_stream(
+        &self,
+        _sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static>,
+        _error_sink: Box<dyn Fn() + Send + Sync + 'static>,
+    ) -> Result<(), crate::domain::VerbalixError> {
+        Err(crate::domain::VerbalixError::UnsupportedPlatform)
+    }
+
+    fn stop_stream(&self) {}
+}
+
+#[cfg(not(target_os = "macos"))]
+impl crate::application::AudioPreviewPort for StubAudioPlayback {
+    fn play(&self, _wav_bytes: Vec<u8>) -> Result<(), crate::domain::VerbalixError> {
+        Err(crate::domain::VerbalixError::UnsupportedPlatform)
+    }
+
+    fn stop(&self) {}
 }
