@@ -190,13 +190,11 @@ pub trait VoicePipelinePort: Send + Sync {
                 + 'a,
         >,
     > {
-        let _ = (wav_bytes, target_language, token);
         Box::pin(async move {
-            Err(crate::domain::InterpretOutcome {
-                session_id,
-                segment_id,
-                result: Err(crate::domain::VerbalixError::InterpretationFailed),
-            })
+            let outcome = self
+                .interpret(session_id, segment_id, wav_bytes, target_language, token)
+                .await;
+            Err(outcome)
         })
     }
 }
@@ -204,6 +202,16 @@ pub trait VoicePipelinePort: Send + Sync {
 pub trait AudioPreviewPort: Send + Sync {
     fn play(&self, wav_bytes: Vec<u8>) -> Result<(), crate::domain::VerbalixError>;
     fn stop(&self);
+    fn play_stream(
+        &self,
+        handle: crate::application::streaming_audio::StreamSegmentHandle,
+    ) -> Result<(), crate::domain::VerbalixError> {
+        use std::sync::atomic::Ordering;
+        while !handle.cancel.load(Ordering::Relaxed) && !handle.complete.load(Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

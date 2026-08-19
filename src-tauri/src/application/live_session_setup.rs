@@ -18,6 +18,7 @@ pub struct LiveEventPayload {
     pub stage_ms: Option<StageDurations>,
     pub segment_id: Option<u64>,
     pub detected_language: Option<String>,
+    pub first_audio_ms: Option<u64>,
 }
 
 pub type LiveEventFn = Arc<dyn Fn(LiveEventPayload) + Send + Sync>;
@@ -76,6 +77,7 @@ pub(crate) fn build_audio_sink(
                 ss.frame_buffer.extend_from_slice(&frames);
             }
             Some(EndpointEvent::Closed) | Some(EndpointEvent::MaxDurationReached) => {
+                let t_capture_end = Instant::now();
                 let (wav_bytes, session_id, segment_id, target_lang) = {
                     let mut ss = sink_state_arc.lock().unwrap();
                     let samples = resample_to_16k(&ss.frame_buffer, ss.sample_rate, ss.channels);
@@ -102,6 +104,7 @@ pub(crate) fn build_audio_sink(
                         wav_bytes,
                         target_language: target_lang,
                         token: token.clone(),
+                        t_capture_end,
                     });
                 }
             }
@@ -150,6 +153,7 @@ pub(crate) fn build_worker_callback(
                     stage_ms: None,
                     segment_id: None,
                     detected_language: None,
+                    first_audio_ms: None,
                 });
             }
         }
@@ -158,6 +162,7 @@ pub(crate) fn build_worker_callback(
             session_id,
             stage_ms,
             detected_language,
+            first_audio_ms,
         } => {
             let current_session_matches = {
                 let st = state_arc.lock().unwrap();
@@ -178,6 +183,7 @@ pub(crate) fn build_worker_callback(
                 stage_ms: Some(stage_ms),
                 segment_id: Some(segment_id.0),
                 detected_language: Some(detected_language),
+                first_audio_ms,
             });
         }
         WorkerEvent::Dropped { segment_id } => {
@@ -186,6 +192,7 @@ pub(crate) fn build_worker_callback(
                 stage_ms: None,
                 segment_id: Some(segment_id.0),
                 detected_language: None,
+                first_audio_ms: None,
             });
         }
     })

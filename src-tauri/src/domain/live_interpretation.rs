@@ -10,7 +10,7 @@ impl LiveSessionId {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct SegmentId(pub u64);
 
 impl SegmentId {

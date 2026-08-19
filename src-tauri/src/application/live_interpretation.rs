@@ -116,6 +116,19 @@ impl LiveInterpretationCoordinator {
             VerbalixError::AudioCaptureFailed
         })?;
 
+        let state_for_accepts = Arc::clone(&self.state);
+        let accepts_fn = Arc::new(
+            move |sid: crate::domain::LiveSessionId, seg: crate::domain::SegmentId| {
+                state_for_accepts
+                    .lock()
+                    .unwrap()
+                    .session
+                    .as_ref()
+                    .map(|s| s.accepts(sid, seg))
+                    .unwrap_or(false)
+            },
+        );
+
         let worker = LiveWorker::new(
             Arc::clone(&self.pipeline),
             Arc::clone(&self.playback),
@@ -126,6 +139,7 @@ impl LiveInterpretationCoordinator {
                 Arc::clone(&self.capture),
                 Arc::clone(&self.on_live_event),
             ),
+            accepts_fn,
         );
 
         *self.worker.lock().unwrap() = Some(worker);
@@ -140,6 +154,7 @@ impl LiveInterpretationCoordinator {
             stage_ms: None,
             segment_id: None,
             detected_language: None,
+            first_audio_ms: None,
         });
 
         Ok(self.pause.begin_on_air())
@@ -176,6 +191,7 @@ impl LiveInterpretationCoordinator {
             stage_ms: None,
             segment_id: None,
             detected_language: None,
+            first_audio_ms: None,
         });
     }
 
@@ -226,6 +242,7 @@ fn resolve_route(
                 stage_ms: None,
                 segment_id: None,
                 detected_language: None,
+                first_audio_ms: None,
             });
             false
         }
