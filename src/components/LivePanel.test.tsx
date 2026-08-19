@@ -21,7 +21,7 @@ vi.mock("../native", () => ({
 import { LivePanel } from "./LivePanel";
 
 describe("LivePanel", () => {
-  let liveStateListener: ((event: { status: string; lastLatencyMs?: number; lastDropped?: boolean; errorMessage?: string }) => void) | null;
+  let liveStateListener: ((event: { status: string; lastLatencyMs?: number; firstAudioMs?: number; lastDropped?: boolean; errorMessage?: string }) => void) | null;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -156,6 +156,39 @@ describe("LivePanel", () => {
     });
 
     expect(await screen.findByText("3200 ms")).toBeInTheDocument();
+  });
+
+  it("shows the speech-to-first-audio latency when firstAudioMs is present", async () => {
+    render(<LivePanel voiceProfileId="profile-id" />);
+
+    act(() => {
+      liveStateListener?.({ status: "speaking", firstAudioMs: 850 });
+    });
+
+    expect(await screen.findByText("850 ms")).toBeInTheDocument();
+    expect(screen.getByText("fala→primeiro áudio")).toBeInTheDocument();
+  });
+
+  it("does not render the first-audio latency section when firstAudioMs is absent", async () => {
+    render(<LivePanel voiceProfileId="profile-id" />);
+
+    act(() => {
+      liveStateListener?.({ status: "speaking" });
+    });
+
+    expect(screen.queryByText("fala→primeiro áudio")).not.toBeInTheDocument();
+  });
+
+  it("never surfaces source text or content in the latency display", async () => {
+    render(<LivePanel voiceProfileId="profile-id" />);
+
+    act(() => {
+      liveStateListener?.({ status: "speaking", firstAudioMs: 420 });
+    });
+
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).not.toMatch(/transcript|source|context|translation/i);
+    expect(await screen.findByText("420 ms")).toBeInTheDocument();
   });
 
   it("shows a dropped-segment indicator without disclosing segment content", async () => {

@@ -10,7 +10,7 @@ pub use endpointing::{EndpointEvent, Endpointer, EndpointerConfig};
 pub use error::VerbalixError;
 pub use live_interpretation::{
     InterpretOutcome, LanguageTag, LiveSession, LiveSessionId, LiveState, SegmentId, SegmentResult,
-    StageDurations,
+    StageDurations, TranslationContext,
 };
 pub use selection::{
     GeometrySource, Rect, SelectionElementIdentity, SelectionEvent, SelectionExtractionStrategy,

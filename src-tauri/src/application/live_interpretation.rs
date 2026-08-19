@@ -8,7 +8,7 @@ use crate::{
         runtime_pause::{OnAirGuard, RuntimePause},
         AudioPreviewPort, AudioStreamPort, VirtualMicOutputPort, VoicePipelinePort,
     },
-    domain::{LiveState, SegmentId, VerbalixError},
+    domain::{LiveState, SegmentId, TranslationContext, VerbalixError},
 };
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -32,6 +32,7 @@ pub struct LiveInterpretationCoordinator {
     on_live_event: LiveEventFn,
     virtual_mic: Arc<dyn VirtualMicOutputPort>,
     route: Arc<AtomicBool>,
+    context: Arc<Mutex<TranslationContext>>,
 }
 
 impl LiveInterpretationCoordinator {
@@ -62,6 +63,7 @@ impl LiveInterpretationCoordinator {
             on_live_event,
             virtual_mic,
             route,
+            context: Arc::new(Mutex::new(TranslationContext::new())),
         }
     }
 
@@ -86,6 +88,8 @@ impl LiveInterpretationCoordinator {
             st.last_segment_time = None;
         }
 
+        self.context.lock().unwrap().reset();
+
         let routed = resolve_route(
             route_to_virtual_mic,
             self.virtual_mic.as_ref(),
@@ -98,6 +102,7 @@ impl LiveInterpretationCoordinator {
             Arc::clone(&self.state),
             Arc::clone(&self.worker),
             token,
+            Arc::clone(&self.context),
         );
 
         let state_for_error = Arc::clone(&self.state);
@@ -116,6 +121,19 @@ impl LiveInterpretationCoordinator {
             VerbalixError::AudioCaptureFailed
         })?;
 
+        let state_for_accepts = Arc::clone(&self.state);
+        let accepts_fn = Arc::new(
+            move |sid: crate::domain::LiveSessionId, seg: crate::domain::SegmentId| {
+                state_for_accepts
+                    .lock()
+                    .unwrap()
+                    .session
+                    .as_ref()
+                    .map(|s| s.accepts(sid, seg))
+                    .unwrap_or(false)
+            },
+        );
+
         let worker = LiveWorker::new(
             Arc::clone(&self.pipeline),
             Arc::clone(&self.playback),
@@ -126,6 +144,8 @@ impl LiveInterpretationCoordinator {
                 Arc::clone(&self.capture),
                 Arc::clone(&self.on_live_event),
             ),
+            accepts_fn,
+            Arc::clone(&self.context),
         );
 
         *self.worker.lock().unwrap() = Some(worker);
@@ -140,6 +160,8 @@ impl LiveInterpretationCoordinator {
             stage_ms: None,
             segment_id: None,
             detected_language: None,
+            target_language: None,
+            first_audio_ms: None,
         });
 
         Ok(self.pause.begin_on_air())
@@ -153,6 +175,8 @@ impl LiveInterpretationCoordinator {
         st.live_state = LiveState::Stopping;
         st.session = None;
         drop(st);
+
+        self.context.lock().unwrap().reset();
 
         self.route.store(false, Ordering::Relaxed);
         self.virtual_mic.close();
@@ -171,11 +195,15 @@ impl LiveInterpretationCoordinator {
         st.live_state = LiveState::Idle;
         drop(st);
 
+        crate::diagnostics::emit_latency_summary();
+
         self.on_live_event.as_ref()(LiveEventPayload {
             status: "idle".to_owned(),
             stage_ms: None,
             segment_id: None,
             detected_language: None,
+            target_language: None,
+            first_audio_ms: None,
         });
     }
 
@@ -208,6 +236,11 @@ impl LiveInterpretationCoordinator {
     pub(crate) fn active_session_id(&self) -> Option<crate::domain::LiveSessionId> {
         self.state.lock().unwrap().session.as_ref().map(|s| s.id)
     }
+
+    #[cfg(test)]
+    pub(crate) fn context_snapshot(&self) -> Vec<String> {
+        self.context.lock().unwrap().snapshot()
+    }
 }
 
 fn resolve_route(
@@ -226,6 +259,8 @@ fn resolve_route(
                 stage_ms: None,
                 segment_id: None,
                 detected_language: None,
+                target_language: None,
+                first_audio_ms: None,
             });
             false
         }
@@ -235,3 +270,7 @@ fn resolve_route(
 #[cfg(test)]
 #[path = "live_interpretation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "live_interpretation_context_tests.rs"]
+mod context_tests;

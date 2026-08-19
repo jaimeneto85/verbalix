@@ -1,14 +1,23 @@
 use crate::{
     application::{
-        live_queue::{LiveQueue, QueueEvent},
-        AudioPreviewPort, VoicePipelinePort,
+        live_queue::LiveQueue, streaming_audio::StreamSegmentHandle, AudioPreviewPort,
+        VoicePipelinePort,
     },
-    domain::{InterpretOutcome, LiveSessionId, SegmentId, StageDurations},
+    diagnostics::{self, LatencyStage},
+    domain::{
+        InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations,
+        TranslationContext,
+    },
 };
-use base64::{engine::general_purpose::STANDARD, Engine};
-use std::sync::{mpsc, Arc, Mutex};
-use std::time::Duration;
-use tokio::sync::Semaphore;
+use std::{
+    collections::HashMap,
+    sync::{mpsc, Arc, Mutex},
+    time::{Duration, Instant},
+};
+use tokio::sync::Mutex as AsyncMutex;
+
+mod playback;
+use playback::{call_interpret_stream, process_queue_events_async, WorkerCallbacks};
 
 const MAX_IN_FLIGHT: usize = 2;
 
@@ -19,6 +28,8 @@ pub enum WorkerCommand {
         wav_bytes: Vec<u8>,
         target_language: String,
         token: String,
+        t_capture_end: Instant,
+        context: Vec<String>,
     },
     Stop,
 }
@@ -29,6 +40,8 @@ pub enum WorkerEvent {
         session_id: LiveSessionId,
         stage_ms: StageDurations,
         detected_language: String,
+        target_language: Option<String>,
+        first_audio_ms: Option<u64>,
     },
     Dropped {
         segment_id: SegmentId,
@@ -43,59 +56,14 @@ pub struct LiveWorker {
     cmd_tx: mpsc::SyncSender<WorkerCommand>,
 }
 
-async fn call_interpret(
-    pipeline: Arc<dyn VoicePipelinePort>,
-    session_id: LiveSessionId,
-    segment_id: SegmentId,
-    wav_bytes: Vec<u8>,
-    target_language: String,
-    token: String,
-) -> InterpretOutcome {
-    pipeline
-        .interpret(session_id, segment_id, wav_bytes, &target_language, &token)
-        .await
-}
-
-fn process_queue_events(
-    events: Vec<QueueEvent>,
-    playback: &dyn AudioPreviewPort,
-    on_event: &(dyn Fn(WorkerEvent) + Send + Sync),
-) {
-    for event in events {
-        match event {
-            QueueEvent::Ready(out) => {
-                let emit_seg = out.segment_id;
-                let emit_session = out.session_id;
-                if let Ok(ref result) = out.result {
-                    if let Ok(wav) = STANDARD.decode(&result.audio_base64) {
-                        let _ = playback.play(wav);
-                    }
-                    on_event(WorkerEvent::Ready {
-                        segment_id: emit_seg,
-                        session_id: emit_session,
-                        stage_ms: result.stage_ms.clone(),
-                        detected_language: result.detected_language.clone(),
-                    });
-                } else {
-                    on_event(WorkerEvent::Failed {
-                        segment_id: emit_seg,
-                        session_id: emit_session,
-                    });
-                }
-            }
-            QueueEvent::Dropped { segment_id } => {
-                on_event(WorkerEvent::Dropped { segment_id });
-            }
-        }
-    }
-}
-
 impl LiveWorker {
     pub fn new(
         pipeline: Arc<dyn VoicePipelinePort>,
         playback: Arc<dyn AudioPreviewPort>,
         queue: Arc<Mutex<LiveQueue>>,
         on_event: Arc<dyn Fn(WorkerEvent) + Send + Sync>,
+        accepts_fn: Arc<dyn Fn(LiveSessionId, SegmentId) -> bool + Send + Sync + 'static>,
+        context: Arc<Mutex<TranslationContext>>,
     ) -> Self {
         let (cmd_tx, cmd_rx) = mpsc::sync_channel::<WorkerCommand>(32);
 
@@ -105,12 +73,19 @@ impl LiveWorker {
                 .build()
                 .expect("worker runtime");
 
-            let sem = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
+            let sem = Arc::new(tokio::sync::Semaphore::new(MAX_IN_FLIGHT));
+            let playback_lock = Arc::new(AsyncMutex::new(()));
+            let pending_handles: Arc<Mutex<HashMap<SegmentId, StreamSegmentHandle>>> =
+                Arc::new(Mutex::new(HashMap::new()));
 
             rt.block_on(async move {
                 loop {
                     match cmd_rx.try_recv() {
                         Ok(WorkerCommand::Stop) => {
+                            let handles: Vec<_> = pending_handles.lock().unwrap().drain().collect();
+                            for (_, h) in handles {
+                                h.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
                             let drained = queue.lock().unwrap().drain_all();
                             for o in drained {
                                 on_event(WorkerEvent::Dropped {
@@ -125,28 +100,93 @@ impl LiveWorker {
                             wav_bytes,
                             target_language,
                             token,
+                            t_capture_end,
+                            context: ctx_snapshot,
                         }) => {
                             let pipeline = Arc::clone(&pipeline);
                             let playback = Arc::clone(&playback);
                             let queue = Arc::clone(&queue);
                             let on_event = Arc::clone(&on_event);
                             let sem = Arc::clone(&sem);
+                            let playback_lock = Arc::clone(&playback_lock);
+                            let pending_handles = Arc::clone(&pending_handles);
+                            let accepts_fn = Arc::clone(&accepts_fn);
+                            let context = Arc::clone(&context);
 
                             tokio::task::spawn(async move {
                                 let _permit = sem.acquire_owned().await.unwrap();
 
-                                let outcome = call_interpret(
+                                diagnostics::record_latency(
+                                    LatencyStage::CaptureToRequest,
+                                    t_capture_end.elapsed().as_millis() as u64,
+                                );
+
+                                match call_interpret_stream(
                                     pipeline,
                                     session_id,
                                     segment_id,
                                     wav_bytes,
                                     target_language,
                                     token,
+                                    ctx_snapshot,
                                 )
-                                .await;
-
-                                let events = queue.lock().unwrap().insert(outcome);
-                                process_queue_events(events, playback.as_ref(), on_event.as_ref());
+                                .await
+                                {
+                                    Ok(handle) => {
+                                        diagnostics::record_latency(
+                                            LatencyStage::Ttfb,
+                                            t_capture_end.elapsed().as_millis() as u64,
+                                        );
+                                        let outcome = InterpretOutcome {
+                                            session_id,
+                                            segment_id,
+                                            result: Ok(SegmentResult {
+                                                audio_base64: String::new(),
+                                                detected_language: handle.detected_language.clone(),
+                                                stage_ms: StageDurations {
+                                                    stt: handle.stt_ms,
+                                                    translate: handle.translate_ms,
+                                                    tts: 0,
+                                                },
+                                            }),
+                                        };
+                                        pending_handles.lock().unwrap().insert(segment_id, handle);
+                                        let events = queue.lock().unwrap().insert(outcome);
+                                        process_queue_events_async(
+                                            events,
+                                            playback,
+                                            playback_lock,
+                                            pending_handles,
+                                            WorkerCallbacks {
+                                                accepts_fn,
+                                                on_event,
+                                                context,
+                                            },
+                                            t_capture_end,
+                                        )
+                                        .await;
+                                    }
+                                    Err(outcome) => {
+                                        diagnostics::record_latency(
+                                            LatencyStage::Ttfb,
+                                            t_capture_end.elapsed().as_millis() as u64,
+                                        );
+                                        let events = queue.lock().unwrap().insert(outcome);
+                                        process_queue_events_async(
+                                            events,
+                                            playback,
+                                            playback_lock,
+                                            pending_handles,
+                                            WorkerCallbacks {
+                                                accepts_fn,
+                                                on_event,
+                                                context,
+                                            },
+                                            t_capture_end,
+                                        )
+                                        .await;
+                                    }
+                                }
                             });
                         }
                         Err(mpsc::TryRecvError::Empty) => {
@@ -171,5 +211,17 @@ impl LiveWorker {
 }
 
 #[cfg(test)]
+#[path = "live_worker_test_helpers.rs"]
+mod test_helpers;
+
+#[cfg(test)]
 #[path = "live_worker_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "live_worker_streaming_tests.rs"]
+mod streaming_tests;
+
+#[cfg(test)]
+#[path = "live_worker_context_tests.rs"]
+mod context_tests;

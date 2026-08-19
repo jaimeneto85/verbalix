@@ -18,10 +18,16 @@ pub(crate) mod preferences_sync_store;
 pub(crate) mod remote_preferences;
 mod runtime_pause;
 mod settings_file;
+pub(crate) mod streaming_audio;
 mod supabase;
 mod transform_lease;
 mod voice_enrollment;
 pub(crate) mod voice_pipeline;
+pub(crate) mod voice_pipeline_stream;
+#[cfg(test)]
+mod voice_pipeline_stream_frame_tests;
+#[cfg(test)]
+mod voice_pipeline_stream_tests;
 
 pub use ai_readiness::{
     classify_refresh_failure, evaluate_ai_readiness, AiReadiness, AiReadinessStatus,

@@ -1,4 +1,12 @@
 pub const TARGET_SAMPLE_RATE: u32 = 16_000;
+
+pub fn pcm_i16le_to_f32(bytes: &[u8]) -> Vec<f32> {
+    bytes
+        .chunks_exact(2)
+        .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
+        .collect()
+}
+
 pub const VIRTUAL_MIC_SAMPLE_RATE: u32 = 48_000;
 
 pub fn resample_f32(samples: &[f32], src_rate: u32, target_rate: u32, channels: u16) -> Vec<f32> {
@@ -52,12 +60,7 @@ pub fn decode_wav_f32(bytes: &[u8]) -> Option<(Vec<f32>, u32, u16)> {
         return None;
     }
 
-    let samples: Vec<f32> = data
-        .chunks_exact(2)
-        .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
-        .collect();
-
-    Some((samples, sample_rate, channels))
+    Some((pcm_i16le_to_f32(data), sample_rate, channels))
 }
 
 pub fn encode_wav(samples: &[i16], sample_rate: u32) -> Vec<u8> {
@@ -147,5 +150,38 @@ mod tests {
         let mut bytes = vec![0u8; 44];
         bytes[0..4].copy_from_slice(b"XXXX");
         assert!(decode_wav_f32(&bytes).is_none());
+    }
+
+    #[test]
+    fn pcm_i16le_to_f32_converts_known_values() {
+        let pos: i16 = 16384;
+        let neg: i16 = -16384;
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&pos.to_le_bytes());
+        bytes.extend_from_slice(&neg.to_le_bytes());
+        let out = pcm_i16le_to_f32(&bytes);
+        assert_eq!(out.len(), 2);
+        assert!((out[0] - 0.5).abs() < 1e-4);
+        assert!((out[1] + 0.5).abs() < 1e-4);
+    }
+
+    #[test]
+    fn pcm_i16le_to_f32_discards_trailing_odd_byte() {
+        let sample: i16 = 32767;
+        let mut bytes = sample.to_le_bytes().to_vec();
+        bytes.push(0xFF);
+        let out = pcm_i16le_to_f32(&bytes);
+        assert_eq!(
+            out.len(),
+            1,
+            "trailing odd byte is discarded, not corrupted"
+        );
+        assert!((out[0] - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn pcm_i16le_to_f32_empty_input_returns_empty() {
+        let out = pcm_i16le_to_f32(&[]);
+        assert!(out.is_empty());
     }
 }

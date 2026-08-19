@@ -8,6 +8,12 @@ import { expect, test } from "@playwright/test";
 // through the `interpret` Edge Function — those require a signed bundle with
 // Accessibility/Microphone permission granted by the user and a deployed
 // backend, and are documented as manual gates.
+//
+// firstAudioMs (fala→primeiro áudio latency): the stub invoke always returns
+// { status: "idle" } for live_status and never emits live-state-changed events
+// with real timing data. The field is verified at the unit level (LivePanel.test.tsx
+// and native.test.ts). A real latency measurement requires: real audio capture,
+// a deployed interpret Edge Function, and a running Tauri bundle — all manual gates.
 
 type Invocation = {
   cmd: string;

@@ -171,11 +171,48 @@ pub trait VoicePipelinePort: Send + Sync {
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = crate::domain::InterpretOutcome> + Send + 'a>,
     >;
+
+    fn interpret_stream<'a>(
+        &'a self,
+        session_id: crate::domain::LiveSessionId,
+        segment_id: crate::domain::SegmentId,
+        wav_bytes: Vec<u8>,
+        target_language: &'a str,
+        token: &'a str,
+        _context: Vec<String>,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        crate::application::streaming_audio::StreamSegmentHandle,
+                        crate::domain::InterpretOutcome,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let outcome = self
+                .interpret(session_id, segment_id, wav_bytes, target_language, token)
+                .await;
+            Err(outcome)
+        })
+    }
 }
 
 pub trait AudioPreviewPort: Send + Sync {
     fn play(&self, wav_bytes: Vec<u8>) -> Result<(), crate::domain::VerbalixError>;
     fn stop(&self);
+    fn play_stream(
+        &self,
+        handle: crate::application::streaming_audio::StreamSegmentHandle,
+    ) -> Result<(), crate::domain::VerbalixError> {
+        use std::sync::atomic::Ordering;
+        while !handle.cancel.load(Ordering::Relaxed) && !handle.complete.load(Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]

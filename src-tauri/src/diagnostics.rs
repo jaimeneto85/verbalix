@@ -2,11 +2,17 @@ use crate::application::VirtualMicStatus;
 use crate::domain::{SelectionSnapshot, VerbalixError};
 #[cfg(target_os = "macos")]
 use crate::platform::macos_focus::{AxCategory, AxStage, ExtractionOrigin};
-use std::sync::OnceLock;
 #[cfg(target_os = "macos")]
-use std::{collections::HashMap, sync::Mutex};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+mod latency;
+#[cfg(test)]
+pub(crate) use latency::LiveLatencyAggregator;
+pub(crate) use latency::{emit_latency_summary, increment_underruns, record_latency, LatencyStage};
 
 pub(crate) mod history;
+
 pub(crate) fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
@@ -15,6 +21,7 @@ pub(crate) fn enabled() -> bool {
             .unwrap_or(false)
     })
 }
+
 #[cfg(target_os = "macos")]
 pub(crate) fn ax_resolution(stage: AxStage, origin: ExtractionOrigin, category: AxCategory) {
     static LAST: OnceLock<Mutex<HashMap<(AxStage, ExtractionOrigin), AxCategory>>> =
@@ -147,6 +154,7 @@ fn snapshot_metadata(snapshot: &SelectionSnapshot) -> String {
         snapshot.writable
     )
 }
+
 fn lifecycle_metadata(origin: &'static str) -> String {
     format!("origin={origin}")
 }

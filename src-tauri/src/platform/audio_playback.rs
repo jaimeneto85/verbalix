@@ -1,7 +1,9 @@
 #[cfg(target_os = "macos")]
 mod mac {
     use crate::{
-        application::AudioPreviewPort, domain::VerbalixError, platform::audio_wav::decode_wav_f32,
+        application::{streaming_audio::StreamSegmentHandle, AudioPreviewPort},
+        domain::VerbalixError,
+        platform::{audio_playback_stream::mac_stream, audio_wav::decode_wav_f32},
     };
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use std::{
@@ -12,6 +14,10 @@ mod mac {
 
     enum PlaybackCommand {
         Play(Vec<u8>, mpsc::SyncSender<Result<(), VerbalixError>>),
+        PlayStream(
+            StreamSegmentHandle,
+            mpsc::SyncSender<Result<(), VerbalixError>>,
+        ),
         Stop,
     }
 
@@ -116,11 +122,20 @@ mod mac {
                                     Ok(PlaybackCommand::Play(_, r)) => {
                                         let _ = r.send(Err(VerbalixError::AudioPlaybackFailed));
                                     }
+                                    Ok(PlaybackCommand::PlayStream(_, r)) => {
+                                        let _ = r.send(Err(VerbalixError::AudioPlaybackFailed));
+                                    }
                                     Err(_) => {}
                                 }
                                 std::thread::sleep(Duration::from_millis(5));
                             };
                             drop(active_stream.take());
+                            let _ = reply.send(result);
+                        }
+
+                        PlaybackCommand::PlayStream(handle, reply) => {
+                            drop(active_stream.take());
+                            let result = mac_stream::run_stream_playback(handle);
                             let _ = reply.send(result);
                         }
 
@@ -147,6 +162,15 @@ mod mac {
 
         fn stop(&self) {
             let _ = self.cmd_tx.send(PlaybackCommand::Stop);
+        }
+
+        fn play_stream(&self, handle: StreamSegmentHandle) -> Result<(), VerbalixError> {
+            let (tx, rx) = mpsc::sync_channel(1);
+            self.cmd_tx
+                .send(PlaybackCommand::PlayStream(handle, tx))
+                .map_err(|_| VerbalixError::AudioPlaybackFailed)?;
+            rx.recv_timeout(Duration::from_secs(65))
+                .map_err(|_| VerbalixError::AudioPlaybackFailed)?
         }
     }
 

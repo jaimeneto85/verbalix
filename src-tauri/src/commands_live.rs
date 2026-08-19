@@ -91,6 +91,12 @@ pub(crate) fn make_live_emitter(app: tauri::AppHandle) -> LiveEventFn {
         if let Some(lang) = payload.detected_language {
             map["detectedLanguage"] = serde_json::json!(lang);
         }
+        if let Some(fam) = payload.first_audio_ms {
+            map["firstAudioMs"] = serde_json::json!(fam);
+        }
+        if let Some(tl) = payload.target_language {
+            map["targetLanguage"] = serde_json::json!(tl);
+        }
         let _ = app.emit("live-state", map);
     })
 }

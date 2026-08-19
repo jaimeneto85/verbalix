@@ -1,8 +1,12 @@
+export type ContextItem = { source: string };
+
 export type InterpretRequest = {
   requestId: string;
   targetLanguage: string;
   audioBase64: string;
   mimeType: "audio/wav";
+  stream?: boolean;
+  context?: ContextItem[];
 };
 
 export type InterpretResponse = {
@@ -31,6 +35,8 @@ export type ErrorCode =
   | "INTERNAL_ERROR";
 
 export const MAX_AUDIO_BYTES = 2_621_440;
+export const MAX_CONTEXT_ITEMS = 2;
+export const MAX_CONTEXT_SOURCE_CHARS = 300;
 
 const ALLOWED_LANGUAGES = new Set([
   "en",
@@ -48,6 +54,24 @@ const ALLOWED_MIME = new Set(["audio/wav"]);
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function capScalars(text: string, maxChars: number): string {
+  return [...text].slice(0, maxChars).join("");
+}
+
+function parseContext(raw: unknown): ContextItem[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+  const items: ContextItem[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    if (typeof e.source !== "string") continue;
+    items.push({ source: capScalars(e.source, MAX_CONTEXT_SOURCE_CHARS) });
+    if (items.length >= MAX_CONTEXT_ITEMS) break;
+  }
+  return items.length > 0 ? items : undefined;
+}
 
 export function parseRequest(body: unknown): InterpretRequest {
   if (!body || typeof body !== "object") throw new Error("INVALID_REQUEST");
@@ -74,10 +98,15 @@ export function parseRequest(body: unknown): InterpretRequest {
     throw new Error("AUDIO_TOO_LARGE");
   }
 
+  const stream = c.stream === true ? true : false;
+  const context = parseContext(c.context);
+
   return {
     requestId: c.requestId as string,
     targetLanguage: c.targetLanguage as string,
     audioBase64: c.audioBase64 as string,
     mimeType: "audio/wav",
+    stream,
+    context,
   };
 }
