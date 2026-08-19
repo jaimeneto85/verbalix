@@ -310,16 +310,16 @@ enum InterpretMode { Json, Stream }
   áudio, fim de playback) + contador de underrun, reusando `emit()`/`enabled()`. Sem conteúdo. Testes de agregação.
 
 ### Round 2 — Edge Function streaming (Deno, Track independente do Rust)
-- [ ] T1.1: [MEDIUM] `contract.ts`: campos `stream?`, `context?` (source-only), `output_format` interno;
+- [x] T1.1: [MEDIUM] `contract.ts`: campos `stream?`, `context?` (source-only), `output_format` interno;
   validação e caps (context ≤ ~600 chars total, cada item ≤ ~300, cap por scalar). Testes de parse.
-- [ ] T1.2: [MEDIUM] `provider.ts`: `synthesizeStream` (fetch `pcm_24000`, checa `ok` ANTES de pipar,
+- [x] T1.2: [MEDIUM] `provider.ts`: `synthesizeStream` (fetch `pcm_24000`, checa `ok` ANTES de pipar,
   retorna `ReadableStream`); `translate` aceita `context` envolto em `<untrusted_context>` próprio +
   invariante (além do `<untrusted_text>` do segmento atual).
-- [ ] T1.3: [HIGH] `stages.ts`+`handler.ts`(+`streaming.ts` se >300): REESTRUTURAR o `try/catch` para
+- [x] T1.3: [HIGH] `stages.ts`+`handler.ts`(+`streaming.ts` se >300): REESTRUTURAR o `try/catch` para
   separar "ainda pode virar JSON de erro" (STT/translate/TTS-not-ok) de "corpo já fluindo → truncar". Ramo
   streaming = FRAME de metadados no corpo (`[magic][len][json sourceText]` + PCM) + headers `X-Verbalix-*`
   não-conteúdo (D4). Ramo JSON legado byte-idêntico ao M2. **Watchdog de inatividade do corpo (D10, CA12).**
-- [ ] T1.4: [MEDIUM] `{contract,provider,handler}_test.ts`: CA01–CA05, CA12, contexto, não-regressão do JSON.
+- [x] T1.4: [MEDIUM] `{contract,provider,handler}_test.ts`: CA01–CA05, CA12, contexto, não-regressão do JSON.
 
 ### Round 3 — Núcleo de streaming no Rust (SEQUENCIAL; maior valor de latência)
 - [ ] T2.2: [HIGH] `Cargo.toml` (feature `stream`), `ports.rs`, `voice_pipeline.rs`(+split se preciso):
