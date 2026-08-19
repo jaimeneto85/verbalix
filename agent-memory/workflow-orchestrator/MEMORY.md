@@ -6,6 +6,58 @@
 - Toda tarefa é executada em worktree dedicado e só é integrada à branch de origem após aprovação explícita.
 
 ## Decisões Arquiteturais
+- Interpretação ao vivo (M2, `docs/013`, branch `live-interpretation`): pipeline frase-a-frase SEM mic
+  virtual. Edge Function `interpret` (split `index/handler/stages/contract/provider/service_client`,
+  `verify_jwt=true`) faz STT (ElevenLabs Scribe `/v1/speech-to-text`) → tradução (OpenAI Responses,
+  prompt com língua-alvo EXPLÍCITA — NÃO o PT↔EN do transform — e texto delimitado em `<untrusted_text>`
+  com invariante de sistema contra prompt-injection) → TTS (`/v1/text-to-speech/{voice_id}`). `provider_voice_id`
+  resolvido server-side pelo `service_client.ts` (perfil `ready` por `user_id` do JWT), nunca no cliente.
+  Timeout re-derivado para 3 round-trips encadeados: 45 s abort na Edge Function, 55 s no cliente Rust
+  (NÃO copiar os 20 s do transform). `ErrorCode` stage-específico (`STT_FAILED`/`TRANSLATION_FAILED`/
+  `TTS_FAILED`) preservado até o Rust — único sinal de debug (conteúdo nunca logado).
+- M2 coordinator: `LiveInterpretationCoordinator` decomposto em `live_interpretation.rs` (estado + fiação),
+  `live_queue.rs` (reorder buffer bounded + backpressure, PURO) e `live_worker.rs` (dispatch concorrente,
+  cap 2 em voo). Dispatch é CONCORRENTE (N+1 começa STT sem esperar TTS de N) mas playback ORDENADO via
+  reorder buffer (N só toca após N-1; falha de N-1 libera N sem travar). `accepts(session_id, segment_id)`
+  puro invalida sessão parada/trocada (fail-closed). Circuit-breaker (K falhas → leave_live), auto-leave
+  idle, permissão revogada mid-sessão → fail-closed. VAD suprimido enquanto `Speaking` (feedback loop
+  mic→alto-falante; recomendar headphones — gate manual). Captura streaming e enrollment MUTUAMENTE
+  EXCLUSIVAS sobre o mesmo worker `MacAudioCapture` via extensão do `CaptureCommand`.
+- M2 `RuntimePause` on-air: `on_air` é um `AtomicBool` TERCEIRO e INDEPENDENTE com `OnAirGuard` RAII próprio
+  — NUNCA reusar `ActionGuard`/`grace_deadline`/`in_flight` (afinados p/ ações sub-segundo; segurar por uma
+  sessão de minutos suprimiria a toolbar/nota o tempo todo — regressão M1 silenciosa que nenhum teste
+  existente pegaria). Compõe via `!is_on_air()` nos 5 entrypoints. Tray "Pausar" durante on-air → `leave_live`
+  NÃO-BLOQUEANTE (spawn), nunca síncrono da callback do menu esperando reply de worker (deadlock de UI).
+  Teste dedicado: supressão dura a SESSÃO INTEIRA, não os 400 ms do grace.
+- M2 playback: `MacAudioPlayback` cpal espelha o padrão thread-dedicada de `MacAudioCapture` (Stream não-Send
+  possuído pela thread; comandos por canal) COM reply-timeout no `Play` (device desconectado não trava o
+  worker). `encode_wav`/`resample_to_16k` extraídos p/ `platform/audio_wav.rs` compartilhável (puros, sem cpal).
+- M2 setting `target_language`: `#[serde(default)]`, allowlist, preservada em `apply_remote` via struct-literal,
+  NÃO sincronizada. A sessão captura a língua-alvo no `enter_live` (snapshot); mudança só vale no próximo enter.
+- Voz (M1 enrollment, `docs/012`): segredo/`provider_voice_id` server-only via OPÇÃO A —
+  cliente NUNCA consulta a tabela via PostgREST; 3 Edge Functions (`voice-enroll`/`voice-delete`/
+  `voice-status`) escrevem/leem com `SUPABASE_SERVICE_ROLE_KEY` escopando por `user_id` do JWT e
+  retornam só `VoiceProfileView` (voiceProfileId/status/displayName). A migration NÃO concede SELECT
+  a `authenticated` (só INSERT/UPDATE/DELETE como defesa em profundidade). A tentativa de view
+  `security_invoker=on` + `revoke select` é um MODELO QUEBRADO (permission denied com invoker=on;
+  vazamento de linhas de terceiros com invoker=off) — rejeitada na análise dual.
+- Áudio de enrollment: `cpal::Stream` NÃO é `Send` no backend CoreAudio. Padrão adotado: thread de
+  captura DEDICADA possui o Stream; surface `Send`-safe = canal `mpsc` (start/stop/cancel) +
+  `Arc<AtomicU32>` (nível). `start()` confirma abertura por canal de reply síncrono antes de retornar
+  (senão device ausente só falha em `stop()`). Formato FIXADO mono 16 kHz 16-bit WAV (~5 MB base64
+  p/ 120 s) para caber no cap; base64 gerado no Rust, áudio bruto nunca cruza o React. Permissão de mic
+  AVFoundation é ASSÍNCRONA → `request_microphone_permission` é command async + evento (publish-then-emit),
+  nunca síncrono bloqueante. Crates: `cpal` (captura) + `objc2-av-foundation` (permissão), cfg macos.
+- Payload de áudio excede o cap de 64KB do transform: contract novo precisa de cap próprio (~10 MB
+  binário; lembrar overhead ~33% do base64 ao dimensionar o cap de corpo) e timeout maior (60 s p/ IVC).
+- Idempotência de enroll: dedup por `request_id` do CLIENTE (NUNCA comparar com a coluna `id` gerada
+  pelo DB — espaços de UUID distintos, bug clássico que passou nos testes com fixture impossível).
+  Consistência: cleanup best-effort da voz na ElevenLabs se a persistência falhar pós-criação (sem
+  órfão billado); partial unique index `(user_id) WHERE status NOT IN ('deleting','failed')` contra
+  corrida concorrente; replace do perfil anterior no re-enroll.
+- Campo novo em `AppSettings` que não deve sincronizar (`voice_profile_id`): `#[serde(default)]` +
+  o struct-literal em `remote_preferences::apply_remote` FORÇA (compile-time) preservar o valor local,
+  protegendo contra clobber pelo remoto de graça.
 - O companion iOS começa como Swift Package puro `ios/VerbalixKit` (só Foundation + Security, zero deps externas),
   com `platforms: [.iOS(.v17), .macOS(.v14)]` — macOS existe só para `swift test` rodar no host sem simulador.
   supabase-swift só entra na Fase 3 (app SwiftUI/extensões), ainda pendente de decisão de tooling.
@@ -68,6 +120,13 @@
   com escopo (`withLock`) numa seção síncrona, sem `lock()/unlock()` cruzando `await`, em stubs de transporte.
 
 ## Aprendizados de QA
+- M1 voz: verdes em TODOS os gates automáticos (clippy, cargo/deno/vitest/e2e, coverage 100%, bundle)
+  NÃO garantiram correção. O qa-reviewer com dual analysis pegou 5 defeitos reais que os gates não
+  viam: (1) idempotência comparando `id` (DB) vs `request_id` (cliente) com TESTE mascarando via
+  fixture impossível; (2) voz órfã sem cleanup; (3) handler.ts 339 linhas > gate 300; (4) RLS SELECT
+  expondo `provider_voice_id`; (5) corrida criando 2 perfis. LIÇÃO: rodar os gates é necessário mas
+  insuficiente — a revisão de QA de conformidade (escopo/design/segurança) é o que fecha o buraco;
+  desconfiar de teste que "passa" quando o cenário testado é impossível em produção.
 - Relatórios finais de sub-agentes podem chegar truncados/otimistas; o orquestrador DEVE re-rodar os gates
   empiricamente (swift test, cargo test/clippy/fmt, npm test/build, deno, e os 3 xcodebuild) antes de aceitar
   qualquer verdict. Ao longo desta entrega os sub-agentes repetidamente: deixaram `Tests/` vazio; entregaram
@@ -76,6 +135,25 @@
   verde". Padrão de mitigação que funcionou: (1) escopo por rodada com "pouse SEMPRE verde+commitado"; (2)
   o orquestrador verifica git log/status + roda os gates a cada retorno; (3) preservar trabalho commitando
   quando o sub-agente esquece.
+- M2 (interpretação ao vivo): tarefa GRANDE (Edge Function + domain + application concorrente + 2 adapters
+  cpal + frontend) fez o `@software-engineer` retornar relatório TRUNCADO em 4 rodadas seguidas — SEMPRE
+  parando mid-edit sem commitar e sem delegar. Padrão de mitigação que funcionou (repetível): a cada
+  notificação de conclusão, (1) NÃO confiar no texto; inspecionar `git log`/`status` + rodar TODOS os gates
+  empiricamente; (2) fazer um commit-checkpoint do trabalho em progresso que COMPILA (preserva contra reset
+  de worktree); (3) re-delegar uma continuação BOUNDED com o inventário EXATO de falhas (nomes de teste,
+  contagem de erros de clippy, arquivos). Convergiu de ~70% → verde em 3 continuações. No fim, o orquestrador
+  teve que DIRIGIR cada handoff da cadeia (engineer→test-engineer→qa-reviewer) porque cada sub-agente
+  truncou antes de delegar. O qa-reviewer também truncou sem verdict → o orquestrador conduziu a auditoria
+  de conformidade ele mesmo (read-only) e emitiu o verdict.
+- M2 clippy `-D warnings` "never used/constructed" (métodos/variantes/campos como `accepts`, `emit_live_state`,
+  `stage_ms`) foi o MELHOR detector de FIAÇÃO INCOMPLETA: código implementado mas não ligado aos commands/
+  eventos aparece como dead-code. LIÇÃO: exigir do engenheiro COMPLETAR a funcionalidade (ligar de verdade),
+  NUNCA silenciar com `#[allow(dead_code)]`. `active_stream` "assigned but never read" x6 era bug real de
+  atribuição morta no caminho de streaming/playback.
+- M2 QA pegou 1 defeito de segurança que os gates verdes não viam: `interpret/translate` interpolava o texto
+  transcrito direto no prompt sem o guard `<untrusted_text>`+invariante de sistema que o `transform` usa
+  (prompt-injection). Reforça a lição do M1: auditar CONFORMIDADE (segurança/design), não só rodar gates.
+  Quando um novo provider de LLM recebe texto do usuário/transcrição, SEMPRE espelhar o hardening do transform.
 - Fase 2 (sync de prefs) tinha DEFEITO real de "remoto sempre vence": LWW exige timestamp local. Solução
   aprovada: SIDECAR `preferences_sync.json` (`{updatedAt, syncedAt, sequence}`) fora do `AppSettings` (que
   cruza IPC), com sequence-guard contra race entre `save_settings` síncrono e o spawn de `load_settings`;

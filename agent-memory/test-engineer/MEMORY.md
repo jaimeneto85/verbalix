@@ -1,105 +1,34 @@
 # Agent Memory — test-engineer
 
 ## Padrões de Teste
-- iOS Swift: testes em `ios/VerbalixKit/Tests/VerbalixKitTests/` usando XCTest + Swift Testing; `swift test --package-path ios/VerbalixKit` roda ambos os frameworks (XCTest e Swift Testing) na mesma invocação. Arquivos nomeados `*Tests.swift` sob o target `VerbalixKitTests`. Classificadores puros (sem rede) são testados com instâncias diretas; BackendConfig usa plist fakado `[String: Any]`.
-- iOS BackendConfig: fallback de `authCallbackURL` exige testar (a) chave ausente, (b) string vazia, (c) whitespace-only, (d) URL https válida, (e) init direto com `authCallback:` param — 6 casos cobre os dois inits públicos.
-- O domínio Rust usa testes inline com fakes de `SelectionPort`, `OverlayPort` e `AiProvider`.
-- O frontend usa Vitest; contratos IPC são testados com mock hoisted de `invoke`.
-- Contratos da Edge Function usam `deno test` sem dependências externas.
-- Smoke tests validam configuração e também executam o bundle `.app` pelo CLI do Tauri.
-- Boundaries macOS que não podem ser exercitados sem permissão real usam uma combinação de funções puras Rust para geometria e contratos estáticos Vitest para garantir APIs AX/Core Graphics, ausência de AppKit no worker e lifecycle do shell.
-- Text markers permanecem sem mocks FFI: a suíte combina matriz pura e exaustiva de categorias AX, validação de índices/length em UTF-16, fluxo read-only até nota e contrato estático das APIs públicas/RAII; o gate real cobre o adapter nativo.
-- O fluxo composto de fallback AX deve combinar matriz pura de categorias com contrato de integração do source: falha estrutural de CFRange não pode alcançar `marker_selection`, enquanto somente falhas explícitas de capacidade podem fazê-lo.
-- Transformações do toolbar delegam readiness exclusivamente ao comando Rust; testes frontend e Playwright exigem uma única chamada `transform_selection`, não chamam `ai_readiness` e não abrem a janela principal para todo erro.
-- A transação de transformação é testada com `snapshot.id + request_id`: captura transitória durante `Processing` preserva o alvo pinado, invalidação real bloqueia provider/write, segunda ação é rejeitada e falha de undo após write mantém `Applied`.
-- Supersede durante transformação exige testes separados: candidato equivalente preserva exatamente `snapshot.id + request_id`; PID ou identidade AX diferentes substituem o lease antes do provider; resposta de provider já iniciado fica inerte; falha de hide não ressuscita `Processing`; preview superseded falha antes do write. Feedback de erro usa helper puro e só pertence ao snapshot ID original.
-- A linearização do setter usa adapter bloqueável em dois pontos: antes do claim, `Candidate`/`Invalidated` precisam adquirir imediatamente os mutexes do coordinator, cancelar o lease e manter zero setters; depois do claim, uma escrita pode concluir, mas não pode publicar `Applied` nem undo sobre o novo alvo. `apply_preview` usa a mesma matriz.
-- Publicação visual enfileirada carrega `PublicationGuard` até o executor. O teste cancela o guard depois do enqueue e exige zero execução e `current_note_result=None`, evitando que um payload stale reapareça pelo fallback de readiness.
-- O boundary visual deve separar `prepare` de `publish`: gates com `Condvar` cancelam a guarda durante a preparação de toolbar e nota, exigem zero `emit/show`, cancelamento da readiness, ACK tardio inerte e payload corrente filtrado. Se o claim vence primeiro, o teste registra exatamente `publish → hide` e visibilidade final falsa.
-- Readiness da transformação é coberta como fase posterior ao pin: Candidate diferente nesse intervalo revoga a request antes do provider, write e feedback. Erros `StaleSelection`/`OperationInProgress` de pin e falhas de apply/undo preservam apenas a guarda do alvo original, cancelada pela próxima Candidate.
-- Toolbar usa a mesma disciplina visual das notas: o adapter bloqueável prova que `Candidate` e `Invalidated` adquirem estado/presentation enquanto `show_toolbar_guarded` está parado, e o executor recebe a guarda cancelada com zero publicação.
-- Undo/restore tem matriz própria antes/depois do claim: antes, Candidate B cancela com zero restore; depois, exatamente um restore pode concluir, mas B permanece `ToolbarVisible` e o término de A não executa um segundo hide.
-- Histórico remoto pode ser testado sem Supabase real com servidor HTTP loopback que cobre `/auth/v1/user`, inserts de `translate`/`improve` e listagem autenticada; o contrato causal do command exige insert somente após `coordinator.transform` bem-sucedido.
-- Persistência de histórico no command é testada como task detached: retorno principal não espera future pendente, timeout cancela e solta o future, e outcomes `inserted`/`failed`/`timeout` permanecem distintos para diagnóstico sanitizado.
-- O budget da Responses API usa caracteres Unicode e precisa de boundaries discriminatórios: 558 caracteres ainda resultam no piso 500, 559 produzem 501, 11.806 produzem 7.999 e 11.807 alcançam 8.000; emoji não-BMP deve provar que UTF-16 não é usado.
-- Validação de envelope Responses deve ser testada com output parcial que seria semanticamente válido: status ausente, desconhecido ou incomplete e `incomplete_details` não nulo precisam falhar antes do parse; completed aceita details nulo ou ausente.
-- Restore precisa de testes separados e combinados para PID, identidade estável do elemento, texto selecionado e range UTF-16 atual; coincidência de texto/range em outro campo do mesmo PID deve continuar falhando fechada.
-- Replace e restore exigem identidade forte antes de qualquer lookup/write AX; testes devem cobrir `identifier=None`, string vazia e somente whitespace, todos com zero escrita.
-- Fluxos críticos de recuperação visual usam Playwright com `__TAURI_INTERNALS__` simulado e verificam tanto invocações IPC quanto clipping pelo bounding box.
-- Superfícies de overlay transparentes exigem teste antes do render: a classe de rota deve existir durante o callback de bootstrap e `html`, `body` e `#root` devem computar fundo transparente, dimensões mínimas zero e overflow oculto sem alterar a rota principal.
-- Posicionamento macOS em múltiplos monitores é testado como geometria pura em pontos Cocoa: conversão AX round-trip, escolha por centro/interseção, clamp nas quatro bordas, fallback vertical e coordenadas globais negativas. Um contrato estático separado impede reintroduzir `LogicalPosition`, `PhysicalPosition` ou `scale_factor` no caminho macOS.
-- O fallback de geometria da seleção segue `SelectedRange → Cursor contido inclusivamente em FocusedElement → FocusedElement → None`; cursor sem frame válido falha fechado. A matriz cobre quatro cantos, pontos imediatamente externos, não finitos, overflow das somas, coordenadas negativas e frame cruzando a origem.
-- A referência AX → Cocoa deve vir da zero screen, `NSScreen.screens.firstObject`, nunca de `mainScreen`, que acompanha a key window. O teste discriminatório usa uma key-window screen secundária com origem e altura diferentes.
-- A primeira pintura do overlay usa handshake de readiness: testes separam `ready` de `requested`, comprovam render antes do sinal frontend e garantem que `HideAll` antes de `SurfaceReady` não ressuscita a janela.
-- O handshake só deve nascer em `useLayoutEffect` depois do commit dos filhos, e o ACK nativo só pode resolver após a closure da main thread aplicar readiness/visibilidade. Retries precisam ser estritamente sequenciais, limitados a três após ACK falso/erro, parar no primeiro sucesso e reportar exaustão sem deixar invokes órfãos por `Promise.race`.
-- Readiness é uma capacidade por documento: Rust emite geração UUID na URL, o estado nativo compara geração atual/pronta e o comando valida label mais identidade da WebView chamadora. ACK antigo, reload e rota sem geração devem falhar fechados.
-- Reload não pode apenas girar a geração mantendo a URL antiga: no segundo `PageLoadEvent::Started`, a geração é invalidada e a WebView destruída; a próxima solicitação deve recriar janela, UUID e URL. Testes combinam lifecycle puro e contrato estático de destroy/diagnósticos/fallback.
-- Criação de overlay deve ser transacional: `begin_document → build → configure`. Falha de build invalida sem executar rollback de recurso inexistente; falha de configure invalida antes de tentar `destroy → hide`, e uma criação posterior recebe geração nova.
-- Invalidação deve ser compare-and-invalidate: callbacks e rollbacks carregam a geração esperada e só removem `current/ready` quando ela ainda coincide. Um rollback stale de G1 nunca pode apagar G2 já pronta.
-- Uma lifetime guard reutilizável precisa de `PublicationPermit` independente por comando: clones do mesmo permit compartilham um único claim, enquanto permits distintos da mesma ação podem publicar feedbacks sequenciais. Os testes de Preview/Undo/Toolbar seguidos de erro devem afirmar emissão e visibilidade, não apenas ordem dos comandos.
-- O fallback `ValueRange` é testado com CFString real, nunca por índices UTF-8: a matriz cobre BMP, emoji, combining marks, cortes de surrogate, ranges negativos/vazios/fora do valor/overflow, limite exato de 262.144 code units e limite +1.
-- A ordem transacional `range₁ → AXValue → range₂ → validação/cópia` possui contrato estático e helper puro para divergência de ranges; somente depois da estabilidade o teste autoriza `CFStringGetCharacters` sobre o trecho selecionado.
-- Estratégia de extração integra a identidade do alvo. Testes cruzam `SelectedText`, `StringForRange`, `ValueRange` e `TextMarker` em `same_target`, replace e restore para impedir revalidação entre estratégias.
-- Capacidade de leitura e setter são matrizes independentes: settable verdadeiro/falso, ausência/unsupported e falhas estruturais possuem resultados distintos; contrato estático impede setter de `AXValue` e exige `AXSelectedText` como único writer.
-- Privacidade do fallback combina testes nativos e contrato de source: valor não-CFString falha antes de length/copy, role não elegível bloqueia `value_range_selection`, protected field é verificado antes de extract e nenhum helper converte o documento completo para `String`.
-- O gate global de role é testado em duas camadas: trace parametrizado exige somente `role` para secure/non-text e o contrato de source exige `validate` antes de identifier, conteúdo, range e bounds; roles textuais percorrem o trace completo.
-- Registry causal de handles precisa de relógio lógico injetado pelos próprios argumentos, sem sleeps: o boundary exato de TTL, eviction por inserção, substituição, remoção e `Drop` são observáveis. Um contrato separado proíbe qualquer re-resolução por PID quando o handle exato está ausente.
-- Receipt de mutação é a identidade do undo, não o texto transformado. Testes mantêm dois records com resultado idêntico e exigem que somente o `mutation_id` de `Applied` seja restaurado; falha de feedback após setter deve preservar o record no journal.
-- Secure text fields exigem classificação conjunta `AXRole + AXSubrole` antes de identifier, settable, conteúdo, range, marker ou bounds. O contrato de produção cobre tanto `capture` quanto `capture_with_strategy`; validação manual continua necessária para a chamada FFI real sob TCC.
-- O scheduler AX precisa de teste com o worker real: bloquear A no boundary anterior ao claim, avançar a epoch causal fora da FIFO, confirmar que Capture B fica pendente na fila, liberar A e exigir zero setter de A antes de B executar.
-- Recovery de mutation ledger é uma state machine persistente: o payload completo nasce em `Prepared` antes do setter; replay usa o mesmo ID; `Indeterminate` e `RestoreIndeterminate` reconciliam por leitura; estados reconciliados terminais recebem timestamp para TTL, ou o ledger fica permanentemente ocupado.
-- Commit failure depois de setter confirmado não pode apagar o receipt. O teste deve envenenar o commit de estado depois do claim, exigir uma única escrita e confirmar que o journal ainda permite reconciliação/undo exato.
-- Eventos AX causais usam o roteador real com o actor bloqueado: `FocusChanged` e `SelectedTextChanged` sem expectativa exata incrementam o epoch antes de uma `Capture` pendente e mantêm o setter anterior em zero.
-- Supressão de self-notification é one-shot por mutation ID, alvo forte, geração, ledger e seleção atual. O token usa PID + `AXIdentifier` completo após role+subrole; sem identifier, a supressão não é armada e o evento falha seguro como externo.
-- Restore exige matriz de estados do ledger: cada outcome permite no máximo um `begin_restore`, estados terminais nunca reabrem e reconcile de `RestoreIndeterminate` permanece somente leitura.
-- Todo reader de reconciliação passa pelo gate central role+subrole; a matriz de estratégias exige zero leitor de conteúdo após transição para `AXSecureTextField`.
-- Secure-after-prepare atravessa `ActorState::replace/restore` com `AxMutationTarget` instrumentado no mesmo registry causal, epoch e `TransformLease` reais; o fake muda para secure depois de prepare e prova zero setter, terminal Rejected/RestoreRejected e self-notification limpa.
-- A matriz de terminalização registra `TerminalPhase`: retry idempotente exige mesma fase/API e outcome, enquanto `finish_* ↔ reconcile_*` cross-phase falha sem alterar status, TTL, restore-attempt ou provenance.
-- Restore causal exige harness no `AxActor` real: bloquear `prepare_restore`, avançar `CausalEpoch` por FocusChanged fora da FIFO, manter Capture pendente e provar `Confirmed`/provenance/lease intactos com zero setter.
-- Replays terminais de restore validam mutation ID, snapshot completo, texto transformado e ownership da lease antes de `Restored` early-return ou `RestoreIndeterminate` reconcile; divergências precisam provar zero read e metadados imutáveis.
-- O boundary causal final usa um `AxMutationTarget` instrumentado que observa self-notification pendente, incrementa `CausalEpoch` no início de `write_replace/write_restore` e só então consulta `AxWriteAuthorization`; isso prova deterministicamente claim+arm anteriores, zero setter, limpeza da expectativa e terminal rejeitado.
-- Expiração de replay terminal pode ser testada sem sleep pelo `ActorState`: capture `terminal_at`, ajuste `started` para o limite exato do TTL e invoque `restore`; o `get_mut` precisa podar antes do early-return, retornar `StaleSelection` e remover o record.
-- Evento Selected exato durante `Armed` precisa atravessar `route_observer_event → AxActor::observe_selection_change → take_exact` enquanto o worker está bloqueado. Uma `TestPendingCapture` prova a FIFO ocupada; retorno síncrono, bump imediato, zero setter e terminal tipado distinguem o teste real de um bump direto.
-- A fase `Authorizing` exige a mesma prova actor/router para replace e restore: bloqueie dentro de `begin_setter_after_authorizing`; evento exato deve cancelar e bumpar fora da FIFO, enquanto epoch stale direto permanece pendente até o rejected-path limpar a expectation. Ambos terminam com zero setter e fase terminal tipada, sem sleeps.
-- Para fechar a janela pós-epoch/pré-CAS, use `begin_setter_after_epoch_valid` no target do actor real. Focus/Destroyed via router e sinal direto devem cancelar/remover pending antes do bump, retornar enquanto a FIFO segue bloqueada e fazer o CAS perder; o contracaso promove primeiro e exige pending preservado, um setter e um consumo self.
-- O setter final é testável sem AX real quando produção separa `PreparedSelectedTextWrite` do seam FFI: prepare o payload CF antes, consuma-o no mesmo helper que chama `begin_setter`, observe `InSetter` dentro do seam e exija exatamente uma chamada; epoch rejeitado precisa consumir zero setters.
+
+- **Framework Deno (Edge Functions)**: testes em `*_test.ts` ao lado dos arquivos fonte. Sem framework de assertion externo — usa função local `assertEquals` (JSON.stringify comparison). Cada `Deno.test()` é independente.
+- **Framework frontend**: Vitest + React Testing Library. Arquivos `*.test.tsx` / `*.test.ts` em `src/`.
+- **E2E**: Playwright em `e2e/*.e2e.ts`, rodado contra Vite real com `window.__TAURI_INTERNALS__` stubado.
+- **Rust**: `cargo test` padrão; testes em módulo `#[cfg(test)]` dentro dos próprios arquivos ou em `tests/`.
 
 ## Estratégias de Mock
-- Seleções mutáveis ficam em `Arc<Mutex<SelectionSnapshot>>` para simular mudança durante requests.
-- Providers falsos retornam sucesso, timeout ou request ID divergente sem acessar a rede.
-- O limite de Keychain é verificado pelo payload IPC; testes não gravam credenciais reais.
-- Wiring com efeitos Tauri pode ser testado por callbacks `FnOnce` que contam separadamente abertura de janela e publicação de nota, mantendo o mesmo branch usado por produção sem construir `AppHandle`.
 
-## Padrões de Teste (Swift/iOS)
-- `ios/VerbalixKit` usa `swift-tools-version: 5.9`, plataformas `.iOS(.v17)`/`.macOS(.v14)`; testes rodam via `swift test --package-path ios/VerbalixKit` no host macOS, sem simulador.
-- Suíte Swift atual: `TransformContractTests`, `TransformGuardsTests`, `VerbalixErrorTests`, `TransformClientTests`, `PreferencesStoreTests` + `PreferencesSyncSerializationTests` + `MergePreferencesTests`, todas em `Tests/VerbalixKitTests/`; stub compartilhado `Support/StubHTTPTransport.swift` implementa `HTTPTransport` injetável (sem rede real), `Support/VerbalixErrorMatching.swift` ajuda a comparar erros.
-- `TransformRequest.requestId` precisa de `encode(to:)` manual (com `CodingKeys` privado) para serializar `UUID` em lowercase (`uuidString.lowercased()`), pois `JSONEncoder` padrão do Foundation emite UUID em uppercase e o contrato espelha `contract.ts`'s `isUuid()/randomUUID()` (sempre lowercase). Decodificação continua sintetizada automaticamente — implementar só `encode(to:)` não desativa a síntese de `init(from:)`.
+- **Deno handlers**: injeção de dependência via `deps: HandlerDeps`. Criar `createState(options)` que retorna instâncias fake das interfaces (authenticator, provider, serviceClient, timeout). Contadores (authCalls, enrollCalls, setReadyCalls, setFailedCalls) em closures para verificação de chamadas.
+- **Opções de erro em createState**: adicionar campos `xyzError?: Error` na `StateOptions` e checar no mock antes de resolver. Padrão: `if (options.xyzError) return Promise.reject(options.xyzError)`.
+- **Frontend**: `vi.mock` para módulos Tauri (`@tauri-apps/api/core`). IPC wrappers em `src/native.ts` são o único ponto de contato — mocká-lo isola testes de componentes.
+- **Playwright**: script de init injeta `window.__TAURI_INTERNALS__`; assertivas em chamadas `invoke` gravadas.
 
 ## Erros Recorrentes & Soluções
-- Factories de `vi.mock` são hoisted; mocks compartilhados devem usar `vi.hoisted`.
-- Clipboard e Accessibility reais não devem ser acionados em testes automatizados, pois alteram estado global do macOS.
-- Coordenadas globais negativas são válidas em monitores secundários; validação geométrica deve rejeitar valores não finitos e dimensões inválidas sem rejeitar a origem negativa.
-- Doubles Deno que implementam interfaces assíncronas sem executar `await` devem retornar `Promise.resolve`/`Promise.reject` explicitamente para satisfazer `deno lint require-await`.
-- Limites superiores de índices marker em macOS arm64 devem considerar que `isize::MAX == i64::MAX`; o maior location válido antes de um range de length 1 é `isize::MAX - 1`.
-- O analyzer QA considera linhas efetivas e impõe máximo de 300 por arquivo modificado; os boundaries macOS foram divididos e devem permanecer abaixo desse limite.
-- Em sandbox restrito, o teste de histórico HTTP pode falhar ao criar `TcpListener` com `PermissionDenied`; isso não deve ser confundido com regressão quando todos os demais testes passam. O gate completo precisa de execução com socket loopback permitido.
-- Em sandbox restrito, o web server do Playwright pode falhar com `listen EPERM` em `127.0.0.1:4173`; repita o mesmo `npm run test:e2e` com permissão de loopback antes de classificar como regressão.
-- `XCTAssertEqual(_:_:accuracy:)` exige operandos `FloatingPoint` NÃO-opcionais; comparar `TimeInterval?` (ex.: `Date?.timeIntervalSince1970`) direto nesse overload falha em "no exact matches". Desembrulhe cada lado com `try XCTUnwrap(...)` (tornando o teste `throws`) antes da comparação com `accuracy:`.
-- Em Swift 6 language mode, `NSLock.lock()/unlock()` cruzando um `await` vira erro ("instance method 'unlock' is unavailable from asynchronous contexts"). Use `NSLock.withLock { ... }` (disponível iOS 16+/macOS 13+) envolvendo só a seção síncrona (ex.: mutação de estado + `removeFirst()`), retornando o valor necessário para fora do closure antes de qualquer `await` subsequente.
+
+- **Deno: assertEquals usa JSON.stringify** — arrays vazios `[]` e `0` são distintos; verificar exatamente o tipo esperado.
+- **setReadyCalls conta mesmo quando setReady lança**: o contador é incrementado antes do check de erro no mock — é intencional para verificar que a chamada aconteceu antes da exceção.
+- **cpal::Stream não é Send**: `MacAudioCapture` usa thread de captura dedicada + `mpsc` + `Arc<AtomicU32>`. O caminho de erro `start()` sem device não pode ser testado sem injeção de `cpal::Host` — documentar como gate manual.
 
 ## Cobertura & Métricas
-- O escopo instrumentado do cliente frontend (`native.ts` e `types.ts`) mantém 100% em statements, branches, functions e lines.
-- A suíte Rust cobre state machine, latest-wins, stale selection, falhas seguras, Unicode/UTF-16, matriz AX, marker read-only, identidade forte de replace/restore, settings, readiness e geometria. `cargo-llvm-cov` não está instalado; os testes Rust e os gates `clippy -D warnings` são usados como evidência.
-- A suíte Rust possui 229 testes, incluindo readiness pós-pin, feedback tipado, toolbar/replace/restore bloqueáveis, leases antes/depois do claim, revogação AX fora da FIFO, router real nas fases Armed/Authorizing e pós-epoch/pré-CAS, ownership após promoção, seam FFI com payload preparado, replay terminal expirado, restore monotônico, secure-after-prepare, histórico detached e receipt exato.
-- O frontend possui 55 testes Vitest com 100% de statements, branches, functions e lines no escopo instrumentado; os 6 testes Playwright continuam verdes.
-- A suíte iOS (VerbalixKit) possui 87 testes (69 XCTest + 18 Swift Testing), todos verdes — inclui BackendConfigAuthCallbackTests (6), AuthCallbackRegressionTests (1), AuthCallbackTests (10), SessionRefresherTests (8), RefreshLockTests (10), e demais suítes de preferências/transform/error.
+
+- **Limiar**: 80% mínimo; 100% em `src/native.ts` e `src/types.ts` (enforced por `npm run test:coverage`).
+- **Deno**: não há threshold automático; cobertura verificada por inspeção dos cenários (happy path, auth error, parse error, timeout, idempotência, replace, orphan cleanup, DB conflict).
+- Áreas de cobertura difícil: `platform/audio_capture.rs` (cpal, macOS-only), `platform/audio_permission.rs` (AVFoundation, requer hardware real).
 
 ## Observações
-- Preview/apply/undo possuem integração mockada; a matriz AX e o fallback de clipboard ainda precisam de validação manual em um app com permissão de Acessibilidade.
-- Configuração pública do Supabase é testada como build-time embutido com override de runtime; OpenAI/service-role não podem aparecer nos arquivos do runtime público.
-- Limites HTTP da Edge são testados em bytes com JSON válido seguido de whitespace até exatamente 64 KiB; isso separa o boundary de transporte do limite de 12.000 caracteres do domínio.
-- Testes pré-deploy da Edge mantêm Auth, scheduler e OpenAI totalmente injetados: cobrem usuário real/anon, timeout que vence provider não cooperativo, respostas por operação e limites exatos sem rede ou secrets reais.
-- O 504 `PROVIDER_TIMEOUT` da Edge ainda não prova `ProviderTimeout` no Rust: `RemoteTransformer` converte non-2xx genérico em `ProviderRejected`, enquanto somente timeout de transporte reqwest vira `ProviderTimeout`. Não alegar tipagem ponta a ponta sem teste/correção específica.
-- Contratos estáticos do overlay precisam acompanhar a fronteira entre `overlay_dispatcher.rs`, `overlay_execution.rs` e `overlay_publication.rs`; ler apenas o dispatcher gera falso negativo quando a execução é extraída sem mudança de comportamento.
-- Contratos estáticos devem proteger `PublicationPermit::try_claim` e sua criação antes do dispatch; nomes removidos como `try_claim_publication` transformam o teste em trava da implementação antiga.
-- O hard gate Trivy pode ser reutilizado quando executado contemporaneamente na mesma worktree: scan `vuln,misconfig` HIGH/CRITICAL com `--ignore-unfixed --exit-code 1` passou para `package-lock`, `Cargo.lock` e configurações.
+
+- O projeto tem gate de linhas em `lib.rs` (≤301) verificado por `bundle-smoke.test.ts` — não adicionar código inline lá.
+- Commits NUNCA devem mencionar Claude, IA ou qualquer ferramenta de IA.
+- Worktree ativo em `.worktrees/voice-enrollment` (branch `voice-enrollment`).
+- Gates manuais documentados em `tasks/voice-enrollment/plan.md` na seção "Gates Manuais".
