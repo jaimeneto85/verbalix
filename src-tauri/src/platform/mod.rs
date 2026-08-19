@@ -2,6 +2,7 @@
 mod audio_capture;
 #[cfg(target_os = "macos")]
 pub mod audio_permission;
+pub mod audio_wav;
 mod causal_epoch;
 #[cfg(target_os = "macos")]
 mod causal_registry;
