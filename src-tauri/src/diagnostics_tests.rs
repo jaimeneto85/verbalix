@@ -4,6 +4,76 @@ use crate::domain::{Rect, TextRange};
 use crate::platform::macos_focus::{AxCategory, AxStage, ExtractionOrigin};
 
 #[test]
+fn p50_and_p95_of_known_latency_distribution() {
+    let mut agg = LiveLatencyAggregator::new();
+    for _ in 0..50 {
+        agg.record(LatencyStage::CaptureToRequest, 80);
+    }
+    for _ in 0..50 {
+        agg.record(LatencyStage::CaptureToRequest, 200);
+    }
+    assert_eq!(
+        agg.p50(LatencyStage::CaptureToRequest),
+        100,
+        "50th percentile of [80×50, 200×50] should fall in ≤100ms bucket"
+    );
+    assert_eq!(
+        agg.p95(LatencyStage::CaptureToRequest),
+        200,
+        "95th percentile of [80×50, 200×50] should fall in ≤200ms bucket"
+    );
+}
+
+#[test]
+fn p95_at_overflow_bucket() {
+    let mut agg = LiveLatencyAggregator::new();
+    for _ in 0..90 {
+        agg.record(LatencyStage::Ttfb, 100);
+    }
+    for _ in 0..10 {
+        agg.record(LatencyStage::Ttfb, 9_999);
+    }
+    assert_eq!(
+        agg.p50(LatencyStage::Ttfb),
+        100,
+        "p50 falls in ≤100ms bucket"
+    );
+    let p95 = agg.p95(LatencyStage::Ttfb);
+    assert!(p95 > 5000, "p95 is in overflow bucket (>5000ms), got {p95}");
+}
+
+#[test]
+fn all_stages_aggregate_independently() {
+    let mut agg = LiveLatencyAggregator::new();
+    for _ in 0..10 {
+        agg.record(LatencyStage::CaptureToRequest, 80);
+    }
+    for _ in 0..10 {
+        agg.record(LatencyStage::FirstAudio, 500);
+    }
+    assert_eq!(agg.p50(LatencyStage::CaptureToRequest), 100);
+    assert_eq!(agg.p50(LatencyStage::FirstAudio), 500);
+    assert_eq!(agg.p50(LatencyStage::Ttfb), 0, "empty stage returns 0");
+}
+
+#[test]
+fn underrun_counter_increments() {
+    let mut agg = LiveLatencyAggregator::new();
+    assert_eq!(agg.underruns, 0);
+    agg.increment_underruns();
+    agg.increment_underruns();
+    assert_eq!(agg.underruns, 2);
+}
+
+#[test]
+fn single_sample_p50_and_p95_agree() {
+    let mut agg = LiveLatencyAggregator::new();
+    agg.record(LatencyStage::PlaybackEnd, 300);
+    assert_eq!(agg.p50(LatencyStage::PlaybackEnd), 300);
+    assert_eq!(agg.p95(LatencyStage::PlaybackEnd), 300);
+}
+
+#[test]
 fn snapshot_diagnostics_never_include_selected_text() {
     let snapshot = SelectionSnapshot::new(
         42,
