@@ -347,7 +347,7 @@ enum InterpretMode { Json, Stream }
   `native.ts`/`types.ts` tipados (camelCase); `LivePanel.test.tsx`/`native.test.ts`; e2e ajustado.
 - [x] T5.1: [MEDIUM] Testes coordinator/worker: ordering+burst-drain (CA07), fail-closed truncado (CA06),
   stop/drop mid-stream fechando socket (CA11/EC04/EC08), underrun mid-segmento (EC07), contexto (CA08).
-- [ ] T5.2: [LOW] Rodar TODOS os gates; QA (dual analysis) e correções.
+- [x] T5.2: [LOW] Rodar TODOS os gates; QA (dual analysis) e correções.
 
 ## ✅ Gates (rodados no worktree pelo orquestrador a cada retorno)
 `npm test` · `npm run test:coverage` · `npm run test:e2e` · `npm run build` ·
