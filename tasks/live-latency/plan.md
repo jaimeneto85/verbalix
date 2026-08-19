@@ -301,12 +301,12 @@ enum InterpretMode { Json, Stream }
 > depois o núcleo de streaming (o maior valor de latência), e o contexto (D4) POR ÚLTIMO e droppable.
 
 ### Round 1 — Quick wins isolados (baixo risco, arquivos disjuntos)
-- [ ] T4.2: [LOW] `domain/endpointing.rs`: histerese (reusa `voiced_frames`/`total_open_frames` já
+- [x] T4.2: [LOW] `domain/endpointing.rs`: histerese (reusa `voiced_frames`/`total_open_frames` já
   existentes) + constantes nomeadas; reduzir silêncio de fechamento com segurança (o frame do endpointer é
   o buffer de callback do cpal, não ms fixo — normalizar/documentar a conversão). Testes de não-corte/fechamento.
-- [ ] T2.1: [LOW] `audio_wav.rs`: `pcm_i16le_to_f32` (extrai a expressão de `decode_wav_f32`) + helper de
+- [x] T2.1: [LOW] `audio_wav.rs`: `pcm_i16le_to_f32` (extrai a expressão de `decode_wav_f32`) + helper de
   resample incremental com estado de fase (reusa/estende `resample_f32`). Testes puros incl. CA13.
-- [ ] T4.1: [MEDIUM] `diagnostics.rs`: buckets fixos p50/p95 por estágio (capture→request, TTFB, primeiro
+- [x] T4.1: [MEDIUM] `diagnostics.rs`: buckets fixos p50/p95 por estágio (capture→request, TTFB, primeiro
   áudio, fim de playback) + contador de underrun, reusando `emit()`/`enabled()`. Sem conteúdo. Testes de agregação.
 
 ### Round 2 — Edge Function streaming (Deno, Track independente do Rust)
