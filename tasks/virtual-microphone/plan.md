@@ -330,7 +330,7 @@ Seção "Microfone virtual" no painel Interpretação:
   incompatibleVersion mostra orientação de reinstalar; toggle dispara `save_settings` com
   `outputToVirtualMic: true`. Segue exatamente o padrão de `live-interpretation.e2e.ts` (stub de
   `__TAURI_INTERNALS__.invoke` + `plugin:event|listen`).
-- [ ] T7.6: QA (@qa-reviewer com análise dual) → verdict.
+- [x] T7.6: QA (@qa-reviewer com análise dual) → verdict.
 
 ## Gates antes do handoff (DENTRO do worktree)
 `npm test`, `npm run test:coverage`, `npm run test:e2e`, `npm run build`, `cargo test`,
