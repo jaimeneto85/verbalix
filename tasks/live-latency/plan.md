@@ -322,7 +322,7 @@ enum InterpretMode { Json, Stream }
 - [x] T1.4: [MEDIUM] `{contract,provider,handler}_test.ts`: CA01–CA05, CA12, contexto, não-regressão do JSON. + `{handler_edge_cases,stages}_test.ts`: PROVIDER_TIMEOUT via AbortError, INTERNAL_ERROR, anon role, content-length guard, runStreamPipeline/runInterpretPipeline AbortError paths.
 
 ### Round 3 — Núcleo de streaming no Rust (SEQUENCIAL; maior valor de latência)
-- [ ] T2.2: [HIGH] `Cargo.toml` (feature `stream`), `ports.rs`, `voice_pipeline.rs`(+split se preciso):
+- [x] T2.2: [HIGH] `Cargo.toml` (feature `stream`), `ports.rs`, `voice_pipeline.rs`(+split se preciso):
   modo streaming do `VoicePipelinePort` — **drenar o corpo para buffer em memória assim que chega** (D9),
   ler o frame de metadados (línguas, stageMs, sourceText), expor handle de buffer + flag `complete` +
   flag de cancelamento. `domain::SegmentResult` permanece PURO (handle vive em `application`). Modo JSON
