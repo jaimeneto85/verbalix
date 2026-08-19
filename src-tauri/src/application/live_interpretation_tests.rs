@@ -135,6 +135,31 @@ fn enter_live_starts_capture_stream() {
 }
 
 #[test]
+fn enter_live_fails_when_capture_fails() {
+    let stream = Arc::new(FakeAudioStream::new_failing());
+    let coord = make_coordinator(
+        Arc::clone(&stream) as Arc<dyn AudioStreamPort>,
+        Arc::new(FakePipeline { should_fail: false }),
+    );
+    let result = coord.enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned());
+    assert!(matches!(result, Err(VerbalixError::AudioCaptureFailed)));
+    assert_eq!(coord.live_state(), LiveState::Idle);
+}
+
+#[test]
+fn active_session_id_present_after_enter_live() {
+    let coord = make_coordinator(
+        Arc::new(FakeAudioStream::new()),
+        Arc::new(FakePipeline { should_fail: false }),
+    );
+    assert!(coord.active_session_id().is_none());
+    let _guard = coord.enter_live("en", uuid::Uuid::new_v4(), "tok".to_owned()).unwrap();
+    assert!(coord.active_session_id().is_some());
+    coord.leave_live();
+    assert!(coord.active_session_id().is_none());
+}
+
+#[test]
 fn leave_live_stops_capture() {
     let stream = Arc::new(FakeAudioStream::new());
     let coord = make_coordinator(
@@ -168,7 +193,7 @@ fn circuit_breaker_triggers_after_k_failures() {
 
     coord.simulate_segment_failure();
     coord.simulate_segment_failure();
-    assert_eq!(coord.live_state(), LiveState::OnAir);
+    assert_eq!(coord.live_state(), LiveState::Recovering);
 
     coord.simulate_segment_failure();
     assert_eq!(coord.live_state(), LiveState::Failed);

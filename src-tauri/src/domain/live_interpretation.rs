@@ -72,7 +72,7 @@ impl LiveSession {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Default)]
 pub struct StageDurations {
     pub stt: u32,
     pub translate: u32,

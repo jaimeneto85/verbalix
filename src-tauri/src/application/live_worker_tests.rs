@@ -83,7 +83,7 @@ fn make_worker(
         playback,
         Arc::clone(&queue),
         Arc::new(move |event| {
-            if let WorkerEvent::SegmentReady { .. } = event {
+            if let WorkerEvent::Ready { .. } = event {
                 ready_clone.fetch_add(1, Ordering::Relaxed);
             }
         }),
@@ -176,17 +176,15 @@ fn stop_drains_queue() {
         playback,
         Arc::clone(&queue),
         Arc::new(move |event| {
-            if let WorkerEvent::SegmentDropped { .. } = event {
+            if let WorkerEvent::Dropped { .. } = event {
                 drop_clone.fetch_add(1, Ordering::Relaxed);
             }
         }),
     );
 
     {
-        let mut q = queue.lock().unwrap();
-        use crate::domain::LiveSessionId;
         let s = session();
-        let outcome = crate::domain::InterpretOutcome {
+        let pending = InterpretOutcome {
             session_id: s,
             segment_id: SegmentId(5),
             result: Ok(SegmentResult {
@@ -195,10 +193,11 @@ fn stop_drains_queue() {
                 stage_ms: StageDurations { stt: 0, translate: 0, tts: 0 },
             }),
         };
-        q.reset(SegmentId(0));
-        drop(q);
+        queue.lock().unwrap().insert(pending);
     }
 
     worker.stop();
     std::thread::sleep(Duration::from_millis(100));
+
+    assert!(drop_count.load(Ordering::Relaxed) >= 1);
 }

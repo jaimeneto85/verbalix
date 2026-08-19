@@ -26,12 +26,10 @@ use overlay_commands::*;
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
 pub(crate) use runtime::{show_main_window, start_selection_observer, AppRuntime};
 use std::{sync::Arc, thread, time::Duration};
-use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
 
 fn normalized_shortcut(raw: &str) -> String {
     raw.replace("Option", "Alt")
-        .replace("Shift", "Shift")
-        .replace("Space", "Space")
 }
 
 fn trigger_active_shortcut(runtime: &AppRuntime) {

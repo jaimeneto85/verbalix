@@ -21,6 +21,9 @@ export type InterpretHandlerDeps = {
   authenticator: UserAuthenticator;
   serviceClient: InterpretServiceClient;
   fetcher: Fetcher;
+  elevenLabsKey: string;
+  openAiKey: string;
+  openAiModel: string;
 };
 
 export async function handleInterpret(
@@ -64,6 +67,9 @@ export async function handleInterpret(
       interpretReq.targetLanguage,
       voiceProfile.providerVoiceId,
       deps.fetcher,
+      deps.elevenLabsKey,
+      deps.openAiKey,
+      deps.openAiModel,
     );
 
     const response: InterpretResponse = {

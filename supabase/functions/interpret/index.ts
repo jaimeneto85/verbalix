@@ -5,6 +5,9 @@ import { createInterpretServiceClient } from "./service_client.ts";
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const elevenLabsKey = Deno.env.get("ELEVENLABS_API_KEY") ?? "";
+const openAiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
+const openAiModel = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
 
 const authenticator = new SupabaseUserAuthenticator(supabaseUrl, anonKey);
 const serviceClient = createInterpretServiceClient(supabaseUrl, serviceKey);
@@ -21,6 +24,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       serviceClient,
       fetcher: (input, init) =>
         fetch(input, { ...init, signal: controller.signal }),
+      elevenLabsKey,
+      openAiKey,
+      openAiModel,
     });
   } finally {
     clearTimeout(handle);

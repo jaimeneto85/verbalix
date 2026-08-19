@@ -4,7 +4,7 @@ use crate::{
         live_queue::{LiveQueue, QueueEvent},
         AudioPreviewPort, VoicePipelinePort,
     },
-    domain::{InterpretOutcome, LiveSessionId, SegmentId},
+    domain::{InterpretOutcome, LiveSessionId, SegmentId, StageDurations},
 };
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
@@ -24,9 +24,18 @@ pub enum WorkerCommand {
 }
 
 pub enum WorkerEvent {
-    SegmentReady { segment_id: SegmentId },
-    SegmentDropped { segment_id: SegmentId },
-    SegmentFailed { segment_id: SegmentId },
+    Ready {
+        segment_id: SegmentId,
+        session_id: LiveSessionId,
+        stage_ms: StageDurations,
+    },
+    Dropped {
+        segment_id: SegmentId,
+    },
+    Failed {
+        segment_id: SegmentId,
+        session_id: LiveSessionId,
+    },
 }
 
 pub struct LiveWorker {
@@ -55,21 +64,25 @@ fn process_queue_events(
         match event {
             QueueEvent::Ready(out) => {
                 let emit_seg = out.segment_id;
+                let emit_session = out.session_id;
                 if let Ok(ref result) = out.result {
                     if let Ok(wav) = STANDARD.decode(&result.audio_base64) {
                         let _ = playback.play(wav);
                     }
-                    on_event(WorkerEvent::SegmentReady {
+                    on_event(WorkerEvent::Ready {
                         segment_id: emit_seg,
+                        session_id: emit_session,
+                        stage_ms: result.stage_ms.clone(),
                     });
                 } else {
-                    on_event(WorkerEvent::SegmentFailed {
+                    on_event(WorkerEvent::Failed {
                         segment_id: emit_seg,
+                        session_id: emit_session,
                     });
                 }
             }
             QueueEvent::Dropped { segment_id } => {
-                on_event(WorkerEvent::SegmentDropped { segment_id });
+                on_event(WorkerEvent::Dropped { segment_id });
             }
         }
     }
@@ -98,7 +111,7 @@ impl LiveWorker {
                         Ok(WorkerCommand::Stop) => {
                             let drained = queue.lock().unwrap().drain_all();
                             for o in drained {
-                                on_event(WorkerEvent::SegmentDropped {
+                                on_event(WorkerEvent::Dropped {
                                     segment_id: o.segment_id,
                                 });
                             }

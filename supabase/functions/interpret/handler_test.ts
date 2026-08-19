@@ -75,6 +75,9 @@ Deno.test("handleInterpret - returns 401 when no JWT", async () => {
     authenticator: new MockAuthenticator({ id: "user-1", role: "authenticated" }),
     serviceClient: new MockServiceClient({ providerVoiceId: "voice-id-1" }),
     fetcher: makeStubbedFetcher([]),
+    elevenLabsKey: "",
+    openAiKey: "",
+    openAiModel: "test",
   };
 
   const req = new Request("http://localhost/interpret", {
@@ -99,6 +102,9 @@ Deno.test("handleInterpret - returns 401 when authenticator returns null", async
     authenticator: new MockAuthenticator(null),
     serviceClient: new MockServiceClient({ providerVoiceId: "voice-id-1" }),
     fetcher: makeStubbedFetcher([]),
+    elevenLabsKey: "",
+    openAiKey: "",
+    openAiModel: "test",
   };
 
   const req = makeRequest(
@@ -122,6 +128,9 @@ Deno.test("handleInterpret - returns 404 when no voice profile", async () => {
     authenticator: new MockAuthenticator({ id: "user-1", role: "authenticated" }),
     serviceClient: new MockServiceClient(null),
     fetcher: makeStubbedFetcher([]),
+    elevenLabsKey: "",
+    openAiKey: "",
+    openAiModel: "test",
   };
 
   const req = makeRequest(
@@ -149,6 +158,9 @@ Deno.test("handleInterpret - calls pipeline on success and returns InterpretResp
       makeTranslateResponse(),
       makeTtsResponse(),
     ]),
+    elevenLabsKey: "",
+    openAiKey: "",
+    openAiModel: "test",
   };
 
   const req = makeRequest(
@@ -187,6 +199,9 @@ Deno.test("handleInterpret - returns 400 for invalid request", async () => {
     authenticator: new MockAuthenticator({ id: "user-1", role: "authenticated" }),
     serviceClient: new MockServiceClient({ providerVoiceId: "voice-id-1" }),
     fetcher: makeStubbedFetcher([]),
+    elevenLabsKey: "",
+    openAiKey: "",
+    openAiModel: "test",
   };
 
   const req = makeRequest({ invalid: "body" }, "valid-token");
@@ -200,6 +215,9 @@ Deno.test("handleInterpret - returns 405 for non-POST methods", async () => {
     authenticator: new MockAuthenticator({ id: "user-1", role: "authenticated" }),
     serviceClient: new MockServiceClient({ providerVoiceId: "voice-id-1" }),
     fetcher: makeStubbedFetcher([]),
+    elevenLabsKey: "",
+    openAiKey: "",
+    openAiModel: "test",
   };
 
   const req = new Request("http://localhost/interpret", {

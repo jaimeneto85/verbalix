@@ -78,7 +78,7 @@ impl Endpointer {
                     self.silent_frames = 0;
                 } else {
                     self.silent_frames += 1;
-                    if self.silent_frames >= self.config.silence_close_frames {
+                    if self.silent_frames > self.config.silence_close_frames {
                         self.reset();
                         return Some(EndpointEvent::Closed);
                     }

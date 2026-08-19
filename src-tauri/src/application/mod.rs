@@ -29,8 +29,6 @@ pub use auth_refresh::RemoteAuthRepository;
 pub use coordinator::SelectionCoordinator;
 pub use enrollment_session::EnrollmentSession;
 pub use live_interpretation::LiveInterpretationCoordinator;
-pub use live_queue::LiveQueue;
-pub use live_worker::{LiveWorker, WorkerCommand, WorkerEvent};
 pub use mutation::{MutationProjection, MutationReceipt, MutationStatus};
 pub use ports::{
     AudioCapturePort, AudioPreviewPort, AudioStreamPort, ClipboardPort, OverlayPort, SelectionPort,

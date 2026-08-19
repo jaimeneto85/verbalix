@@ -7,15 +7,14 @@ use crate::{
     },
     domain::{
         EndpointEvent, Endpointer, EndpointerConfig, LanguageTag, LiveSession,
-        LiveSessionId, LiveState, SegmentId, VerbalixError,
+        LiveState, SegmentId, VerbalixError,
     },
+    platform::audio_wav::{encode_wav, pcm_rms, resample_to_16k, TARGET_SAMPLE_RATE},
 };
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const CIRCUIT_BREAKER_THRESHOLD: u32 = 3;
-const IDLE_TIMEOUT: Duration = Duration::from_secs(120);
-const TARGET_SAMPLE_RATE: u32 = 16_000;
 
 struct CoordinatorState {
     live_state: LiveState,
@@ -40,66 +39,6 @@ pub struct LiveInterpretationCoordinator {
     pause: Arc<RuntimePause>,
     worker: Arc<Mutex<Option<LiveWorker>>>,
     queue: Arc<Mutex<LiveQueue>>,
-}
-
-fn pcm_rms(samples: &[f32]) -> f32 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-    let sum: f32 = samples.iter().map(|s| s * s).sum();
-    (sum / samples.len() as f32).sqrt()
-}
-
-fn resample_to_16k(samples: &[f32], src_rate: u32, channels: u16) -> Vec<i16> {
-    let ch = channels.max(1) as usize;
-    let mono: Vec<f32> = samples
-        .chunks(ch)
-        .map(|frame| frame.iter().sum::<f32>() / ch as f32)
-        .collect();
-
-    if src_rate == TARGET_SAMPLE_RATE {
-        return mono
-            .iter()
-            .map(|&s| (s * 32767.0).clamp(-32768.0, 32767.0) as i16)
-            .collect();
-    }
-
-    let ratio = src_rate as f64 / TARGET_SAMPLE_RATE as f64;
-    let out_len = (mono.len() as f64 / ratio) as usize;
-    let mut output = Vec::with_capacity(out_len);
-    for i in 0..out_len {
-        let pos = i as f64 * ratio;
-        let idx = pos as usize;
-        let frac = (pos - idx as f64) as f32;
-        let a = mono.get(idx).copied().unwrap_or(0.0);
-        let b = mono.get(idx + 1).copied().unwrap_or(a);
-        let sample = a + (b - a) * frac;
-        output.push((sample * 32767.0).clamp(-32768.0, 32767.0) as i16);
-    }
-    output
-}
-
-fn encode_wav(samples: &[i16], sample_rate: u32) -> Vec<u8> {
-    let data_size = (samples.len() * 2) as u32;
-    let file_size = data_size + 36;
-    let mut buf = Vec::with_capacity((data_size + 44) as usize);
-    buf.extend_from_slice(b"RIFF");
-    buf.extend_from_slice(&file_size.to_le_bytes());
-    buf.extend_from_slice(b"WAVE");
-    buf.extend_from_slice(b"fmt ");
-    buf.extend_from_slice(&16u32.to_le_bytes());
-    buf.extend_from_slice(&1u16.to_le_bytes());
-    buf.extend_from_slice(&1u16.to_le_bytes());
-    buf.extend_from_slice(&sample_rate.to_le_bytes());
-    buf.extend_from_slice(&(sample_rate * 2).to_le_bytes());
-    buf.extend_from_slice(&2u16.to_le_bytes());
-    buf.extend_from_slice(&16u16.to_le_bytes());
-    buf.extend_from_slice(b"data");
-    buf.extend_from_slice(&data_size.to_le_bytes());
-    for s in samples {
-        buf.extend_from_slice(&s.to_le_bytes());
-    }
-    buf
 }
 
 impl LiveInterpretationCoordinator {
@@ -147,7 +86,7 @@ impl LiveInterpretationCoordinator {
                 return Err(VerbalixError::LiveSessionInactive);
             }
             st.live_state = LiveState::Preparing;
-            st.session = Some(LiveSession::new(lang.clone()));
+            st.session = Some(LiveSession::new(lang));
             st.circuit_failures = 0;
             st.last_segment_time = None;
         }
@@ -156,7 +95,6 @@ impl LiveInterpretationCoordinator {
         let sink_state_arc = Arc::clone(&self.sink_state);
         let worker_arc = Arc::clone(&self.worker);
         let token_clone = token.clone();
-        let lang_str = lang.as_str().to_owned();
 
         let sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static> = Box::new(
             move |frames, sample_rate, channels| {
@@ -178,7 +116,7 @@ impl LiveInterpretationCoordinator {
                         ss.frame_buffer.extend_from_slice(&frames);
                     }
                     Some(EndpointEvent::Closed) | Some(EndpointEvent::MaxDurationReached) => {
-                        let (wav_bytes, session_id, segment_id) = {
+                        let (wav_bytes, session_id, segment_id, target_lang) = {
                             let mut ss = sink_state_arc.lock().unwrap();
                             let samples =
                                 resample_to_16k(&ss.frame_buffer, ss.sample_rate, ss.channels);
@@ -189,8 +127,9 @@ impl LiveInterpretationCoordinator {
                             if let Some(ref mut session) = st.session {
                                 let sid = session.id;
                                 let seg = session.advance();
+                                let lang = session.target_language.as_str().to_owned();
                                 st.last_segment_time = Some(Instant::now());
-                                (wav, sid, seg)
+                                (wav, sid, seg, lang)
                             } else {
                                 return;
                             }
@@ -202,7 +141,7 @@ impl LiveInterpretationCoordinator {
                                 session_id,
                                 segment_id,
                                 wav_bytes,
-                                target_language: lang_str.clone(),
+                                target_language: target_lang,
                                 token: token_clone.clone(),
                             });
                         }
@@ -237,10 +176,23 @@ impl LiveInterpretationCoordinator {
             Arc::clone(&self.playback),
             Arc::clone(&self.queue),
             Arc::new(move |event| match event {
-                WorkerEvent::SegmentFailed { .. } => {
+                WorkerEvent::Failed { segment_id, session_id } => {
+                    let current_session_matches = {
+                        let st = state_for_worker.lock().unwrap();
+                        st.session
+                            .as_ref()
+                            .map(|s| s.accepts(session_id, segment_id))
+                            .unwrap_or(false)
+                    };
+                    if !current_session_matches {
+                        return;
+                    }
                     let failed = {
                         let mut st = state_for_worker.lock().unwrap();
                         st.circuit_failures += 1;
+                        if st.circuit_failures < CIRCUIT_BREAKER_THRESHOLD {
+                            st.live_state = LiveState::Recovering;
+                        }
                         st.circuit_failures
                     };
                     if failed >= CIRCUIT_BREAKER_THRESHOLD {
@@ -251,11 +203,23 @@ impl LiveInterpretationCoordinator {
                         queue_clone.lock().unwrap().reset(SegmentId(0));
                     }
                 }
-                WorkerEvent::SegmentReady { .. } => {
-                    let mut st = state_for_worker.lock().unwrap();
-                    st.circuit_failures = 0;
+                WorkerEvent::Ready { segment_id, session_id, stage_ms: _ } => {
+                    let current_session_matches = {
+                        let st = state_for_worker.lock().unwrap();
+                        st.session
+                            .as_ref()
+                            .map(|s| s.accepts(session_id, segment_id))
+                            .unwrap_or(false)
+                    };
+                    if current_session_matches {
+                        let mut st = state_for_worker.lock().unwrap();
+                        st.circuit_failures = 0;
+                        if st.live_state == LiveState::Recovering {
+                            st.live_state = LiveState::OnAir;
+                        }
+                    }
                 }
-                WorkerEvent::SegmentDropped { .. } => {}
+                WorkerEvent::Dropped { .. } => {}
             }),
         );
 
@@ -279,6 +243,7 @@ impl LiveInterpretationCoordinator {
         drop(st);
 
         self.capture.stop_stream();
+        self.playback.stop();
 
         if let Some(w) = self.worker.lock().unwrap().take() {
             w.stop();
@@ -300,6 +265,9 @@ impl LiveInterpretationCoordinator {
         let failed = {
             let mut st = self.state.lock().unwrap();
             st.circuit_failures += 1;
+            if st.circuit_failures < CIRCUIT_BREAKER_THRESHOLD {
+                st.live_state = LiveState::Recovering;
+            }
             st.circuit_failures
         };
         if failed >= CIRCUIT_BREAKER_THRESHOLD {
@@ -310,7 +278,7 @@ impl LiveInterpretationCoordinator {
     }
 
     #[cfg(test)]
-    pub(crate) fn active_session_id(&self) -> Option<LiveSessionId> {
+    pub(crate) fn active_session_id(&self) -> Option<crate::domain::LiveSessionId> {
         self.state
             .lock()
             .unwrap()

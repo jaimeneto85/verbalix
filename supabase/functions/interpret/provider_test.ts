@@ -30,7 +30,7 @@ Deno.test("transcribe - sends multipart form with audio and model", async () => 
   };
 
   const audioBase64 = btoa("fake-wav-data");
-  const result = await transcribe(audioBase64, stubbedFetch);
+  const result = await transcribe(audioBase64, stubbedFetch, "test-key");
 
   assertEquals(result.text, "Hello world");
   assertEquals(result.detectedLanguage, "en");
@@ -49,7 +49,7 @@ Deno.test("transcribe - throws STT_FAILED on non-ok response", async () => {
   };
 
   await assertRejects(
-    () => transcribe(btoa("data"), stubbedFetch),
+    () => transcribe(btoa("data"), stubbedFetch, "key"),
     Error,
     "STT_FAILED",
   );
@@ -61,7 +61,7 @@ Deno.test("transcribe - throws STT_FAILED when response missing fields", async (
   };
 
   await assertRejects(
-    () => transcribe(btoa("data"), stubbedFetch),
+    () => transcribe(btoa("data"), stubbedFetch, "key"),
     Error,
     "STT_FAILED",
   );
@@ -84,7 +84,7 @@ Deno.test("translate - sends correct prompt with explicit target language", asyn
     });
   };
 
-  const result = await translate("Hello world", "pt", stubbedFetch);
+  const result = await translate("Hello world", "pt", stubbedFetch, "key", "gpt-4o-mini");
 
   assertEquals(result.translatedText, "Olá mundo");
   assertEquals(typeof result.translateMs, "number");
@@ -102,7 +102,7 @@ Deno.test("translate - throws TRANSLATION_FAILED on non-ok response", async () =
   };
 
   await assertRejects(
-    () => translate("hello", "pt", stubbedFetch),
+    () => translate("hello", "pt", stubbedFetch, "key", "model"),
     Error,
     "TRANSLATION_FAILED",
   );
@@ -114,7 +114,7 @@ Deno.test("translate - throws TRANSLATION_FAILED on unexpected response shape", 
   };
 
   await assertRejects(
-    () => translate("hello", "pt", stubbedFetch),
+    () => translate("hello", "pt", stubbedFetch, "key", "model"),
     Error,
     "TRANSLATION_FAILED",
   );
@@ -126,7 +126,7 @@ Deno.test("synthesize - returns audio as base64", async () => {
     return makeAudioResponse(fakeAudio);
   };
 
-  const result = await synthesize("Hello", "voice123", stubbedFetch);
+  const result = await synthesize("Hello", "voice123", stubbedFetch, "key");
 
   assertEquals(typeof result.audioBase64, "string");
   assertEquals(result.audioBase64.length > 0, true);
@@ -146,7 +146,7 @@ Deno.test("synthesize - throws TTS_FAILED on non-ok response", async () => {
   };
 
   await assertRejects(
-    () => synthesize("hello", "voice123", stubbedFetch),
+    () => synthesize("hello", "voice123", stubbedFetch, "key"),
     Error,
     "TTS_FAILED",
   );
@@ -162,7 +162,7 @@ Deno.test("synthesize - calls correct ElevenLabs TTS endpoint with voiceId", asy
     return makeAudioResponse(new Uint8Array([1, 2, 3]));
   };
 
-  await synthesize("Hello", "my-voice-id", stubbedFetch);
+  await synthesize("Hello", "my-voice-id", stubbedFetch, "key");
 
   assertEquals(
     capturedUrl,

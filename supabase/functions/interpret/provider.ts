@@ -6,8 +6,8 @@ export type Fetcher = (
 export async function transcribe(
   audioBase64: string,
   fetcher: Fetcher,
+  elevenLabsKey: string,
 ): Promise<{ text: string; detectedLanguage: string; sttMs: number }> {
-  const apiKey = Deno.env.get("ELEVENLABS_API_KEY") ?? "";
   const start = Date.now();
 
   const binary = atob(audioBase64);
@@ -27,7 +27,7 @@ export async function transcribe(
     "https://api.elevenlabs.io/v1/speech-to-text",
     {
       method: "POST",
-      headers: { "xi-api-key": apiKey },
+      headers: { "xi-api-key": elevenLabsKey },
       body: form,
     },
   );
@@ -64,9 +64,9 @@ export async function translate(
   text: string,
   targetLanguage: string,
   fetcher: Fetcher,
+  openAiKey: string,
+  openAiModel: string,
 ): Promise<{ translatedText: string; translateMs: number }> {
-  const apiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
-  const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
   const start = Date.now();
 
   const prompt =
@@ -76,10 +76,10 @@ export async function translate(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${openAiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: openAiModel,
       input: prompt,
     }),
   });
@@ -124,8 +124,8 @@ export async function synthesize(
   text: string,
   voiceId: string,
   fetcher: Fetcher,
+  elevenLabsKey: string,
 ): Promise<{ audioBase64: string; ttsMs: number }> {
-  const apiKey = Deno.env.get("ELEVENLABS_API_KEY") ?? "";
   const start = Date.now();
 
   const response = await fetcher(
@@ -133,7 +133,7 @@ export async function synthesize(
     {
       method: "POST",
       headers: {
-        "xi-api-key": apiKey,
+        "xi-api-key": elevenLabsKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

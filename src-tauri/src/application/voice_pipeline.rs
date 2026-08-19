@@ -3,7 +3,7 @@ use crate::{
     domain::{InterpretOutcome, LiveSessionId, SegmentId, SegmentResult, StageDurations, VerbalixError},
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
-use reqwest::{Client, StatusCode};
+use reqwest::{Client, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::{pin::Pin, time::Duration};
 
@@ -24,7 +24,7 @@ struct InterpretPayload {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct InterpretResponse {
+struct InterpretResponseBody {
     #[allow(dead_code)]
     request_id: String,
     detected_language: String,
@@ -37,6 +37,16 @@ struct StageMsResponse {
     stt: u32,
     translate: u32,
     tts: u32,
+}
+
+#[derive(Deserialize)]
+struct ErrorBody {
+    error: ErrorDetail,
+}
+
+#[derive(Deserialize)]
+struct ErrorDetail {
+    code: String,
 }
 
 impl RemoteVoicePipeline {
@@ -52,7 +62,15 @@ impl RemoteVoicePipeline {
         }
     }
 
-    fn map_status_error(status: StatusCode) -> VerbalixError {
+    async fn parse_error(resp: Response, status: StatusCode) -> VerbalixError {
+        if let Ok(body) = resp.json::<ErrorBody>().await {
+            match body.error.code.as_str() {
+                "STT_FAILED" => return VerbalixError::SttFailed,
+                "TRANSLATION_FAILED" => return VerbalixError::TranslationFailed,
+                "TTS_FAILED" => return VerbalixError::TtsFailed,
+                _ => {}
+            }
+        }
         match status {
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => VerbalixError::Unauthenticated,
             StatusCode::NOT_FOUND => VerbalixError::VoiceProfileMissing,
@@ -100,14 +118,15 @@ impl VoicePipelinePort for RemoteVoicePipeline {
 
             let status = resp.status();
             if !status.is_success() {
+                let error = Self::parse_error(resp, status).await;
                 return InterpretOutcome {
                     session_id,
                     segment_id,
-                    result: Err(Self::map_status_error(status)),
+                    result: Err(error),
                 };
             }
 
-            match resp.json::<InterpretResponse>().await {
+            match resp.json::<InterpretResponseBody>().await {
                 Ok(r) => InterpretOutcome {
                     session_id,
                     segment_id,

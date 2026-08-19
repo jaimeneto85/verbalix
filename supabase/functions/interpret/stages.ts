@@ -6,6 +6,9 @@ export async function runInterpretPipeline(
   targetLanguage: string,
   providerVoiceId: string,
   fetcher: Fetcher,
+  elevenLabsKey: string,
+  openAiKey: string,
+  openAiModel: string,
 ): Promise<{
   detectedLanguage: string;
   audioBase64: string;
@@ -13,7 +16,7 @@ export async function runInterpretPipeline(
 }> {
   let sttResult: { text: string; detectedLanguage: string; sttMs: number };
   try {
-    sttResult = await transcribe(audioBase64, fetcher);
+    sttResult = await transcribe(audioBase64, fetcher, elevenLabsKey);
   } catch (reason) {
     if (reason instanceof DOMException && reason.name === "AbortError") {
       throw new Error("PROVIDER_TIMEOUT");
@@ -23,7 +26,13 @@ export async function runInterpretPipeline(
 
   let translateResult: { translatedText: string; translateMs: number };
   try {
-    translateResult = await translate(sttResult.text, targetLanguage, fetcher);
+    translateResult = await translate(
+      sttResult.text,
+      targetLanguage,
+      fetcher,
+      openAiKey,
+      openAiModel,
+    );
   } catch (reason) {
     if (reason instanceof DOMException && reason.name === "AbortError") {
       throw new Error("PROVIDER_TIMEOUT");
@@ -37,6 +46,7 @@ export async function runInterpretPipeline(
       translateResult.translatedText,
       providerVoiceId,
       fetcher,
+      elevenLabsKey,
     );
   } catch (reason) {
     if (reason instanceof DOMException && reason.name === "AbortError") {
