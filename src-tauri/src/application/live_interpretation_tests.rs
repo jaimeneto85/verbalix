@@ -8,8 +8,8 @@ use std::sync::{
     Arc, Mutex,
 };
 
-type SinkFn = Box<dyn Fn(Vec<f32>, u32, u16) + Send + 'static>;
-type ErrorFn = Box<dyn Fn() + Send + 'static>;
+type SinkFn = Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static>;
+type ErrorFn = Box<dyn Fn() + Send + Sync + 'static>;
 
 struct FakeAudioStream {
     sink: Arc<Mutex<Option<SinkFn>>>,

@@ -1,5 +1,6 @@
 mod application;
 mod commands;
+mod commands_live;
 mod commands_settings;
 mod commands_transform;
 mod commands_voice;
@@ -16,19 +17,22 @@ use application::{
 };
 use application::{PreferencesSyncStore, RemotePreferencesRepository};
 use commands::*;
+use commands_live::*;
 use commands_settings::*;
 use commands_transform::*;
 use commands_voice::*;
 use domain::{SelectionEvent, SettingsRepository, VerbalixError};
 use overlay_commands::*;
 use platform::{install_mouse_dismiss_monitor, MacAccessibility, SystemClipboard, TauriOverlay};
-pub(crate) use runtime::{start_selection_observer, AppRuntime};
+pub(crate) use runtime::{show_main_window, start_selection_observer, AppRuntime};
 use std::{sync::Arc, thread, time::Duration};
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-    AppHandle, Manager, RunEvent, WindowEvent,
-};
+use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+
+fn normalized_shortcut(raw: &str) -> String {
+    raw.replace("Option", "Alt")
+        .replace("Shift", "Shift")
+        .replace("Space", "Space")
+}
 
 fn trigger_active_shortcut(runtime: &AppRuntime) {
     diagnostics::detection("shortcut");
@@ -73,48 +77,6 @@ fn trigger_active_shortcut(runtime: &AppRuntime) {
         Err(error) => diagnostics::capture_failure("shortcut", &error),
         _ => {}
     }
-}
-
-pub(crate) fn show_main_window(app: &AppHandle, origin: &'static str) {
-    diagnostics::lifecycle("show_requested", origin);
-    let Some(window) = app.get_webview_window("main") else {
-        diagnostics::lifecycle("show_failed", "main_window_missing");
-        return;
-    };
-    if window.show().and_then(|_| window.set_focus()).is_ok() {
-        diagnostics::lifecycle("shown", origin);
-    } else {
-        diagnostics::lifecycle("show_failed", origin);
-    }
-}
-
-fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let settings = MenuItem::with_id(app, "settings", "Configurações", true, None::<&str>)?;
-    let pause = MenuItem::with_id(app, "pause", "Pausar", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&settings, &pause, &quit])?;
-    let pause_item = pause.clone();
-    TrayIconBuilder::new()
-        .tooltip("Verbalix")
-        .menu(&menu)
-        .on_menu_event(move |app, event| match event.id.as_ref() {
-            "settings" => show_main_window(app, "tray"),
-            "quit" => {
-                diagnostics::lifecycle("quit_requested", "tray");
-                app.exit(0);
-            }
-            "pause" => {
-                let runtime = app.state::<Arc<AppRuntime>>();
-                let paused = runtime.pause.toggle();
-                let _ = pause_item.set_text(if paused { "Retomar" } else { "Pausar" });
-                if paused {
-                    let _ = runtime.coordinator.dispatch(SelectionEvent::Invalidated);
-                }
-            }
-            _ => {}
-        })
-        .build(app)?;
-    Ok(())
 }
 
 pub fn run() {
@@ -165,8 +127,14 @@ pub fn run() {
                     anonymous_key.clone(),
                 ))
             });
-            let (voice_enrollment, audio_capture, enrollment_session) =
-                runtime::build_voice_components(&supabase_url, &anonymous_key);
+            let vc = runtime::build_voice_components(&supabase_url, &anonymous_key);
+            let pause = Arc::new(RuntimePause::default());
+            let live_coordinator = runtime::build_live_coordinator(
+                &supabase_url,
+                &anonymous_key,
+                vc.stream,
+                pause.clone(),
+            );
             let runtime = Arc::new(AppRuntime {
                 coordinator,
                 overlay,
@@ -189,10 +157,12 @@ pub fn run() {
                 auth: Arc::new(RemoteAuthRepository::new(supabase_url, anonymous_key)),
                 remote_preferences,
                 backend_config,
-                pause: RuntimePause::default(),
-                voice_enrollment,
-                audio_capture,
-                enrollment_session,
+                pause,
+                voice_enrollment: vc.enrollment,
+                audio_capture: vc.capture,
+                enrollment_session: vc.session,
+                live_coordinator,
+                on_air_guard: std::sync::Mutex::new(None),
             });
             app.manage(runtime.clone());
             let dismiss_runtime = runtime.clone();
@@ -245,7 +215,7 @@ pub fn run() {
                     .build(),
             )?;
             start_selection_observer(runtime);
-            setup_tray(app.handle())?;
+            runtime::setup_tray(app.handle())?;
             diagnostics::lifecycle("setup_finished", "application");
             Ok(())
         })
@@ -278,8 +248,10 @@ pub fn run() {
             delete_voice_profile,
             voice_profile_status,
             enrollment_level,
-            microphone_permission_status,
-            request_microphone_permission
+            enter_live,
+            leave_live,
+            live_status,
+            set_target_language
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Verbalix");

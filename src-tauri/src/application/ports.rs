@@ -152,8 +152,8 @@ pub trait AudioCapturePort: Send + Sync {
 pub trait AudioStreamPort: Send + Sync {
     fn start_stream(
         &self,
-        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + 'static>,
-        error_sink: Box<dyn Fn() + Send + 'static>,
+        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static>,
+        error_sink: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Result<(), crate::domain::VerbalixError>;
 
     fn stop_stream(&self);

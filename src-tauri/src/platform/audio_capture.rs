@@ -18,8 +18,8 @@ enum CaptureCommand {
     Stop(mpsc::SyncSender<Result<EnrollmentSample, VerbalixError>>),
     Cancel,
     StartStream {
-        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + 'static>,
-        error_sink: Box<dyn Fn() + Send + 'static>,
+        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static>,
+        error_sink: Box<dyn Fn() + Send + Sync + 'static>,
         reply: mpsc::SyncSender<Result<(), VerbalixError>>,
     },
     StopStream,
@@ -283,8 +283,8 @@ impl AudioCapturePort for MacAudioCapture {
 impl AudioStreamPort for MacAudioCapture {
     fn start_stream(
         &self,
-        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + 'static>,
-        error_sink: Box<dyn Fn() + Send + 'static>,
+        sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static>,
+        error_sink: Box<dyn Fn() + Send + Sync + 'static>,
     ) -> Result<(), VerbalixError> {
         let (tx, rx) = mpsc::sync_channel(1);
         self.cmd_tx

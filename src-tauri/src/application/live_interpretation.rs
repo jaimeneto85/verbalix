@@ -7,7 +7,7 @@ use crate::{
     },
     domain::{
         EndpointEvent, Endpointer, EndpointerConfig, LanguageTag, LiveSession,
-        LiveState, SegmentId, VerbalixError,
+        LiveSessionId, LiveState, SegmentId, VerbalixError,
     },
 };
 use std::sync::{Arc, Mutex};
@@ -158,7 +158,7 @@ impl LiveInterpretationCoordinator {
         let token_clone = token.clone();
         let lang_str = lang.as_str().to_owned();
 
-        let sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + 'static> = Box::new(
+        let sink: Box<dyn Fn(Vec<f32>, u32, u16) + Send + Sync + 'static> = Box::new(
             move |frames, sample_rate, channels| {
                 let rms = pcm_rms(&frames);
                 let event = {
@@ -213,7 +213,7 @@ impl LiveInterpretationCoordinator {
         );
 
         let state_for_error = Arc::clone(&self.state);
-        let error_sink: Box<dyn Fn() + Send + 'static> = Box::new(move || {
+        let error_sink: Box<dyn Fn() + Send + Sync + 'static> = Box::new(move || {
             let mut st = state_for_error.lock().unwrap();
             st.live_state = LiveState::Failed;
             st.session = None;
