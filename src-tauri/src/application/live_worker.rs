@@ -211,8 +211,16 @@ impl LiveWorker {
 }
 
 #[cfg(test)]
+#[path = "live_worker_test_helpers.rs"]
+mod test_helpers;
+
+#[cfg(test)]
 #[path = "live_worker_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "live_worker_streaming_tests.rs"]
+mod streaming_tests;
 
 #[cfg(test)]
 #[path = "live_worker_context_tests.rs"]

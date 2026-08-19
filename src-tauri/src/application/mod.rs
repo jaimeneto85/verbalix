@@ -25,6 +25,8 @@ mod voice_enrollment;
 pub(crate) mod voice_pipeline;
 pub(crate) mod voice_pipeline_stream;
 #[cfg(test)]
+mod voice_pipeline_stream_frame_tests;
+#[cfg(test)]
 mod voice_pipeline_stream_tests;
 
 pub use ai_readiness::{
